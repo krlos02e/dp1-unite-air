@@ -1,0 +1,3 @@
+[submodule "dp1-algoritmos"]
+	path = dp1-algoritmos
+	url = git@github.com:Krlos02E/dp1-algoritmos.git
