@@ -53,6 +53,16 @@ public class SimulationService {
 
         Config_Simulacion config = new Config_Simulacion();
         config.setAeropuertoHub("SKBO");
+        config.setMinimaConexion(java.time.Duration.ofMinutes(30));
+        config.setIteracionesALNS(20);
+        config.setIteracionesACO(10);
+        config.setHormigasACO(4);
+        config.setMaxRutasPorPaquete(4);
+        config.setTopRutasACO(2);
+        config.setHormigasEliteACO(1);
+        config.setMaxEscalas(2);
+        config.setVentanaActualizacionPesos(5);
+        config.setEvaporacionFeromona(0.4);
 
         cargaArchivosService.cargarDatasetConFechas(fecha, duracionDias);
         dataset = cargaArchivosService.obtenerUltimoDataset();

@@ -9,6 +9,7 @@ import pe.edu.pucp.uniteair.dp1backend.repository.SimulationSessionRepository;
 import tasf.config.Config_Simulacion;
 import tasf.core.Dataset;
 import tasf.core.EstadoOperacional;
+import tasf.core.PlanificacionUtils;
 import tasf.core.Solucion;
 import tasf.model.Aeropuerto;
 import tasf.model.Vuelo;
@@ -99,6 +100,7 @@ public class SimulationEngine {
                         : new ALNS_RutasPlanner();
                 TwoPhaseOrchestrator orchestrator = new TwoPhaseOrchestrator(planner);
 
+                PlanificacionUtils.limpiarCacheGlobal();
                 actualizarEstadoPlanificando(sessionId, "Planificando rutas...");
 
                 System.out.println("[2/4] Algoritmo: " + algoritmo);
@@ -106,11 +108,21 @@ public class SimulationEngine {
                 long tPlanStart = System.nanoTime();
                 Solucion solucion = orchestrator.ejecutarFlujoCompleto(dataset, config);
                 long tPlanEnd = System.nanoTime();
-                System.out.printf("[4/4] Planificación completada [%dms]%n", (tPlanEnd - tPlanStart) / 1_000_000);
+                long duracionMs = (tPlanEnd - tPlanStart) / 1_000_000;
+                System.out.printf("[4/4] Planificación completada [%dms]%n", duracionMs);
 
                 Map<String, Ruta> rutas = solucion.getRutasAsignadas();
                 Set<String> noAsignados = solucion.getPaquetesNoAsignados();
+                boolean hayColapso = !noAsignados.isEmpty();
                 maletasEnTransito = rutas.size();
+
+                System.out.println("=== Ejecucion Completada ===");
+                System.out.printf("Paquetes totales: %d, rutas asignadas: %d%n",
+                        dataset.getPaquetes().size(), rutas.size());
+                System.out.println("Asignados: " + rutas.size() + " | Sin asignar: " + noAsignados.size());
+                System.out.println("Colapso: " + (hayColapso ? "SI" : "NO"));
+                System.out.println("Costo total: " + (long) solucion.getCostoTotal());
+                System.out.println("Duración: " + duracionMs + " ms");
 
                 logs.add(LogEntry.builder()
                         .timestamp(fechaInicio)
@@ -118,6 +130,18 @@ public class SimulationEngine {
                         .mensaje(String.format("Planificación completada: %d rutas asignadas, %d no asignados",
                                 rutas.size(), noAsignados.size()))
                         .build());
+
+                if (hayColapso) {
+                    String motivo = "Colapso en planificación: " + noAsignados.size() + " paquetes sin asignar";
+                    logs.add(LogEntry.builder()
+                            .timestamp(fechaInicio)
+                            .tipo("COLAPSO")
+                            .mensaje(motivo)
+                            .build());
+                    actualizarEstadoColapsado(sessionId, fechaInicio, motivo, logs);
+                    actualizarSesionColapsada(sessionId, motivo, 0, duracionHoras);
+                    return;
+                }
 
                 actualizarEstadoEjecutando(sessionId, fechaInicio, logs);
 
@@ -162,28 +186,6 @@ public class SimulationEngine {
                                 .mensaje(String.format("Hora %d: %d maletas entregadas, %d en tránsito",
                                         hora, maletasEntregadas, maletasEnTransito))
                                 .build());
-                    }
-
-                    if (maletasEnTransito > 0 && hora > duracionHoras / 2) {
-                        long stagnant = rutas.values().stream()
-                                .filter(r -> !r.getVuelos().isEmpty())
-                                .filter(r -> {
-                                    Vuelo ultimo = r.getVuelos().get(r.getVuelos().size() - 1);
-                                    return simTime.isAfter(ultimo.getLlegadaUtc().plusHours(24));
-                                })
-                                .count();
-                        if (stagnant > rutas.size() * 0.3) {
-                            String motivo = "Colapso: " + stagnant + " envíos estancados sin entregar en hora " + hora;
-                            logs.add(LogEntry.builder()
-                                    .timestamp(simTime)
-                                    .tipo("COLAPSO")
-                                    .mensaje(motivo)
-                                    .build());
-                            actualizarSesionColapsada(sessionId, motivo, hora, duracionHoras);
-                            actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
-                                    maletasEntregadas, maletasEnTransito, hora, duracionHoras, true, motivo, logs);
-                            break;
-                        }
                     }
 
                     actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
@@ -351,6 +353,23 @@ public class SimulationEngine {
                 .maletasEnTransito(0)
                 .progreso(0)
                 .colapsada(false)
+                .logs(logs)
+                .build();
+        simulationCache.put(sessionId, updated);
+    }
+
+    private void actualizarEstadoColapsado(String sessionId, LocalDateTime simTime, String motivo, List<LogEntry> logs) {
+        SimulationState updated = SimulationState.builder()
+                .sessionId(sessionId)
+                .status("COLAPSADA")
+                .simulationTime(simTime)
+                .vuelos(new ArrayList<>())
+                .aeropuertos(new ArrayList<>())
+                .maletasEntregadas(0)
+                .maletasEnTransito(0)
+                .progreso(0)
+                .colapsada(true)
+                .motivoColapso(motivo)
                 .logs(logs)
                 .build();
         simulationCache.put(sessionId, updated);

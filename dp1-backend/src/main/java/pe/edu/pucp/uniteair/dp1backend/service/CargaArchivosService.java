@@ -88,7 +88,8 @@ public class CargaArchivosService {
         Files.createDirectories(destino.getParent());
         try (InputStream is = getClass().getClassLoader().getResourceAsStream(classpath)) {
             if (is == null) {
-                throw new IOException("Recurso no encontrado: " + classpath);
+                System.err.println("[WARN] Recurso no encontrado, se omite: " + classpath);
+                return;
             }
             Files.copy(is, destino, StandardCopyOption.REPLACE_EXISTING);
         }
