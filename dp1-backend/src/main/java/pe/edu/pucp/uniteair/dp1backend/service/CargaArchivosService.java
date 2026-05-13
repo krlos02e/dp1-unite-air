@@ -56,8 +56,9 @@ public class CargaArchivosService {
     }
 
     private Dataset cargarDatasetEnTemp(Path tempDir, LocalDate fechaInicio, int dias) throws IOException {
+        int diasVuelos = dias + 2;
         Set<LocalDate> fechasFiltro = generarFechasSimulacion(fechaInicio, dias);
-        return DatasetTextoLoader.cargarDataset(tempDir, fechaInicio, dias, 50000, fechasFiltro);
+        return DatasetTextoLoader.cargarDataset(tempDir, fechaInicio, diasVuelos, 50000, fechasFiltro);
     }
 
     private Set<LocalDate> generarFechasSimulacion(LocalDate inicio, int dias) {

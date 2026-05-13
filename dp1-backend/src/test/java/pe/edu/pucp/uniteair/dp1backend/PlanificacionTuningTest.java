@@ -20,7 +20,7 @@ class PlanificacionTuningTest {
     @Autowired
     private CargaArchivosService cargaArchivosService;
 
-    record ConfigACO(int iter, int hormigas, int maxRutas, int escalas, double evaporacion, double alpha, double beta, int horizonteHoras) {}
+    record ConfigACO(int iter, int hormigas, int maxRutas, int escalas, double evaporacion, double alpha, double beta, int horizonteHoras, int minConexionMin) {}
 
     @Test
     void tunearACO() {
@@ -28,27 +28,25 @@ class PlanificacionTuningTest {
         Dataset dataset = cargaArchivosService.obtenerUltimoDataset();
         int totalPaquetes = dataset.getPaquetes().size();
 
-        System.out.println("\n=== TUNEANDO ACO ===");
+        System.out.println("\n=== ULTIMO TEST: RELAJANDO RESTRICCIONES ===");
         System.out.println("Total paquetes: " + totalPaquetes + "\n");
-        System.out.printf("%-55s | %10s | %10s | %10s | %10s%n",
+        System.out.printf("%-65s | %10s | %10s | %10s | %10s%n",
                 "Config", "Asignados", "NA", "Costo", "Duración");
-        System.out.println("-".repeat(110));
+        System.out.println("-".repeat(120));
 
         ConfigACO[] configs = {
-                new ConfigACO(10, 4,  4, 2, 0.4, 0.9, 3.2,  72),
-                new ConfigACO(10, 4,  4, 3, 0.4, 0.9, 3.2, 120),
-                new ConfigACO(10, 4,  4, 3, 0.4, 0.9, 3.2, 168),
-                new ConfigACO(50, 8, 10, 3, 0.3, 0.8, 2.8, 120),
-                new ConfigACO(50, 8, 10, 3, 0.3, 0.8, 2.8, 168),
+                new ConfigACO(10, 4,  4, 2, 0.4, 0.9, 3.2,  72, 30),
+                new ConfigACO(10, 4,  4, 2, 0.4, 0.9, 3.2, 168, 15),
+                new ConfigACO(50, 8, 10, 4, 0.3, 0.8, 2.8, 168, 10),
         };
 
         for (ConfigACO cfg : configs) {
             PlanificacionUtils.limpiarCacheGlobal();
-            TwoPhaseOrchestrator orchestrator = new TwoPhaseOrchestrator(new ACO_RutasPlanner());
+            TwoPhaseOrchestrator orchestrator = new TwoPhaseOrchestrator(new ACO_RutasPlanner(17L));
 
             Config_Simulacion config = new Config_Simulacion();
             config.setAeropuertoHub("SKBO");
-            config.setMinimaConexion(Duration.ofMinutes(30));
+            config.setMinimaConexion(Duration.ofMinutes(cfg.minConexionMin));
             config.setIteracionesACO(cfg.iter);
             config.setHormigasACO(cfg.hormigas);
             config.setMaxRutasPorPaquete(cfg.maxRutas);
@@ -70,9 +68,9 @@ class PlanificacionTuningTest {
             long costo = (long) solucion.getCostoTotal();
             long dur = (t1 - t0) / 1_000_000;
 
-            String label = String.format("iter=%d horm=%d maxR=%d esc=%d evap=%.1f α=%.1f β=%.1f h=%dh",
-                    cfg.iter, cfg.hormigas, cfg.maxRutas, cfg.escalas, cfg.evaporacion, cfg.alpha, cfg.beta, cfg.horizonteHoras);
-            System.out.printf("%-55s | %6d/%d | %4d %s | %8d | %3ds%n",
+            String label = String.format("iter=%d horm=%d maxR=%d esc=%d conn=%dmin h=%dh",
+                    cfg.iter, cfg.hormigas, cfg.maxRutas, cfg.escalas, cfg.minConexionMin, cfg.horizonteHoras);
+            System.out.printf("%-65s | %6d/%d | %4d %s | %8d | %3ds%n",
                     label, asignados, totalPaquetes, na, na == 0 ? " " : "⚠",
                     costo, dur / 1000);
         }

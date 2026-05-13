@@ -77,7 +77,8 @@ class PlanificacionIntegrationTest {
 
         assertNotNull(asignadas);
         assertNotNull(noAsignados);
-        assertTrue(!colapso, "COLAPSO: " + noAsignados.size() + " paquetes sin asignar con " + algoritmo);
+        assertEquals(0, noAsignados.size(),
+                "COLAPSO: " + noAsignados.size() + " paquetes sin asignar con " + algoritmo);
     }
 
     @Test
