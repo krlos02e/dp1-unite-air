@@ -13,8 +13,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
-import java.util.Comparator;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @Service
 public class CargaArchivosService {
@@ -34,12 +35,35 @@ public class CargaArchivosService {
         try {
             Path tempDir = Files.createTempDirectory("default_carga_");
             copiarRecursosACarpeta(tempDir);
-            Dataset dataset = DatasetTextoLoader.cargarDataset(tempDir, LocalDate.now(), 3, 50000);
+            Dataset dataset = cargarDatasetEnTemp(tempDir, LocalDate.now(), 3);
             this.lastDataset = dataset;
             deleteTempDir(tempDir);
         } catch (Exception e) {
             System.err.println("No se pudo cargar dataset por defecto: " + e.getMessage());
         }
+    }
+
+    public synchronized void cargarDatasetConFechas(LocalDate fechaInicio, int dias) {
+        try {
+            Path tempDir = Files.createTempDirectory("simulacion_carga_");
+            copiarRecursosACarpeta(tempDir);
+            Dataset dataset = cargarDatasetEnTemp(tempDir, fechaInicio, dias);
+            this.lastDataset = dataset;
+            deleteTempDir(tempDir);
+        } catch (Exception e) {
+            System.err.println("No se pudo cargar dataset con fechas: " + e.getMessage());
+        }
+    }
+
+    private Dataset cargarDatasetEnTemp(Path tempDir, LocalDate fechaInicio, int dias) throws IOException {
+        Set<LocalDate> fechasFiltro = generarFechasSimulacion(fechaInicio, dias);
+        return DatasetTextoLoader.cargarDataset(tempDir, fechaInicio, dias, 50000, fechasFiltro);
+    }
+
+    private Set<LocalDate> generarFechasSimulacion(LocalDate inicio, int dias) {
+        return IntStream.range(0, dias)
+                .mapToObj(inicio::plusDays)
+                .collect(Collectors.toCollection(HashSet::new));
     }
 
     private static final String[] ICAO_ENVIOS = {
@@ -83,7 +107,9 @@ public class CargaArchivosService {
                 saveToTemp(tempDir.resolve("input").resolve("envios"), envios, "_envios_SKBO_.txt");
             }
 
-            Dataset dataset = DatasetTextoLoader.cargarDataset(tempDir, LocalDate.now(), 3, 50000);
+            LocalDate fechaInicio = LocalDate.now();
+            Set<LocalDate> fechasFiltro = generarFechasSimulacion(fechaInicio, 3);
+            Dataset dataset = DatasetTextoLoader.cargarDataset(tempDir, fechaInicio, 3, 50000, fechasFiltro);
 
             int aeropuertosCount = dataset.getAeropuertos().size();
             int vuelosCount = dataset.getVuelos().size();

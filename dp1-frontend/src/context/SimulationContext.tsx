@@ -31,6 +31,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
 
   const startPolling = useCallback((sessionId: string) => {
     stopPolling()
+    setSimulationState(null)
     setIsRunning(true)
 
     const poll = async () => {

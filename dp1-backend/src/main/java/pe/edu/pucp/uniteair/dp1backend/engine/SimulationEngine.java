@@ -101,27 +101,25 @@ public class SimulationEngine {
 
                 actualizarEstadoPlanificando(sessionId, "Planificando rutas...");
 
+                System.out.println("[2/4] Algoritmo: " + algoritmo);
+                System.out.println("[3/4] Algoritmo ejecutando...");
+                long tPlanStart = System.nanoTime();
                 Solucion solucion = orchestrator.ejecutarFlujoCompleto(dataset, config);
+                long tPlanEnd = System.nanoTime();
+                System.out.printf("[4/4] Planificación completada [%dms]%n", (tPlanEnd - tPlanStart) / 1_000_000);
 
                 Map<String, Ruta> rutas = solucion.getRutasAsignadas();
                 Set<String> noAsignados = solucion.getPaquetesNoAsignados();
                 maletasEnTransito = rutas.size();
 
                 logs.add(LogEntry.builder()
-                        .timestamp(LocalDateTime.now())
+                        .timestamp(fechaInicio)
                         .tipo("INFO")
                         .mensaje(String.format("Planificación completada: %d rutas asignadas, %d no asignados",
                                 rutas.size(), noAsignados.size()))
                         .build());
 
                 actualizarEstadoEjecutando(sessionId, fechaInicio, logs);
-
-                var sessionOpt = sessionRepository.findById(sessionId);
-                if (sessionOpt.isPresent()) {
-                    var s = sessionOpt.get();
-                    s.setEstado("EJECUTANDO");
-                    sessionRepository.save(s);
-                }
 
                 Set<String> rutasEntregadas = new HashSet<>();
 
@@ -159,7 +157,7 @@ public class SimulationEngine {
 
                     if (hora > 0 && hora % 12 == 0) {
                         logs.add(LogEntry.builder()
-                                .timestamp(LocalDateTime.now())
+                                .timestamp(simTime)
                                 .tipo("INFO")
                                 .mensaje(String.format("Hora %d: %d maletas entregadas, %d en tránsito",
                                         hora, maletasEntregadas, maletasEnTransito))
@@ -177,7 +175,7 @@ public class SimulationEngine {
                         if (stagnant > rutas.size() * 0.3) {
                             String motivo = "Colapso: " + stagnant + " envíos estancados sin entregar en hora " + hora;
                             logs.add(LogEntry.builder()
-                                    .timestamp(LocalDateTime.now())
+                                    .timestamp(simTime)
                                     .tipo("COLAPSO")
                                     .mensaje(motivo)
                                     .build());
@@ -190,13 +188,6 @@ public class SimulationEngine {
 
                     actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
                             maletasEntregadas, maletasEnTransito, hora, duracionHoras, false, null, logs);
-
-                    var session = sessionRepository.findById(sessionId).orElse(null);
-                    if (session != null) {
-                        session.setFechaActualSimulacion(simTime);
-                        session.setProgresoPorcentaje(Math.min(100, (hora * 100) / duracionHoras));
-                        sessionRepository.save(session);
-                    }
 
                     long sleepMs = (long) (1000.0 / Math.max(1, velocidad));
                     if (sleepMs > 0) {
@@ -214,6 +205,17 @@ public class SimulationEngine {
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                System.err.println("[ERROR] Simulación " + sessionId + " falló: " + e.getMessage());
+                e.printStackTrace();
+                try {
+                    var session = sessionRepository.findById(sessionId).orElse(null);
+                    if (session != null) {
+                        session.setEstado("ERROR");
+                        session.setMotivoColapso("Error interno: " + e.getMessage());
+                        sessionRepository.save(session);
+                    }
+                } catch (Exception ignored) {}
             } finally {
                 activeSimulations.remove(sessionId);
                 cancellationFlags.remove(sessionId);

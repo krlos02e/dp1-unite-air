@@ -25,13 +25,16 @@ public class SimulationService {
     private final SimulationSessionRepository sessionRepository;
     private final SimulationCache simulationCache;
     private final SimulationEngine simulationEngine;
+    private final CargaArchivosService cargaArchivosService;
 
     public SimulationService(SimulationSessionRepository sessionRepository,
                              SimulationCache simulationCache,
-                             SimulationEngine simulationEngine) {
+                             SimulationEngine simulationEngine,
+                             CargaArchivosService cargaArchivosService) {
         this.sessionRepository = sessionRepository;
         this.simulationCache = simulationCache;
         this.simulationEngine = simulationEngine;
+        this.cargaArchivosService = cargaArchivosService;
     }
 
     public SimulationState iniciarSimulacion(SimulacionConfigRequest req, Dataset dataset) {
@@ -51,8 +54,30 @@ public class SimulationService {
         Config_Simulacion config = new Config_Simulacion();
         config.setAeropuertoHub("SKBO");
 
+        cargaArchivosService.cargarDatasetConFechas(fecha, duracionDias);
+        dataset = cargaArchivosService.obtenerUltimoDataset();
+        if (dataset == null) {
+            return SimulationState.builder()
+                    .sessionId(sessionId)
+                    .status("ERROR")
+                    .simulationTime(fechaInicio)
+                    .vuelos(new ArrayList<>())
+                    .aeropuertos(new ArrayList<>())
+                    .maletasEntregadas(0)
+                    .maletasEnTransito(0)
+                    .progreso(0)
+                    .colapsada(false)
+                    .logs(List.of(LogEntry.builder()
+                            .timestamp(LocalDateTime.now())
+                            .tipo("ERROR")
+                            .mensaje("No se pudo cargar el dataset para las fechas seleccionadas")
+                            .build()))
+                    .build();
+        }
+
         SimulationSession session = SimulationSession.builder()
                 .sessionId(sessionId)
+                .isNewSession(true)
                 .estado("PLANIFICANDO")
                 .duracionDias(duracionDias)
                 .fechaInicio(fechaInicio)
@@ -93,7 +118,23 @@ public class SimulationService {
 
     public SimulationState obtenerEstado(String sessionId) {
         SimulationState state = simulationCache.get(sessionId);
-        if (state == null) return null;
+        if (state == null) {
+            var session = sessionRepository.findById(sessionId).orElse(null);
+            if (session != null) {
+                return SimulationState.builder()
+                        .sessionId(sessionId)
+                        .status(session.getEstado())
+                        .simulationTime(session.getFechaActualSimulacion())
+                        .maletasEntregadas(0)
+                        .maletasEnTransito(0)
+                        .progreso(session.getProgresoPorcentaje())
+                        .colapsada("COLAPSADA".equals(session.getEstado()))
+                        .motivoColapso(session.getMotivoColapso())
+                        .logs(new ArrayList<>())
+                        .build();
+            }
+            return null;
+        }
         List<LogEntry> logs = state.getLogs();
         if (logs != null && logs.size() > 50) {
             logs = logs.subList(logs.size() - 50, logs.size());

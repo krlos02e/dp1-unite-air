@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.data.domain.Persistable;
 
 import java.time.LocalDateTime;
 
@@ -14,10 +15,24 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class SimulationSession {
+public class SimulationSession implements Persistable<String> {
 
     @Id
     private String sessionId;
+
+    @Transient
+    private boolean isNewSession;
+
+    @Override
+    public String getId() {
+        return sessionId;
+    }
+
+    @Override
+    @Transient
+    public boolean isNew() {
+        return isNewSession;
+    }
 
     private String estado;
 

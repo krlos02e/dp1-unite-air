@@ -25,11 +25,11 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
   }, [sessionId, startPolling, stopPolling])
 
   useEffect(() => {
-    if (simulationState?.colapsada) {
+    if (simulationState?.colapsada && simulationState.sessionId === sessionId) {
       stopPolling()
       onColapso?.(simulationState)
     }
-  }, [simulationState?.colapsada, stopPolling, onColapso])
+  }, [simulationState?.colapsada, simulationState?.sessionId, sessionId, stopPolling, onColapso])
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
