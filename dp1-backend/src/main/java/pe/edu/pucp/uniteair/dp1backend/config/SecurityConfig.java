@@ -11,19 +11,11 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import pe.edu.pucp.uniteair.dp1backend.security.CookieAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
 public class SecurityConfig {
-
-    private final CookieAuthenticationFilter cookieAuthenticationFilter;
-
-    public SecurityConfig(CookieAuthenticationFilter cookieAuthenticationFilter) {
-        this.cookieAuthenticationFilter = cookieAuthenticationFilter;
-    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -34,9 +26,11 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/auth/**").permitAll()
                 .requestMatchers("/carga/**").permitAll()
-                .requestMatchers("/api/public/**").permitAll()
+                .requestMatchers("/simulacion/**").permitAll()
+                .requestMatchers("/dashboard/**").permitAll()
                 .anyRequest().authenticated())
-            .addFilterBefore(cookieAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+            .formLogin(form -> form.disable())
+            .httpBasic(basic -> basic.disable());
         return http.build();
     }
 
