@@ -19,19 +19,19 @@ function App() {
   return (
     <SimulationProvider>
       <div className="min-h-screen bg-gray-950 text-gray-100">
-        <nav className="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center gap-6">
-          <h1 className="text-xl font-bold text-sky-400">UniteAir</h1>
-          <button onClick={nav('inicio')} className="hover:text-sky-300">Inicio</button>
-          <button onClick={nav('carga')} className="hover:text-sky-300">Gestión de Envíos</button>
-          <button onClick={nav('config')} className="hover:text-sky-300">Simulación</button>
+        <nav className="bg-gray-900 border-b border-gray-800 px-4 sm:px-6 py-3 flex items-center gap-4 sm:gap-6 overflow-x-auto">
+          <h1 className="text-lg sm:text-xl font-bold text-sky-400 shrink-0">UniteAir</h1>
+          <button onClick={nav('inicio')} className="text-sm sm:text-base hover:text-sky-300 shrink-0">Inicio</button>
+          <button onClick={nav('carga')} className="text-sm sm:text-base hover:text-sky-300 shrink-0">Gestión de Envíos</button>
+          <button onClick={nav('config')} className="text-sm sm:text-base hover:text-sky-300 shrink-0">Simulación</button>
         </nav>
 
-        <main className="p-6">
+        <main className="p-4 sm:p-6">
           {page === 'inicio' && (
-            <div className="text-center mt-20">
-              <h2 className="text-4xl font-bold mb-4">UniteAir Logistics</h2>
-              <p className="text-gray-400 mb-8">Sistema de simulación logística con optimización de rutas</p>
-              <div className="flex gap-4 justify-center">
+            <div className="text-center mt-10 sm:mt-20">
+              <h2 className="text-2xl sm:text-4xl font-bold mb-4">UniteAir Logistics</h2>
+              <p className="text-gray-400 mb-8 px-4">Sistema de simulación logística con optimización de rutas</p>
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-stretch sm:items-center px-4">
                 <button onClick={nav('carga')} className="bg-sky-600 hover:bg-sky-700 px-6 py-3 rounded-lg font-semibold">Gestión de Envíos</button>
                 <button onClick={nav('config')} className="bg-emerald-600 hover:bg-emerald-700 px-6 py-3 rounded-lg font-semibold">Simulación</button>
                 <button onClick={nav('dashboard')} className="bg-violet-600 hover:bg-violet-700 px-6 py-3 rounded-lg font-semibold">Dashboard</button>

@@ -36,7 +36,7 @@ export default function GestionEnvios() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h2 className="text-2xl font-bold mb-6">Gestión de Envíos</h2>
+      <h2 className="text-xl sm:text-2xl font-bold mb-6">Gestión de Envíos</h2>
 
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
         <FileInput label="Archivo de vuelos (planes_vuelo.txt)" onChange={setPlanesVuelo} />

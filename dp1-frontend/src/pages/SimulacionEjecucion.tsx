@@ -47,24 +47,54 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
 
   if (!simulationState) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-gray-400">Iniciando simulación...</p>
+      <div className="flex items-center justify-center h-64 px-4">
+        <p className="text-gray-400 text-center">Iniciando simulación...</p>
+      </div>
+    )
+  }
+
+  if (simulationState.status === 'PLANIFICANDO') {
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl sm:text-2xl font-bold">Planificando Rutas</h2>
+          <button onClick={handleDetener}
+                  className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-medium text-sm">
+            Detener
+          </button>
+        </div>
+        <div className="flex flex-col items-center justify-center py-16">
+          <div className="w-12 h-12 border-4 border-sky-400 border-t-transparent rounded-full animate-spin mb-6" />
+          <p className="text-gray-300 text-lg mb-2">Calculando rutas óptimas...</p>
+          <p className="text-gray-500 text-sm">El motor de planificación está procesando los envíos</p>
+        </div>
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 max-w-2xl mx-auto">
+          <h3 className="text-sm font-semibold text-gray-300 mb-2">Registro Operativo</h3>
+          <div className="h-32 overflow-y-auto space-y-1 text-xs font-mono">
+            {simulationState.logs.map((log, i) => (
+              <div key={i} className="text-gray-400">
+                [{log.timestamp}] {log.tipo}: {log.mensaje}
+              </div>
+            ))}
+            <div ref={logEndRef} />
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold">Simulación en Curso</h2>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4">
+        <h2 className="text-xl sm:text-2xl font-bold">Simulación en Curso</h2>
         <button onClick={handleDetener}
                 className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-medium text-sm">
           Detener Simulación
         </button>
       </div>
 
-      <div className="grid grid-cols-[7fr_3fr] gap-4">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-2 h-[70vh]">
+      <div className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-4">
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-2 h-[50vh] lg:h-[70vh]">
           <MapaAeropuertos
             aeropuertos={simulationState.aeropuertos}
             vuelos={simulationState.vuelos}
@@ -100,7 +130,7 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
 
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex-1">
             <h3 className="text-sm font-semibold text-gray-300 mb-2">Registro Operativo</h3>
-            <div className="h-48 overflow-y-auto space-y-1 text-xs font-mono">
+            <div className="h-32 lg:h-48 overflow-y-auto space-y-1 text-xs font-mono">
               {simulationState.logs.map((log, i) => (
                 <div key={i} className={`${log.tipo === 'ERROR' ? 'text-red-400' : log.tipo === 'WARN' ? 'text-yellow-400' : log.tipo === 'COLAPSO' ? 'text-red-500 font-bold' : 'text-gray-400'}`}>
                   [{log.timestamp}] {log.tipo}: {log.mensaje}

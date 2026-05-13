@@ -1,5 +1,6 @@
 package pe.edu.pucp.uniteair.dp1backend.service;
 
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import tasf.core.Dataset;
@@ -7,9 +8,12 @@ import tasf.io.DatasetTextoLoader;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.UUID;
 
 @Service
@@ -19,6 +23,52 @@ public class CargaArchivosService {
 
     public record CargaResult(boolean success, String message, int aeropuertosCount, int vuelosCount,
                               int paquetesCount, String datasetId) {}
+
+    @PostConstruct
+    public void init() {
+        cargarDatasetPorDefecto();
+    }
+
+    public synchronized void cargarDatasetPorDefecto() {
+        if (this.lastDataset != null) return;
+        try {
+            Path tempDir = Files.createTempDirectory("default_carga_");
+            copiarRecursosACarpeta(tempDir);
+            Dataset dataset = DatasetTextoLoader.cargarDataset(tempDir, LocalDate.now(), 3, 50000);
+            this.lastDataset = dataset;
+            deleteTempDir(tempDir);
+        } catch (Exception e) {
+            System.err.println("No se pudo cargar dataset por defecto: " + e.getMessage());
+        }
+    }
+
+    private static final String[] ICAO_ENVIOS = {
+        "EBCI","EDDI","EHAM","EKCH","LATI","LBSF","LDZA","LKPR","LOWW",
+        "OAKB","OERK","OJAI","OMDB","OOMS","OPKC","OSDI","OYSN",
+        "SABE","SBBR","SCEL","SEQM","SGAS","SKBO",
+        "SLLP","SPIM","SUAA","SVMI","UBBB","UMMS","VIDP"
+    };
+
+    private void copiarRecursosACarpeta(Path destino) throws IOException {
+        copiarRecurso("default-data/input/aeropuertos/c.1inf54.26.1.v1.Aeropuerto.husos.v1.20250818__estudiantes.txt",
+                destino.resolve("input/aeropuertos/c.Aeropuerto.txt"));
+        copiarRecurso("default-data/input/vuelos/planes_vuelo.txt",
+                destino.resolve("input/vuelos/planes_vuelo.txt"));
+        for (String icao : ICAO_ENVIOS) {
+            copiarRecurso("default-data/input/envios/_envios_" + icao + "_.txt",
+                    destino.resolve("input/envios/_envios_" + icao + "_.txt"));
+        }
+    }
+
+    private void copiarRecurso(String classpath, Path destino) throws IOException {
+        Files.createDirectories(destino.getParent());
+        try (InputStream is = getClass().getClassLoader().getResourceAsStream(classpath)) {
+            if (is == null) {
+                throw new IOException("Recurso no encontrado: " + classpath);
+            }
+            Files.copy(is, destino, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
 
     public synchronized CargaResult cargarArchivos(MultipartFile planesVuelo, MultipartFile aeropuertosFile, MultipartFile envios) {
         try {
@@ -63,7 +113,7 @@ public class CargaArchivosService {
     private void deleteTempDir(Path tempDir) {
         try {
             Files.walk(tempDir)
-                    .sorted(java.util.Comparator.reverseOrder())
+                    .sorted(Comparator.reverseOrder())
                     .map(Path::toFile)
                     .forEach(File::delete);
         } catch (IOException ignored) {

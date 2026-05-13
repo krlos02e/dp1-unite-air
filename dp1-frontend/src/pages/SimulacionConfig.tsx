@@ -40,7 +40,7 @@ export default function SimulacionConfig({ onStart }: Props) {
 
   return (
     <div className="max-w-lg mx-auto">
-      <h2 className="text-2xl font-bold mb-6">Configurar Simulación</h2>
+      <h2 className="text-xl sm:text-2xl font-bold mb-6">Configurar Simulación</h2>
 
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-5">
         <div>

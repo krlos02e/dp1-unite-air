@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, memo } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { AeropuertoDTO, VueloDTO } from '../types'
@@ -11,6 +11,7 @@ interface Props {
 }
 
 const center: [number, number] = [4.711, -74.072]
+const THROTTLE_MS = 4000
 
 function aeropuertoColor(ocu: number, max: number): string {
   const ratio = max > 0 ? ocu / max : 0
@@ -39,13 +40,26 @@ function interpolate(a: [number, number], b: [number, number], t: number): [numb
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
 }
 
-export default function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick }: Props) {
+function dataKey(arr: AeropuertoDTO[] | VueloDTO[]): string {
+  if (arr.length === 0) return ''
+  if ('codigoOACI' in arr[0]) {
+    return (arr as AeropuertoDTO[]).map(x => x.codigoOACI + x.ocupacionActual).join(',')
+  }
+  return (arr as VueloDTO[]).map(x => x.id + x.progresoVuelo + x.cargaActual).join(',')
+}
+
+function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick }: Props) {
   const mapRef = useRef<L.Map | null>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
+  const circleLayerRef = useRef<L.LayerGroup>(L.layerGroup())
+  const routeLayerRef = useRef<L.LayerGroup>(L.layerGroup())
+  const markerLayerRef = useRef<L.LayerGroup>(L.layerGroup())
+  const lastUpdateRef = useRef(0)
+  const prevKeyRef = useRef('')
 
   useEffect(() => {
     if (mapContainerRef.current && !mapRef.current) {
-      mapRef.current = L.map(mapContainerRef.current, {
+      const map = L.map(mapContainerRef.current, {
         center,
         zoom: 6,
         zoomControl: true,
@@ -54,7 +68,12 @@ export default function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors',
         maxZoom: 18,
-      }).addTo(mapRef.current)
+      }).addTo(map)
+
+      circleLayerRef.current.addTo(map)
+      routeLayerRef.current.addTo(map)
+      markerLayerRef.current.addTo(map)
+      mapRef.current = map
     }
 
     return () => {
@@ -66,8 +85,16 @@ export default function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick
   }, [])
 
   useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
+    const currentKey = dataKey(aeropuertos) + '|' + dataKey(vuelos)
+    if (currentKey === prevKeyRef.current) return
+    const now = Date.now()
+    if (now - lastUpdateRef.current < THROTTLE_MS) return
+    lastUpdateRef.current = now
+    prevKeyRef.current = currentKey
+
+    circleLayerRef.current.clearLayers()
+    routeLayerRef.current.clearLayers()
+    markerLayerRef.current.clearLayers()
 
     const circles = aeropuertos.map((a) => {
       const radius = Math.max(5000, (a.capacidadMaxima / 100) * 10000)
@@ -77,46 +104,42 @@ export default function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick
         fillColor: aeropuertoColor(a.ocupacionActual, a.capacidadMaxima),
         fillOpacity: 0.6,
         weight: 2,
-      }).addTo(map)
-
+      })
       circle.bindTooltip(a.codigoOACI)
       circle.on('click', () => onAeropuertoClick?.(a))
       return circle
     })
+    circles.forEach((c) => circleLayerRef.current.addLayer(c))
 
     const polylines = vuelos.map((v) => {
       const from: [number, number] = [v.latOrigen, v.lonOrigen]
       const to: [number, number] = [v.latDestino, v.lonDestino]
-      const mid = interpolate(from, to, 0.5)
-      mid[0] += 2
+      const mid: [number, number] = [(from[0] + to[0]) / 2 + 2, (from[1] + to[1]) / 2]
       const line = L.polyline([from, mid, to], {
         color: vueloColor(v.cargaActual, v.capacidad),
         weight: 2,
         opacity: 0.7,
         dashArray: '5, 5',
-      }).addTo(map)
-
+      })
       line.on('click', () => onVueloClick?.(v))
       return line
     })
+    polylines.forEach((l) => routeLayerRef.current.addLayer(l))
 
     const markers = vuelos.map((v) => {
       const from: [number, number] = [v.latOrigen, v.lonOrigen]
       const to: [number, number] = [v.latDestino, v.lonDestino]
-      const pos = interpolate(from, to, v.progresoVuelo / 100)
-      pos[0] += 1
-      const marker = L.marker(pos, { icon: airplaneIcon() }).addTo(map)
+      const t = v.progresoVuelo / 100
+      const pos: [number, number] = [from[0] + (to[0] - from[0]) * t + 1, from[1] + (to[1] - from[1]) * t]
+      const marker = L.marker(pos, { icon: airplaneIcon() })
       marker.bindTooltip(`${v.id} (${Math.round(v.progresoVuelo)}%)`)
       marker.on('click', () => onVueloClick?.(v))
       return marker
     })
-
-    return () => {
-      circles.forEach((c) => c.remove())
-      polylines.forEach((l) => l.remove())
-      markers.forEach((m) => m.remove())
-    }
+    markers.forEach((m) => markerLayerRef.current.addLayer(m))
   }, [aeropuertos, vuelos, onAeropuertoClick, onVueloClick])
 
   return <div ref={mapContainerRef} className="w-full h-full rounded-lg" />
 }
+
+export default memo(MapaAeropuertos)

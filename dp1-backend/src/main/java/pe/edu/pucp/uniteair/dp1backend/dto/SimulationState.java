@@ -14,6 +14,7 @@ import java.util.List;
 @AllArgsConstructor
 public class SimulationState {
     private String sessionId;
+    private String status;
     private LocalDateTime simulationTime;
     private List<VueloDTO> vuelos;
     private List<AeropuertoDTO> aeropuertos;

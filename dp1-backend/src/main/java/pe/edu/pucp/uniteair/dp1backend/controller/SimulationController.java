@@ -23,7 +23,11 @@ public class SimulationController {
     public ResponseEntity<SimulationState> iniciar(@RequestBody SimulacionConfigRequest request) {
         var dataset = cargaArchivosService.obtenerUltimoDataset();
         if (dataset == null) {
-            return ResponseEntity.badRequest().build();
+            cargaArchivosService.cargarDatasetPorDefecto();
+            dataset = cargaArchivosService.obtenerUltimoDataset();
+        }
+        if (dataset == null) {
+            return ResponseEntity.badRequest().body(null);
         }
         return ResponseEntity.ok(simulationService.iniciarSimulacion(request, dataset));
     }

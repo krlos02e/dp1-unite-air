@@ -18,7 +18,7 @@ const SimulationContext = createContext<SimulationContextType | null>(null)
 export function SimulationProvider({ children }: { children: ReactNode }) {
   const [simulationState, setSimulationState] = useState<SimulationState | null>(null)
   const [isRunning, setIsRunning] = useState(false)
-  const [pollingInterval, setPollingInterval] = useState(2000)
+  const [pollingInterval, setPollingInterval] = useState(4000)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const stopPolling = useCallback(() => {

@@ -2,6 +2,7 @@ package pe.edu.pucp.uniteair.dp1backend.service;
 
 import org.springframework.stereotype.Service;
 import pe.edu.pucp.uniteair.dp1backend.cache.SimulationCache;
+import pe.edu.pucp.uniteair.dp1backend.dto.LogEntry;
 import pe.edu.pucp.uniteair.dp1backend.dto.SimulationState;
 import pe.edu.pucp.uniteair.dp1backend.dto.SimulacionConfigRequest;
 import pe.edu.pucp.uniteair.dp1backend.engine.SimulationEngine;
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -51,7 +53,7 @@ public class SimulationService {
 
         SimulationSession session = SimulationSession.builder()
                 .sessionId(sessionId)
-                .estado("CONFIGURANDO")
+                .estado("PLANIFICANDO")
                 .duracionDias(duracionDias)
                 .fechaInicio(fechaInicio)
                 .fechaActualSimulacion(fechaInicio)
@@ -62,8 +64,16 @@ public class SimulationService {
                 .build();
         sessionRepository.save(session);
 
+        ArrayList<LogEntry> logs = new ArrayList<>();
+        logs.add(LogEntry.builder()
+                .timestamp(LocalDateTime.now())
+                .tipo("INFO")
+                .mensaje("Iniciando planificación de rutas...")
+                .build());
+
         SimulationState initialState = SimulationState.builder()
                 .sessionId(sessionId)
+                .status("PLANIFICANDO")
                 .simulationTime(fechaInicio)
                 .vuelos(new ArrayList<>())
                 .aeropuertos(new ArrayList<>())
@@ -71,12 +81,9 @@ public class SimulationService {
                 .maletasEnTransito(0)
                 .progreso(0)
                 .colapsada(false)
-                .logs(new ArrayList<>())
+                .logs(logs)
                 .build();
         simulationCache.put(sessionId, initialState);
-
-        session.setEstado("EJECUTANDO");
-        sessionRepository.save(session);
 
         simulationEngine.ejecutarSimulacion(sessionId, dataset, config, algoritmo,
                 duracionDias, fechaInicio, 1.0);
@@ -85,7 +92,25 @@ public class SimulationService {
     }
 
     public SimulationState obtenerEstado(String sessionId) {
-        return simulationCache.get(sessionId);
+        SimulationState state = simulationCache.get(sessionId);
+        if (state == null) return null;
+        List<LogEntry> logs = state.getLogs();
+        if (logs != null && logs.size() > 50) {
+            logs = logs.subList(logs.size() - 50, logs.size());
+        }
+        return SimulationState.builder()
+                .sessionId(state.getSessionId())
+                .status(state.getStatus())
+                .simulationTime(state.getSimulationTime())
+                .vuelos(state.getVuelos())
+                .aeropuertos(state.getAeropuertos())
+                .maletasEntregadas(state.getMaletasEntregadas())
+                .maletasEnTransito(state.getMaletasEnTransito())
+                .progreso(state.getProgreso())
+                .colapsada(state.isColapsada())
+                .motivoColapso(state.getMotivoColapso())
+                .logs(logs != null ? new ArrayList<>(logs) : null)
+                .build();
     }
 
     public SimulationState detenerSimulacion(String sessionId) {
