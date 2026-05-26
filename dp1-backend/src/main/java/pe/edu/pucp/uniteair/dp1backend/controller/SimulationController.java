@@ -3,11 +3,14 @@ package pe.edu.pucp.uniteair.dp1backend.controller;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import pe.edu.pucp.uniteair.dp1backend.cache.SimulationCache;
+import pe.edu.pucp.uniteair.dp1backend.dto.LogEntry;
 import pe.edu.pucp.uniteair.dp1backend.dto.SimulationState;
 import pe.edu.pucp.uniteair.dp1backend.dto.SimulacionConfigRequest;
 import pe.edu.pucp.uniteair.dp1backend.service.CargaArchivosService;
 import pe.edu.pucp.uniteair.dp1backend.service.SimulationService;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -52,7 +55,16 @@ public class SimulationController {
             dataset = cargaArchivosService.obtenerUltimoDataset();
         }
         if (dataset == null) {
-            return ResponseEntity.badRequest().body(null);
+            SimulationState errorState = SimulationState.builder()
+                    .sessionId("error")
+                    .status("ERROR")
+                    .logs(List.of(LogEntry.builder()
+                            .timestamp(LocalDateTime.now())
+                            .tipo("ERROR")
+                            .mensaje("No se encontró un dataset cargado y no se pudo cargar el dataset por defecto")
+                            .build()))
+                    .build();
+            return ResponseEntity.badRequest().body(errorState);
         }
         return ResponseEntity.ok(simulationService.iniciarSimulacion(request, dataset));
     }
@@ -67,6 +79,22 @@ public class SimulationController {
     @PostMapping("/detener/{sessionId}")
     public ResponseEntity<SimulationState> detener(@PathVariable String sessionId) {
         var state = simulationService.detenerSimulacion(sessionId);
+        if (state == null) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(state);
+    }
+
+    @PostMapping("/pausar/{sessionId}")
+    public ResponseEntity<SimulationState> pausar(@PathVariable String sessionId) {
+        simulationService.pausarSimulacion(sessionId);
+        var state = simulationService.obtenerEstado(sessionId);
+        if (state == null) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(state);
+    }
+
+    @PostMapping("/reanudar/{sessionId}")
+    public ResponseEntity<SimulationState> reanudar(@PathVariable String sessionId) {
+        simulationService.reanudarSimulacion(sessionId);
+        var state = simulationService.obtenerEstado(sessionId);
         if (state == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(state);
     }

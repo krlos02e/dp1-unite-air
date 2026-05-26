@@ -1,11 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSimulation } from '../context/SimulationContext'
 import { simulationService } from '../services/SimulationService'
 import MapaAeropuertos from '../components/MapaAeropuertos'
 import VueloModal from '../components/VueloModal'
 import AeropuertoModal from '../components/AeropuertoModal'
 import type { SimulationState, VueloDTO, AeropuertoDTO } from '../types'
-import { useState } from 'react'
 
 interface Props {
   sessionId: string
@@ -17,6 +16,7 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
   const { simulationState, startPolling, stopPolling } = useSimulation()
   const [selectedVuelo, setSelectedVuelo] = useState<VueloDTO | null>(null)
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
+  const [isPaused, setIsPaused] = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -35,14 +35,23 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [simulationState?.logs])
 
-  const handleDetener = async () => {
+  const handleTogglePause = async () => {
     try {
-      await simulationService.detener(sessionId)
-      stopPolling()
-      onBack()
+      if (isPaused) {
+        await simulationService.reanudar(sessionId)
+        setIsPaused(false)
+      } else {
+        await simulationService.pausar(sessionId)
+        setIsPaused(true)
+      }
     } catch {
       // ignore
     }
+  }
+
+  const handleNuevaSimulacion = () => {
+    stopPolling()
+    onBack()
   }
 
   if (!simulationState) {
@@ -53,47 +62,62 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
     )
   }
 
-  if (simulationState.status === 'PLANIFICANDO') {
-    return (
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl sm:text-2xl font-bold">Planificando Rutas</h2>
-          <button onClick={handleDetener}
-                  className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-medium text-sm">
-            Detener
-          </button>
-        </div>
-        <div className="flex flex-col items-center justify-center py-16">
-          <div className="w-12 h-12 border-4 border-sky-400 border-t-transparent rounded-full animate-spin mb-6" />
-          <p className="text-gray-300 text-lg mb-2">Calculando rutas óptimas...</p>
-          <p className="text-gray-500 text-sm">El motor de planificación está procesando los envíos</p>
-        </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 max-w-2xl mx-auto">
-          <h3 className="text-sm font-semibold text-gray-300 mb-2">Registro Operativo</h3>
-          <div className="h-32 overflow-y-auto space-y-1 text-xs font-mono">
-            {simulationState.logs.map((log, i) => (
-              <div key={i} className="text-gray-400">
-                [{log.timestamp}] {log.tipo}: {log.mensaje}
-              </div>
-            ))}
-            <div ref={logEndRef} />
-          </div>
-        </div>
-      </div>
-    )
-  }
+  const isPlanning = simulationState.status === 'PLANIFICANDO'
+  const isCompleted = simulationState.status === 'COMPLETADA'
+  const isColapsada = simulationState.status === 'COLAPSADA'
+  const isError = simulationState.status === 'ERROR'
+  const showActionButton = !isColapsada && !isError
 
   return (
-    <div>
+    <div className="relative">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4">
-        <h2 className="text-xl sm:text-2xl font-bold">Simulación en Curso</h2>
-        <button onClick={handleDetener}
-                className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-medium text-sm">
-          Detener Simulación
-        </button>
+        <h2 className="text-xl sm:text-2xl font-bold">
+          {isPlanning ? 'Planificando Rutas' :
+           isCompleted ? 'Simulación Completada' :
+           isColapsada ? 'Simulación Colapsada' :
+           isError ? 'Error en Simulación' :
+           'Simulación en Curso'}
+        </h2>
+        {showActionButton && (
+          <button
+            onClick={isCompleted ? handleNuevaSimulacion : handleTogglePause}
+            className={`px-4 py-2 rounded-lg font-medium text-sm ${
+              isCompleted
+                ? 'bg-emerald-600 hover:bg-emerald-700'
+                : isPaused
+                ? 'bg-sky-600 hover:bg-sky-700'
+                : 'bg-amber-600 hover:bg-amber-700'
+            }`}
+          >
+            {isCompleted
+              ? 'Nueva Simulación'
+              : isPaused
+              ? 'Reanudar Simulación'
+              : 'Pausar Simulación'}
+          </button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-4">
+      {isCompleted && (
+        <div className="bg-emerald-900/50 border border-emerald-700 text-emerald-300 p-4 rounded-xl mb-4">
+          <p className="font-semibold">Simulación finalizada exitosamente</p>
+          <p className="text-sm mt-1">
+            Se entregaron {simulationState.maletasEntregadas} maletas en {simulationState.progreso}% del tiempo simulado.
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-4 relative">
+        {isPlanning && !isPaused && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60 rounded-xl pointer-events-none">
+            <div className="text-center pointer-events-auto">
+              <div className="w-12 h-12 border-4 border-sky-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+              <p className="text-gray-300 text-lg mb-2">Calculando rutas óptimas...</p>
+              <p className="text-gray-500 text-sm">El motor de planificación está procesando los envíos</p>
+            </div>
+          </div>
+        )}
+
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-2 h-[50vh] lg:h-[70vh]">
           <MapaAeropuertos
             aeropuertos={simulationState.aeropuertos}
