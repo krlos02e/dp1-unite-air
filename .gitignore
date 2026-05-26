@@ -1,0 +1,8 @@
+*.tar
+*.pem
+*.zip
+*.log
+*.bak
+*.tmp
+*.cache
+*.env

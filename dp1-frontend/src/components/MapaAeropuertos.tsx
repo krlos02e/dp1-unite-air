@@ -30,14 +30,10 @@ function vueloColor(carga: number, cap: number): string {
 function airplaneIcon(): L.DivIcon {
   return L.divIcon({
     className: '',
-    html: `<div style="font-size:18px;transform:rotate(0deg);color:#0ea5e9">✈</div>`,
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
+    html: `<div style="font-size:14px;color:#0ea5e9">✈</div>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
   })
-}
-
-function interpolate(a: [number, number], b: [number, number], t: number): [number, number] {
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
 }
 
 function dataKey(arr: AeropuertoDTO[] | VueloDTO[]): string {
@@ -65,8 +61,8 @@ function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick 
         zoomControl: true,
       })
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
         maxZoom: 18,
       }).addTo(map)
 
@@ -117,26 +113,27 @@ function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick 
       const mid: [number, number] = [(from[0] + to[0]) / 2 + 2, (from[1] + to[1]) / 2]
       const line = L.polyline([from, mid, to], {
         color: vueloColor(v.cargaActual, v.capacidad),
-        weight: 2,
-        opacity: 0.7,
-        dashArray: '5, 5',
+        weight: 1,
+        opacity: 0.4,
+        dashArray: '4, 6',
       })
       line.on('click', () => onVueloClick?.(v))
       return line
     })
     polylines.forEach((l) => routeLayerRef.current.addLayer(l))
 
-    const markers = vuelos.map((v) => {
+    const activeFlights = vuelos.filter(v => v.progresoVuelo > 0 && v.progresoVuelo < 100)
+    const flightMarkers = activeFlights.map((v) => {
       const from: [number, number] = [v.latOrigen, v.lonOrigen]
       const to: [number, number] = [v.latDestino, v.lonDestino]
       const t = v.progresoVuelo / 100
       const pos: [number, number] = [from[0] + (to[0] - from[0]) * t + 1, from[1] + (to[1] - from[1]) * t]
-      const marker = L.marker(pos, { icon: airplaneIcon() })
-      marker.bindTooltip(`${v.id} (${Math.round(v.progresoVuelo)}%)`)
-      marker.on('click', () => onVueloClick?.(v))
-      return marker
+      const mk = L.marker(pos, { icon: airplaneIcon() })
+      mk.bindTooltip(`${v.id} (${Math.round(v.progresoVuelo)}%)`)
+      mk.on('click', () => onVueloClick?.(v))
+      return mk
     })
-    markers.forEach((m) => markerLayerRef.current.addLayer(m))
+    flightMarkers.forEach((m) => markerLayerRef.current.addLayer(m))
   }, [aeropuertos, vuelos, onAeropuertoClick, onVueloClick])
 
   return <div ref={mapContainerRef} className="w-full h-full rounded-lg" />

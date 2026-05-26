@@ -14,7 +14,7 @@ interface Props {
 }
 
 export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Props) {
-  const { simulationState, isRunning, startPolling, stopPolling, setPollingInterval } = useSimulation()
+  const { simulationState, startPolling, stopPolling } = useSimulation()
   const [selectedVuelo, setSelectedVuelo] = useState<VueloDTO | null>(null)
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
   const logEndRef = useRef<HTMLDivElement>(null)

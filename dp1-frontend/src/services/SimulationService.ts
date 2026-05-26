@@ -17,6 +17,10 @@ class SimulationService extends HttpClient {
   poll(sessionId: string): Promise<SimulationState> {
     return this.get<SimulationState>(`/simulacion/${sessionId}/poll`)
   }
+
+  activa(): Promise<{ activa: boolean; sessionId?: string; status?: string; progreso?: number }> {
+    return this.get(`/simulacion/activa`)
+  }
 }
 
 export const simulationService = new SimulationService()

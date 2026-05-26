@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit;
 public class SimulationCache {
 
     private Cache<String, SimulationState> cache;
+    private String activeSessionId;
 
     @PostConstruct
     public void init() {
@@ -25,6 +26,9 @@ public class SimulationCache {
 
     public void put(String sessionId, SimulationState state) {
         cache.put(sessionId, state);
+        if ("PLANIFICANDO".equals(state.getStatus()) || "EJECUTANDO".equals(state.getStatus())) {
+            this.activeSessionId = sessionId;
+        }
     }
 
     public SimulationState get(String sessionId) {
@@ -33,10 +37,23 @@ public class SimulationCache {
 
     public void evict(String sessionId) {
         cache.invalidate(sessionId);
+        if (sessionId.equals(this.activeSessionId)) {
+            this.activeSessionId = null;
+        }
     }
 
     public boolean containsKey(String sessionId) {
         return cache.getIfPresent(sessionId) != null;
+    }
+
+    public String getActiveSessionId() {
+        if (activeSessionId == null) return null;
+        SimulationState state = cache.getIfPresent(activeSessionId);
+        if (state == null || "COLAPSADA".equals(state.getStatus()) || "COMPLETADA".equals(state.getStatus()) || "ERROR".equals(state.getStatus())) {
+            activeSessionId = null;
+            return null;
+        }
+        return activeSessionId;
     }
 
     public Map<String, SimulationState> getAll() {

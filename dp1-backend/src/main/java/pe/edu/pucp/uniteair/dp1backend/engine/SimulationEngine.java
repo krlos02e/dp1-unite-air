@@ -204,6 +204,22 @@ public class SimulationEngine {
                         session.setProgresoPorcentaje(100);
                         sessionRepository.save(session);
                     }
+                    SimulationState finalState = simulationCache.get(sessionId);
+                    if (finalState != null) {
+                        SimulationState completed = SimulationState.builder()
+                                .sessionId(sessionId)
+                                .status("COMPLETADA")
+                                .simulationTime(finalState.getSimulationTime())
+                                .vuelos(finalState.getVuelos())
+                                .aeropuertos(finalState.getAeropuertos())
+                                .maletasEntregadas(finalState.getMaletasEntregadas())
+                                .maletasEnTransito(finalState.getMaletasEnTransito())
+                                .progreso(100)
+                                .colapsada(false)
+                                .logs(finalState.getLogs())
+                                .build();
+                        simulationCache.put(sessionId, completed);
+                    }
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

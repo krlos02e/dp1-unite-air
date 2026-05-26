@@ -20,7 +20,7 @@ export abstract class HttpClient {
 
   constructor() {
     this.instance = axios.create({
-      baseURL: 'http://localhost:8080',
+      baseURL: import.meta.env.VITE_API_URL || '/api',
       withCredentials: true,
       paramsSerializer: customParamsSerializer,
     })

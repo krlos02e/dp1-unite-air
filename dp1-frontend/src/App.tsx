@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { SimulationProvider } from './context/SimulationContext'
 import GestionEnvios from './pages/GestionEnvios'
 import Dashboard from './pages/Dashboard'
 import SimulacionConfig from './pages/SimulacionConfig'
 import SimulacionEjecucion from './pages/SimulacionEjecucion'
 import EscenarioColapso from './pages/EscenarioColapso'
+import { simulationService } from './services/SimulationService'
 import type { SimulationState } from './types'
 
 type Page = 'inicio' | 'carga' | 'dashboard' | 'config' | 'ejecucion' | 'colapso'
@@ -13,12 +14,43 @@ function App() {
   const [page, setPage] = useState<Page>('inicio')
   const [sessionId, setSessionId] = useState<string>('')
   const [colapsoState, setColapsoState] = useState<SimulationState | null>(null)
+  const [checking, setChecking] = useState(true)
 
-  const nav = (p: Page) => () => setPage(p)
+  useEffect(() => {
+    simulationService.activa().then(res => {
+      if (res.activa && res.sessionId) {
+        setSessionId(res.sessionId)
+        if (res.status === 'PLANIFICANDO' || res.status === 'EJECUTANDO') {
+          setPage('ejecucion')
+        }
+      }
+    }).catch(() => {}).finally(() => setChecking(false))
+  }, [])
+
+  const nav = (p: Page) => () => {
+    if (p === 'config') {
+      simulationService.activa().then(res => {
+        if (res.activa && res.sessionId) {
+          setSessionId(res.sessionId)
+          setPage('ejecucion')
+        } else {
+          setPage('config')
+        }
+      }).catch(() => setPage('config'))
+    } else {
+      setPage(p)
+    }
+  }
   
   return (
     <SimulationProvider>
       <div className="min-h-screen bg-gray-950 text-gray-100">
+        {checking ? (
+          <div className="flex items-center justify-center h-screen">
+            <div className="w-8 h-8 border-4 border-sky-400 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+        <>
         <nav className="bg-gray-900 border-b border-gray-800 px-4 sm:px-6 py-3 flex items-center gap-4 sm:gap-6 overflow-x-auto">
           <h1 className="text-lg sm:text-xl font-bold text-sky-400 shrink-0">UniteAir</h1>
           <button onClick={nav('inicio')} className="text-sm sm:text-base hover:text-sky-300 shrink-0">Inicio</button>
@@ -58,6 +90,8 @@ function App() {
           )}
           {page === 'colapso' && <EscenarioColapso state={colapsoState} onBack={nav('inicio')} />}
         </main>
+        </>
+        )}
       </div>
     </SimulationProvider>
   )
