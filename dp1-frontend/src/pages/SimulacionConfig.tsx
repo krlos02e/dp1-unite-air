@@ -29,10 +29,16 @@ export default function SimulacionConfig({ onStart }: Props) {
         fechaInicio,
         horaInicio,
         algoritmo,
+        velocidad,
       })
       onStart(state.sessionId)
-    } catch {
-      setError('Error al iniciar la simulación')
+    } catch (err: any) {
+      const msg = err?.response?.data?.logs?.[0]?.mensaje
+        || err?.response?.data?.message
+        || err?.message
+        || 'Error al iniciar la simulación'
+      setError(msg)
+      console.error('Error al iniciar simulación:', err)
     } finally {
       setLoading(false)
     }

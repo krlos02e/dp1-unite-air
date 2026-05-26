@@ -14,6 +14,14 @@ class SimulationService extends HttpClient {
     return this.post<SimulationState>(`/simulacion/detener/${sessionId}`)
   }
 
+  pausar(sessionId: string): Promise<SimulationState> {
+    return this.post<SimulationState>(`/simulacion/pausar/${sessionId}`)
+  }
+
+  reanudar(sessionId: string): Promise<SimulationState> {
+    return this.post<SimulationState>(`/simulacion/reanudar/${sessionId}`)
+  }
+
   poll(sessionId: string): Promise<SimulationState> {
     return this.get<SimulationState>(`/simulacion/${sessionId}/poll`)
   }

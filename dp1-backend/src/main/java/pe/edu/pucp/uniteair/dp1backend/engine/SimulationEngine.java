@@ -75,10 +75,29 @@ public class SimulationEngine {
     private final SimulationSessionRepository sessionRepository;
     private final Map<String, CompletableFuture<Void>> activeSimulations = new ConcurrentHashMap<>();
     private final Map<String, Boolean> cancellationFlags = new ConcurrentHashMap<>();
+    private final Map<String, Boolean> pauseFlags = new ConcurrentHashMap<>();
 
     public SimulationEngine(SimulationCache simulationCache, SimulationSessionRepository sessionRepository) {
         this.simulationCache = simulationCache;
         this.sessionRepository = sessionRepository;
+    }
+
+    public void pausarSimulacion(String sessionId) {
+        pauseFlags.put(sessionId, true);
+    }
+
+    public void reanudarSimulacion(String sessionId) {
+        pauseFlags.remove(sessionId);
+    }
+
+    public boolean isPausada(String sessionId) {
+        return pauseFlags.getOrDefault(sessionId, false);
+    }
+
+    private void esperarSiPausada(String sessionId) throws InterruptedException {
+        while (pauseFlags.getOrDefault(sessionId, false)) {
+            Thread.sleep(200);
+        }
     }
 
     @Async("taskExecutor")
@@ -101,15 +120,130 @@ public class SimulationEngine {
                 TwoPhaseOrchestrator orchestrator = new TwoPhaseOrchestrator(planner);
 
                 PlanificacionUtils.limpiarCacheGlobal();
-                actualizarEstadoPlanificando(sessionId, "Planificando rutas...");
 
-                System.out.println("[2/4] Algoritmo: " + algoritmo);
-                System.out.println("[3/4] Algoritmo ejecutando...");
-                long tPlanStart = System.nanoTime();
-                Solucion solucion = orchestrator.ejecutarFlujoCompleto(dataset, config);
-                long tPlanEnd = System.nanoTime();
-                long duracionMs = (tPlanEnd - tPlanStart) / 1_000_000;
-                System.out.printf("[4/4] Planificación completada [%dms]%n", duracionMs);
+                // Inicializar visualización inmediatamente con datos del dataset
+                logs.add(LogEntry.builder()
+                        .timestamp(fechaInicio)
+                        .tipo("INFO")
+                        .mensaje("Planificando rutas...")
+                        .build());
+                actualizarEstadoEnCache(sessionId, fechaInicio, dataset, cargaVuelo, ocupacionAeropuerto,
+                        0, 0, 0, duracionHoras, false, null, logs, "PLANIFICANDO");
+
+                // Variables compartidas entre hilos
+                final int[] horaRef = {0};
+                final LocalDateTime[] simTimeRef = {fechaInicio};
+                final boolean[] planificacionTerminada = {false};
+                final Solucion[] solucionRef = {null};
+                final List<LogEntry> vizLogs = Collections.synchronizedList(new ArrayList<>(logs));
+
+                // Hilo de planificación
+                Thread planificadorThread = new Thread(() -> {
+                    System.out.println("[2/4] Algoritmo: " + algoritmo);
+                    System.out.println("[3/4] Algoritmo ejecutando...");
+                    long tPlanStart = System.nanoTime();
+                    Solucion sol = orchestrator.ejecutarFlujoCompleto(dataset, config);
+                    long tPlanEnd = System.nanoTime();
+                    long duracionMs = (tPlanEnd - tPlanStart) / 1_000_000;
+                    System.out.printf("[4/4] Planificación completada [%dms]%n", duracionMs);
+                    solucionRef[0] = sol;
+                    planificacionTerminada[0] = true;
+                });
+                planificadorThread.setDaemon(true);
+                planificadorThread.start();
+
+                // Hilo de visualización: avanza el tiempo de simulación mientras planifica
+                Thread visualizacionThread = new Thread(() -> {
+                    int hora = 0;
+                    LocalDateTime simTime = fechaInicio;
+                    Set<String> rutasEntregadasViz = new HashSet<>();
+                    while (!planificacionTerminada[0] && !Thread.currentThread().isInterrupted()) {
+                        if (cancellationFlags.getOrDefault(sessionId, false)) break;
+
+                        try {
+                            esperarSiPausada(sessionId);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+
+                        // Cálculo de carga vuelo y ocupación aeropuerto
+                        for (Vuelo vuelo : dataset.getVuelos()) {
+                            if (simTime.isAfter(vuelo.getSalidaUtc()) && simTime.isBefore(vuelo.getLlegadaUtc())) {
+                                String key = vuelo.getId();
+                                int carga = estado.getCargaVuelo(key);
+                                cargaVuelo.put(key, carga);
+                            }
+                        }
+                        for (Aeropuerto a : dataset.getAeropuertos().values()) {
+                            int ocup = estado.getOcupacionHora(a.getCodigoOACI(), simTime);
+                            ocupacionAeropuerto.put(a.getCodigoOACI(), ocup);
+                        }
+
+                        // Calcular contadores de maletas si la planificación ya terminó
+                        int vizEntregadas = 0;
+                        int vizEnTransito = 0;
+                        Solucion sol = solucionRef[0];
+                        if (sol != null) {
+                            Map<String, Ruta> rutasViz = sol.getRutasAsignadas();
+                            vizEnTransito = rutasViz.size();
+                            for (Map.Entry<String, Ruta> entry : rutasViz.entrySet()) {
+                                Ruta ruta = entry.getValue();
+                                if (!ruta.getVuelos().isEmpty()) {
+                                    Vuelo ultimo = ruta.getVuelos().get(ruta.getVuelos().size() - 1);
+                                    if (simTime.isAfter(ultimo.getLlegadaUtc())) {
+                                        vizEntregadas++;
+                                        vizEnTransito--;
+                                        rutasEntregadasViz.add(entry.getKey());
+                                    }
+                                }
+                            }
+                        }
+
+                        if (hora > 0 && hora % 12 == 0) {
+                            vizLogs.add(LogEntry.builder()
+                                    .timestamp(simTime)
+                                    .tipo("INFO")
+                                    .mensaje(String.format("Planificación en curso... Hora simulada %d/%d", hora, duracionHoras))
+                                    .build());
+                        }
+
+                        actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
+                                vizEntregadas, vizEnTransito, hora, duracionHoras, false, null, vizLogs, "PLANIFICANDO");
+
+                        long sleepMs = (long) (1000.0 / Math.max(1, velocidad));
+                        if (sleepMs > 0) {
+                            try {
+                                Thread.sleep(sleepMs);
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                break;
+                            }
+                        }
+
+                        hora++;
+                        simTime = fechaInicio.plusHours(hora);
+                        if (hora > duracionHoras) {
+                            hora = duracionHoras;
+                            simTime = fechaInicio.plusHours(duracionHoras);
+                        }
+                        horaRef[0] = hora;
+                        simTimeRef[0] = simTime;
+                    }
+                });
+                visualizacionThread.setDaemon(true);
+                visualizacionThread.start();
+
+                // Esperar a que termine la planificación
+                planificadorThread.join();
+                planificacionTerminada[0] = true;
+                visualizacionThread.interrupt();
+                visualizacionThread.join(500);
+
+                Solucion solucion = solucionRef[0];
+                if (solucion == null) {
+                    throw new IllegalStateException("La planificación no produjo una solución");
+                }
 
                 Map<String, Ruta> rutas = solucion.getRutasAsignadas();
                 Set<String> noAsignados = solucion.getPaquetesNoAsignados();
@@ -122,7 +256,6 @@ public class SimulationEngine {
                 System.out.println("Asignados: " + rutas.size() + " | Sin asignar: " + noAsignados.size());
                 System.out.println("Colapso: " + (hayColapso ? "SI" : "NO"));
                 System.out.println("Costo total: " + (long) solucion.getCostoTotal());
-                System.out.println("Duración: " + duracionMs + " ms");
 
                 logs.add(LogEntry.builder()
                         .timestamp(fechaInicio)
@@ -143,12 +276,35 @@ public class SimulationEngine {
                     return;
                 }
 
-                actualizarEstadoEjecutando(sessionId, fechaInicio, logs);
+                // Sincronizar logs acumulados durante la visualización
+                logs = new ArrayList<>(vizLogs);
+                logs.add(LogEntry.builder()
+                        .timestamp(simTimeRef[0])
+                        .tipo("INFO")
+                        .mensaje(String.format("Continuando simulación desde hora %d/%d", horaRef[0], duracionHoras))
+                        .build());
 
+                // Calcular entregas retroactivas hasta el punto donde quedó la visualización
                 Set<String> rutasEntregadas = new HashSet<>();
+                LocalDateTime simTimeActual = simTimeRef[0];
+                int horaActual = horaRef[0];
 
-                for (int hora = 0; hora <= duracionHoras; hora++) {
+                for (Map.Entry<String, Ruta> entry : rutas.entrySet()) {
+                    Ruta ruta = entry.getValue();
+                    if (!ruta.getVuelos().isEmpty()) {
+                        Vuelo ultimo = ruta.getVuelos().get(ruta.getVuelos().size() - 1);
+                        if (simTimeActual.isAfter(ultimo.getLlegadaUtc())) {
+                            maletasEntregadas++;
+                            rutasEntregadas.add(entry.getKey());
+                        }
+                    }
+                }
+                maletasEnTransito = rutas.size() - maletasEntregadas;
+
+                // Continuar simulación desde horaActual
+                for (int hora = horaActual; hora <= duracionHoras; hora++) {
                     if (cancellationFlags.getOrDefault(sessionId, false)) break;
+                    esperarSiPausada(sessionId);
 
                     LocalDateTime simTime = fechaInicio.plusHours(hora);
 
@@ -189,7 +345,7 @@ public class SimulationEngine {
                     }
 
                     actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
-                            maletasEntregadas, maletasEnTransito, hora, duracionHoras, false, null, logs);
+                            maletasEntregadas, maletasEnTransito, hora, duracionHoras, false, null, logs, "EJECUTANDO");
 
                     long sleepMs = (long) (1000.0 / Math.max(1, velocidad));
                     if (sleepMs > 0) {
@@ -237,6 +393,7 @@ public class SimulationEngine {
             } finally {
                 activeSimulations.remove(sessionId);
                 cancellationFlags.remove(sessionId);
+                pauseFlags.remove(sessionId);
             }
         });
 
@@ -252,6 +409,7 @@ public class SimulationEngine {
         }
         activeSimulations.remove(sessionId);
         cancellationFlags.remove(sessionId);
+        pauseFlags.remove(sessionId);
     }
 
     private void actualizarSesionColapsada(String sessionId, String motivo, int hora, int totalHoras) {
@@ -268,7 +426,7 @@ public class SimulationEngine {
                                           Map<String, Integer> cargaVuelo, Map<String, Integer> ocupacionAeropuerto,
                                           int maletasEntregadas, int maletasEnTransito,
                                           int hora, int totalHoras, boolean colapsada,
-                                          String motivo, List<LogEntry> logs) {
+                                          String motivo, List<LogEntry> logs, String status) {
         List<VueloDTO> vuelosDTO = dataset.getVuelos().stream().map(v -> {
             double progreso = 0.0;
             if (simTime != null && v.getSalidaUtc() != null && v.getLlegadaUtc() != null) {
@@ -319,7 +477,7 @@ public class SimulationEngine {
 
         SimulationState state = SimulationState.builder()
                 .sessionId(sessionId)
-                .status("EJECUTANDO")
+                .status(status)
                 .simulationTime(simTime)
                 .vuelos(vuelosDTO)
                 .aeropuertos(aeropuertosDTO)

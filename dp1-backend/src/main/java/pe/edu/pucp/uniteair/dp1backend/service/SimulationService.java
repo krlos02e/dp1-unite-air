@@ -44,12 +44,13 @@ public class SimulationService {
                 ? LocalDate.parse(req.getFechaInicio(), DateTimeFormatter.ISO_LOCAL_DATE)
                 : LocalDate.now();
         LocalTime hora = req.getHoraInicio() != null
-                ? LocalTime.parse(req.getHoraInicio(), DateTimeFormatter.ofPattern("HH:mm"))
+                ? LocalTime.parse(req.getHoraInicio(), DateTimeFormatter.ISO_LOCAL_TIME)
                 : LocalTime.now();
         LocalDateTime fechaInicio = LocalDateTime.of(fecha, hora);
 
         int duracionDias = req.getDuracionDias() > 0 ? req.getDuracionDias() : 3;
         String algoritmo = req.getAlgoritmo() != null ? req.getAlgoritmo() : "ALNS";
+        double velocidad = req.getVelocidad() > 0 ? req.getVelocidad() : 1.0;
 
         Config_Simulacion config = new Config_Simulacion();
         config.setAeropuertoHub("SKBO");
@@ -92,7 +93,7 @@ public class SimulationService {
                 .duracionDias(duracionDias)
                 .fechaInicio(fechaInicio)
                 .fechaActualSimulacion(fechaInicio)
-                .velocidad(1.0)
+                .velocidad(velocidad)
                 .algoritmo(algoritmo)
                 .progresoPorcentaje(0)
                 .createdAt(LocalDateTime.now())
@@ -121,7 +122,7 @@ public class SimulationService {
         simulationCache.put(sessionId, initialState);
 
         simulationEngine.ejecutarSimulacion(sessionId, dataset, config, algoritmo,
-                duracionDias, fechaInicio, 1.0);
+                duracionDias, fechaInicio, velocidad);
 
         return simulationCache.get(sessionId);
     }
@@ -172,5 +173,13 @@ public class SimulationService {
             sessionRepository.save(session);
         }
         return simulationCache.get(sessionId);
+    }
+
+    public void pausarSimulacion(String sessionId) {
+        simulationEngine.pausarSimulacion(sessionId);
+    }
+
+    public void reanudarSimulacion(String sessionId) {
+        simulationEngine.reanudarSimulacion(sessionId);
     }
 }
