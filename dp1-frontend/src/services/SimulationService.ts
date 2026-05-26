@@ -2,7 +2,7 @@ import { HttpClient } from './HttpClient'
 import type { SimulationState } from '../types'
 
 class SimulationService extends HttpClient {
-  iniciar(config: { duracionDias: number; fechaInicio: string; horaInicio: string; algoritmo: string }): Promise<SimulationState> {
+  iniciar(config: { duracionDias: number; fechaInicio: string; horaInicio: string; algoritmo: string; velocidad?: number }): Promise<SimulationState> {
     return this.post<SimulationState>('/simulacion/iniciar', config)
   }
 

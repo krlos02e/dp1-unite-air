@@ -427,6 +427,10 @@ public class SimulationEngine {
                                           int maletasEntregadas, int maletasEnTransito,
                                           int hora, int totalHoras, boolean colapsada,
                                           String motivo, List<LogEntry> logs, String status) {
+        int[] vuelosCulminados = {0};
+        int[] vuelosEnTransito = {0};
+        int[] vuelosCancelados = {0};
+
         List<VueloDTO> vuelosDTO = dataset.getVuelos().stream().map(v -> {
             double progreso = 0.0;
             if (simTime != null && v.getSalidaUtc() != null && v.getLlegadaUtc() != null) {
@@ -438,6 +442,10 @@ public class SimulationEngine {
                 if (simTime.isAfter(v.getLlegadaUtc())) progreso = 100.0;
                 if (simTime.isBefore(v.getSalidaUtc())) progreso = 0.0;
             }
+            if (progreso >= 100.0) vuelosCulminados[0]++;
+            else if (progreso > 0.0) vuelosEnTransito[0]++;
+            else if (simTime != null && v.getSalidaUtc() != null && simTime.isAfter(v.getSalidaUtc())) vuelosCancelados[0]++;
+
             double[] origCoord = COORDENADAS.getOrDefault(v.getOrigen().getCodigoOACI(), new double[]{0, 0});
             double[] destCoord = COORDENADAS.getOrDefault(v.getDestino().getCodigoOACI(), new double[]{0, 0});
             return VueloDTO.builder()
@@ -483,6 +491,9 @@ public class SimulationEngine {
                 .aeropuertos(aeropuertosDTO)
                 .maletasEntregadas(maletasEntregadas)
                 .maletasEnTransito(maletasEnTransito)
+                .vuelosCulminados(vuelosCulminados[0])
+                .vuelosEnTransito(vuelosEnTransito[0])
+                .vuelosCancelados(vuelosCancelados[0])
                 .progreso(Math.min(100, totalHoras > 0 ? (hora * 100) / totalHoras : 0))
                 .colapsada(colapsada)
                 .motivoColapso(motivo)

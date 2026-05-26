@@ -1,5 +1,5 @@
 import { HttpClient } from './HttpClient'
-import type { CargaResult } from '../types'
+import type { CargaResult, AeropuertoDTO } from '../types'
 
 class CargaArchivosService extends HttpClient {
   upload(
@@ -19,6 +19,10 @@ class CargaArchivosService extends HttpClient {
         }
       },
     }).then((r) => r.data as CargaResult)
+  }
+
+  obtenerAeropuertos(): Promise<AeropuertoDTO[]> {
+    return this.get<AeropuertoDTO[]>('/carga/aeropuertos')
   }
 }
 

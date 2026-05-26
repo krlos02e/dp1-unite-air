@@ -15,4 +15,6 @@ public class LogEntry {
     private LocalDateTime timestamp;
     private String tipo;
     private String mensaje;
+    private String modulo;
+    private String detalle;
 }
