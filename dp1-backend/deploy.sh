@@ -24,6 +24,10 @@ ssh ${SSH_BASE} "mkdir -p ${EC2_DIR}"
 rsync -e "ssh -i ${PEM_PATH}" -avz --delete \
   --exclude='.git' --exclude='.idea' --exclude='target' --exclude='node_modules' \
   --exclude='dp1-frontend' --exclude='*.tar' --exclude='*.tar.gz' \
+  --exclude='AGENT.MD' --exclude='AGENTS.md' --exclude='README.md' \
+  --exclude='docker-compose.yml' --exclude='.gitmodules' --exclude='.dockerignore' \
+  --exclude='ssh-config.txt' --exclude='limpiar-ssh.sh' --exclude='subir-tar.sh' \
+  --exclude='dp1-backend/deploy.sh' --exclude='dp1-backend/deploy.bat' \
   $(dirname "$0")/../ ${EC2_USER}@${EC2_HOST}:${EC2_DIR}/
 
 echo "====================================="

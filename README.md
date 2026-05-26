@@ -5,3 +5,6 @@ git submodule update --init --recursive
 git submodule foreach git checkout main
 git submodule foreach git pull
 ```
+
+## Para deploy
+Para poder deployar en la VM de debe ingresar la contraseña en el archivo `deploy-vm.sh` y luego ejecutar el script:
