@@ -17,6 +17,7 @@ export interface AeropuertoDTO {
   codigoOACI: string;
   latitud: number;
   longitud: number;
+  ciudad?: string;
   capacidadMaxima: number;
   ocupacionActual: number;
   vuelosEntrantes: string[];
@@ -27,6 +28,8 @@ export interface LogEntry {
   timestamp: string;
   tipo: 'INFO' | 'WARN' | 'ERROR' | 'COLAPSO';
   mensaje: string;
+  modulo?: string;
+  detalle?: string;
 }
 
 export interface SimulationState {
@@ -37,6 +40,9 @@ export interface SimulationState {
   aeropuertos: AeropuertoDTO[];
   maletasEntregadas: number;
   maletasEnTransito: number;
+  vuelosCulminados: number;
+  vuelosEnTransito: number;
+  vuelosCancelados: number;
   progreso: number;
   colapsada: boolean;
   motivoColapso: string;

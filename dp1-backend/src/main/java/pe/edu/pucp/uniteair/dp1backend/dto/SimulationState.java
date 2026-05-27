@@ -20,6 +20,9 @@ public class SimulationState {
     private List<AeropuertoDTO> aeropuertos;
     private int maletasEntregadas;
     private int maletasEnTransito;
+    private int vuelosCulminados;
+    private int vuelosEnTransito;
+    private int vuelosCancelados;
     private int progreso;
     private boolean colapsada;
     private String motivoColapso;
