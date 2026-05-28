@@ -25,11 +25,15 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
   }, [sessionId, startPolling, stopPolling])
 
   useEffect(() => {
-    if (simulationState?.colapsada && simulationState.sessionId === sessionId) {
+    if (simulationState?.sessionId !== sessionId) return
+    if (simulationState?.colapsada) {
       stopPolling()
       onColapso?.(simulationState)
     }
-  }, [simulationState?.colapsada, simulationState?.sessionId, sessionId, stopPolling, onColapso])
+    if (simulationState?.status === 'COMPLETADA') {
+      stopPolling()
+    }
+  }, [simulationState?.colapsada, simulationState?.status, simulationState?.sessionId, sessionId, stopPolling, onColapso])
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -99,10 +103,10 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
       </div>
 
       {isCompleted && (
-        <div className="bg-emerald-900/50 border border-emerald-700 text-emerald-300 p-4 rounded-xl mb-4">
+        <div className="bg-emerald-900/50 border border-emerald-700 text-emerald-300 p-3 rounded-xl mb-3">
           <p className="font-semibold">Simulación finalizada exitosamente</p>
           <p className="text-sm mt-1">
-            Se entregaron {simulationState.maletasEntregadas} maletas en {simulationState.progreso}% del tiempo simulado.
+            Progreso alcanzado: {simulationState.progreso}% del tiempo simulado.
           </p>
         </div>
       )}
@@ -118,7 +122,7 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
           </div>
         )}
 
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-2 h-[50vh] lg:h-[70vh]">
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-2 h-[42vh] lg:h-[52vh]">
           <MapaAeropuertos
             aeropuertos={simulationState.aeropuertos}
             vuelos={simulationState.vuelos}
@@ -127,34 +131,23 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
           />
         </div>
 
-        <div className="space-y-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <div className="space-y-2">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
             <p className="text-gray-400 text-sm">Tiempo de simulación</p>
             <p className="text-2xl font-mono font-bold text-sky-400">{simulationState.simulationTime}</p>
           </div>
 
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-sm mb-2">Progreso</p>
-            <div className="w-full bg-gray-700 rounded-full h-4">
-              <div className="bg-emerald-500 h-4 rounded-full transition-all" style={{ width: `${simulationState.progreso}%` }} />
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+            <p className="text-gray-400 text-sm mb-1">Progreso</p>
+            <div className="w-full bg-gray-700 rounded-full h-3">
+              <div className="bg-emerald-500 h-3 rounded-full transition-all" style={{ width: `${simulationState.progreso}%` }} />
             </div>
             <p className="text-right text-xs text-gray-500 mt-1">{simulationState.progreso}%</p>
           </div>
 
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <div className="flex justify-between text-sm mb-2">
-              <span className="text-gray-400">Entregadas</span>
-              <span className="text-emerald-400 font-bold">{simulationState.maletasEntregadas}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">En tránsito</span>
-              <span className="text-sky-400 font-bold">{simulationState.maletasEnTransito}</span>
-            </div>
-          </div>
-
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex-1">
-            <h3 className="text-sm font-semibold text-gray-300 mb-2">Registro Operativo</h3>
-            <div className="h-32 lg:h-48 overflow-y-auto space-y-1 text-xs font-mono">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 flex-1">
+            <h3 className="text-sm font-semibold text-gray-300 mb-1">Registro Operativo</h3>
+            <div className="h-24 lg:h-32 overflow-y-auto space-y-1 text-xs font-mono">
               {simulationState.logs.map((log, i) => (
                 <div key={i} className={`${log.tipo === 'ERROR' ? 'text-red-400' : log.tipo === 'WARN' ? 'text-yellow-400' : log.tipo === 'COLAPSO' ? 'text-red-500 font-bold' : 'text-gray-400'}`}>
                   [{log.timestamp}] {log.tipo}: {log.mensaje}

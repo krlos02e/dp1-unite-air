@@ -41,16 +41,7 @@ export default function EscenarioColapso({ state, onBack }: Props) {
               <span className="font-mono text-sm">{state.simulationTime}</span>
             </div>
 
-            <div className="border-t border-gray-700 pt-3 mt-3 space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Maletas entregadas</span>
-                <span className="text-emerald-400 font-bold">{state.maletasEntregadas}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Maletas en tránsito</span>
-                <span className="text-sky-400 font-bold">{state.maletasEnTransito}</span>
-              </div>
-            </div>
+
           </div>
 
           <button onClick={onBack}

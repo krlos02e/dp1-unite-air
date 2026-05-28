@@ -38,7 +38,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       try {
         const state = await simulationService.poll(sessionId)
         setSimulationState(state)
-        if (state.colapsada) {
+        if (state.colapsada || state.status === 'COMPLETADA') {
           stopPolling()
         }
       } catch {
