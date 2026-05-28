@@ -2,6 +2,7 @@ import { useEffect, useRef, memo } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { AeropuertoDTO, VueloDTO } from '../types'
+import { getAirportCity, AIRPORTS_DATA } from '../data/airportsData'
 
 interface Props {
   aeropuertos: AeropuertoDTO[]
@@ -19,13 +20,6 @@ function aeropuertoColor(ocu: number, max: number): string {
   return '#ef4444'
 }
 
-function vueloColor(carga: number, cap: number): string {
-  const ratio = cap > 0 ? carga / cap : 0
-  if (ratio < 0.4) return '#22c55e'
-  if (ratio < 0.7) return '#eab308'
-  return '#ef4444'
-}
-
 function airplaneIcon(): L.DivIcon {
   return L.divIcon({
     className: '',
@@ -35,15 +29,18 @@ function airplaneIcon(): L.DivIcon {
   })
 }
 
-function airportIcon(color: string): L.DivIcon {
+function airportIcon(color: string, label: string): L.DivIcon {
   return L.divIcon({
     className: '',
-    html: `<svg width="24" height="32" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 0C5.373 0 0 5.373 0 12c0 9 12 20 12 20s12-11 12-20c0-6.627-5.373-12-12-12z" fill="${color}" stroke="white" stroke-width="1.5"/>
-      <circle cx="12" cy="12" r="4" fill="white"/>
-    </svg>`,
-    iconSize: [24, 32],
-    iconAnchor: [12, 28],
+    html: `<div style="display:flex;flex-direction:column;align-items:center;pointer-events:auto;">
+      <svg width="24" height="32" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 0C5.373 0 0 5.373 0 12c0 9 12 20 12 20s12-11 12-20c0-6.627-5.373-12-12-12z" fill="${color}" stroke="white" stroke-width="1.5"/>
+        <circle cx="12" cy="12" r="4" fill="white"/>
+      </svg>
+      <span style="font-size:10px;font-weight:bold;color:white;text-shadow:0 1px 3px rgba(0,0,0,0.8);white-space:nowrap;margin-top:2px;">${label}</span>
+    </div>`,
+    iconSize: [24, 52],
+    iconAnchor: [12, 48],
   })
 }
 
@@ -88,6 +85,8 @@ function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick 
         flightMarkersRef.current.clear()
         flightRoutesRef.current.clear()
         airportMarkersRef.current.clear()
+        targetPositionsRef.current.clear()
+        currentPositionsRef.current.clear()
         cancelAnimationFrame(rafRef.current)
       }
     }
@@ -110,12 +109,18 @@ function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick 
     aeropuertos.forEach((a) => {
       const existing = airportMarkersRef.current.get(a.codigoOACI)
       const color = aeropuertoColor(a.ocupacionActual, a.capacidadMaxima)
+      const cityName = a.ciudad || getAirportCity(a.codigoOACI) || a.codigoOACI
+      const label = cityName
+
+      const staticData = AIRPORTS_DATA[a.codigoOACI]
+      const lat = (a.latitud && a.latitud !== 0) ? a.latitud : (staticData?.latitud ?? 0)
+      const lon = (a.longitud && a.longitud !== 0) ? a.longitud : (staticData?.longitud ?? 0)
 
       if (existing) {
-        existing.setIcon(airportIcon(color))
+        existing.setIcon(airportIcon(color, label))
+        existing.setLatLng([lat, lon])
       } else {
-        const mk = L.marker([a.latitud, a.longitud], { icon: airportIcon(color) })
-        mk.bindTooltip(`<b>${a.codigoOACI}</b><br/>Cap: ${a.ocupacionActual}/${a.capacidadMaxima}`, { direction: 'top' })
+        const mk = L.marker([lat, lon], { icon: airportIcon(color, label) })
         mk.on('click', () => onAeropuertoClick?.(a))
         circleLayerRef.current?.addLayer(mk)
         airportMarkersRef.current.set(a.codigoOACI, mk)
@@ -159,24 +164,9 @@ function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick 
 
       targetPositionsRef.current.set(v.id, [lat, lon])
 
-      const existingLine = flightRoutesRef.current.get(v.id)
-      const color = vueloColor(v.cargaActual, v.capacidad)
-      if (!existingLine) {
-        const line = L.polyline([from, [midLat, midLon], to], {
-          color,
-          weight: 1.5,
-          opacity: 0.35,
-          dashArray: '4, 6',
-        })
-        line.on('click', () => onVueloClick?.(v))
-        routeLayerRef.current?.addLayer(line)
-        flightRoutesRef.current.set(v.id, line)
-      } else {
-        existingLine.setStyle({ color })
-      }
-
       if (!currentPositionsRef.current.has(v.id)) {
-        currentPositionsRef.current.set(v.id, [lat, lon])
+        // Start at origin so the plane appears to depart from the node
+        currentPositionsRef.current.set(v.id, [from[0], from[1]])
       }
     })
 
@@ -188,15 +178,15 @@ function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick 
         const current = currentPositionsRef.current.get(id)
         if (!target || !current) return
 
-        const dx = target[0] - current[0]
-        const dy = target[1] - current[1]
+        const dx = target[1] - current[1]
+        const dy = target[0] - current[0]
         const dist = Math.sqrt(dx * dx + dy * dy)
 
         if (dist > 0.001) {
           const speed = Math.min(0.15, dist * 0.3)
           const angle = Math.atan2(dy, dx)
-          current[0] += Math.sin(angle) * speed
           current[1] += Math.cos(angle) * speed
+          current[0] += Math.sin(angle) * speed
           mk.setLatLng(current)
         }
       })
@@ -210,12 +200,12 @@ function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick 
 
       let mk = flightMarkersRef.current.get(v.id)
       if (!mk) {
-        mk = L.marker(target, { icon: airplaneIcon() })
+        const startPos = currentPositionsRef.current.get(v.id) || target
+        mk = L.marker(startPos, { icon: airplaneIcon() })
         mk.bindTooltip(`${v.id} (${Math.round(v.progresoVuelo)}%)`)
         mk.on('click', () => onVueloClick?.(v))
         markerLayerRef.current?.addLayer(mk)
         flightMarkersRef.current.set(v.id, mk)
-        currentPositionsRef.current.set(v.id, [...target] as [number, number])
       }
     })
 

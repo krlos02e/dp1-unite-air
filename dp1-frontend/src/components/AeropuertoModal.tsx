@@ -1,4 +1,5 @@
 import type { AeropuertoDTO } from '../types'
+import { getAirportCity } from '../data/airportsData'
 
 interface Props {
   aeropuerto: AeropuertoDTO | null
@@ -20,10 +21,13 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose }: Props) 
     ? (aeropuerto.ocupacionActual / aeropuerto.capacidadMaxima) * 100
     : 0
 
+  const cityName = aeropuerto.ciudad || getAirportCity(aeropuerto.codigoOACI) || ''
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60" onClick={onClose}>
       <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-lg mx-4" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-xl font-bold text-emerald-400 mb-4">{aeropuerto.codigoOACI}</h2>
+        <h2 className="text-xl font-bold text-emerald-400 mb-1">{aeropuerto.codigoOACI}</h2>
+        {cityName && <p className="text-sm text-gray-400 mb-4">{cityName}</p>}
 
         <div className="space-y-3 text-sm">
           <div className="flex justify-between">

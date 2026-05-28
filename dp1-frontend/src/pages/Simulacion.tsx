@@ -211,7 +211,7 @@ export default function Simulacion() {
       </div>
 
       {/* Mapa siempre visible con altura fija */}
-      <div className="relative h-[60vh] bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+      <div className="relative h-[48vh] bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
         <MapaAeropuertos
           aeropuertos={aeropuertos}
           vuelos={vuelos}
@@ -223,8 +223,8 @@ export default function Simulacion() {
       {/* Paneles inferiores - SOLO 3 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Estados / Contadores */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="text-sm font-bold text-gray-100 mb-3">Estados</h3>
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+          <h3 className="text-sm font-bold text-gray-100 mb-2">Estados</h3>
           <div className="space-y-2">
             <div className="flex items-center justify-between bg-emerald-900/30 border border-emerald-800/50 rounded-lg px-3 py-2">
               <span className="text-xs text-emerald-400 font-medium">Vuelos Culminados</span>
@@ -239,22 +239,13 @@ export default function Simulacion() {
               <span className="text-sm font-bold text-red-300 bg-red-800/50 px-2 py-0.5 rounded">{vuelosCancelados}</span>
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t border-gray-800 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-400">Maletas Entregadas</span>
-              <span className="text-sm font-bold text-emerald-400">{simulationState?.maletasEntregadas ?? 0}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-400">Maletas en Tránsito</span>
-              <span className="text-sm font-bold text-sky-400">{simulationState?.maletasEnTransito ?? 0}</span>
-            </div>
-          </div>
+
         </div>
 
         {/* Eventos Simulación */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col">
-          <h3 className="text-sm font-bold text-gray-100 mb-2">Eventos Simulación</h3>
-          <div className="flex-1 overflow-y-auto max-h-40 space-y-1 text-xs font-mono">
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 flex flex-col">
+          <h3 className="text-sm font-bold text-gray-100 mb-1">Eventos Simulación</h3>
+          <div className="flex-1 overflow-y-auto max-h-28 space-y-1 text-xs font-mono">
             {simulationState && simulationState.logs.length > 0 ? (
               simulationState.logs.slice(-20).map((log, i) => (
                 <div key={i} className={`${
@@ -274,8 +265,8 @@ export default function Simulacion() {
         </div>
 
         {/* Tiempo de Simulación */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="text-sm font-bold text-gray-100 mb-2">Tiempo de Simulación</h3>
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+          <h3 className="text-sm font-bold text-gray-100 mb-1">Tiempo de Simulación</h3>
           <div className="space-y-2 text-xs text-gray-400">
             <div className="flex justify-between">
               <span>Inicio:</span>

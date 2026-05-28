@@ -10,7 +10,7 @@ export default function VueloModal({ vuelo, isOpen, onClose }: Props) {
   if (!isOpen || !vuelo) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60" onClick={onClose}>
       <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-lg mx-4" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-xl font-bold text-sky-400 mb-4">Vuelo {vuelo.id}</h2>
 
