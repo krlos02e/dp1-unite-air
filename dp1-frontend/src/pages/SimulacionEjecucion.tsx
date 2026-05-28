@@ -53,6 +53,16 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
     }
   }
 
+  const handleDetener = async () => {
+    try {
+      await simulationService.detener(sessionId)
+    } catch {
+      // ignore
+    }
+    stopPolling()
+    onBack()
+  }
+
   const handleNuevaSimulacion = () => {
     stopPolling()
     onBack()
@@ -83,22 +93,36 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
            'Simulación en Curso'}
         </h2>
         {showActionButton && (
-          <button
-            onClick={isCompleted ? handleNuevaSimulacion : handleTogglePause}
-            className={`px-4 py-2 rounded-lg font-medium text-sm ${
-              isCompleted
-                ? 'bg-emerald-600 hover:bg-emerald-700'
-                : isPaused
-                ? 'bg-sky-600 hover:bg-sky-700'
-                : 'bg-amber-600 hover:bg-amber-700'
-            }`}
-          >
-            {isCompleted
-              ? 'Nueva Simulación'
-              : isPaused
-              ? 'Reanudar Simulación'
-              : 'Pausar Simulación'}
-          </button>
+          <div className="flex items-center gap-2">
+            {!isCompleted && (
+              <>
+                <button
+                  onClick={handleTogglePause}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm ${
+                    isPaused
+                      ? 'bg-sky-600 hover:bg-sky-700 text-white'
+                      : 'bg-amber-600 hover:bg-amber-700 text-white'
+                  }`}
+                >
+                  {isPaused ? 'Reanudar Simulación' : 'Pausar Simulación'}
+                </button>
+                <button
+                  onClick={handleDetener}
+                  className="px-4 py-2 rounded-lg font-medium text-sm bg-red-600 hover:bg-red-700 text-white transition-colors"
+                >
+                  Detener Simulación
+                </button>
+              </>
+            )}
+            {isCompleted && (
+              <button
+                onClick={handleNuevaSimulacion}
+                className="px-4 py-2 rounded-lg font-medium text-sm bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+              >
+                Nueva Simulación
+              </button>
+            )}
+          </div>
         )}
       </div>
 

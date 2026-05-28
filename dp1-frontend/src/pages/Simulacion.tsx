@@ -37,6 +37,19 @@ export default function Simulacion() {
       .catch(() => {})
   }, [])
 
+  // Detectar simulación activa al montar (permite ver simulación en otras pestañas)
+  useEffect(() => {
+    let cancelled = false
+    simulationService.activa().then((res) => {
+      if (cancelled) return
+      if (res.activa && res.sessionId) {
+        setSessionId(res.sessionId)
+        startPolling(res.sessionId)
+      }
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [startPolling])
+
   // Auto-scroll logs
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -88,6 +101,18 @@ export default function Simulacion() {
     } catch {
       // ignore
     }
+  }
+
+  const handleDetener = async () => {
+    if (!sessionId) return
+    try {
+      await simulationService.detener(sessionId)
+    } catch {
+      // ignore
+    }
+    stopPolling()
+    setSessionId('')
+    setIsPaused(false)
   }
 
   const handleNuevaSimulacion = () => {
@@ -164,11 +189,10 @@ export default function Simulacion() {
         <div className="flex items-center gap-2">
           <label className="text-sm text-gray-400 font-medium">Velocidad:</label>
           <div className="flex gap-1">
-            {[1, 2, 5].map((v) => (
+            {[1, 2, 5, 10].map((v) => (
               <button
                 key={v}
                 onClick={() => setVelocidad(v)}
-                disabled={isRunning && !isCompleted}
                 className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${
                   velocidad === v
                     ? 'bg-sky-600 text-white border-sky-600'
@@ -186,18 +210,36 @@ export default function Simulacion() {
             <span className="text-xs text-red-400 font-medium">{error}</span>
           )}
           {showActionButton ? (
-            <button
-              onClick={isCompleted ? handleNuevaSimulacion : handleTogglePause}
-              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                isCompleted
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  : isPaused
-                  ? 'bg-sky-600 hover:bg-sky-700 text-white'
-                  : 'bg-amber-600 hover:bg-amber-700 text-white'
-              }`}
-            >
-              {isCompleted ? 'Nueva Simulación' : isPaused ? 'Reanudar' : 'Pausar'}
-            </button>
+            <div className="flex items-center gap-2">
+              {!isCompleted && (
+                <>
+                  <button
+                    onClick={handleTogglePause}
+                    className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                      isPaused
+                        ? 'bg-sky-600 hover:bg-sky-700 text-white'
+                        : 'bg-amber-600 hover:bg-amber-700 text-white'
+                    }`}
+                  >
+                    {isPaused ? 'Reanudar' : 'Pausar'}
+                  </button>
+                  <button
+                    onClick={handleDetener}
+                    className="px-4 py-2 rounded-lg font-medium text-sm bg-red-600 hover:bg-red-700 text-white transition-colors"
+                  >
+                    Detener
+                  </button>
+                </>
+              )}
+              {isCompleted && (
+                <button
+                  onClick={handleNuevaSimulacion}
+                  className="px-4 py-2 rounded-lg font-medium text-sm bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                >
+                  Nueva Simulación
+                </button>
+              )}
+            </div>
           ) : (
             <button
               onClick={handleIniciar}

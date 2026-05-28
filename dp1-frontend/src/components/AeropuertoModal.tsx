@@ -48,9 +48,11 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose }: Props) 
           <div>
             <span className="text-gray-400 block mb-1">Vuelos entrantes ({aeropuerto.vuelosEntrantes.length})</span>
             {aeropuerto.vuelosEntrantes.length > 0 ? (
-              <ul className="list-disc list-inside text-gray-300 text-xs">
-                {aeropuerto.vuelosEntrantes.map((v) => <li key={v}>{v}</li>)}
-              </ul>
+              <div className="max-h-32 overflow-y-auto pr-1">
+                <ul className="list-disc list-inside text-gray-300 text-xs space-y-0.5">
+                  {aeropuerto.vuelosEntrantes.map((v) => <li key={v}>{v}</li>)}
+                </ul>
+              </div>
             ) : (
               <p className="text-gray-500 text-xs">Ninguno</p>
             )}
@@ -59,9 +61,11 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose }: Props) 
           <div>
             <span className="text-gray-400 block mb-1">Vuelos salientes ({aeropuerto.vuelosSalientes.length})</span>
             {aeropuerto.vuelosSalientes.length > 0 ? (
-              <ul className="list-disc list-inside text-gray-300 text-xs">
-                {aeropuerto.vuelosSalientes.map((v) => <li key={v}>{v}</li>)}
-              </ul>
+              <div className="max-h-32 overflow-y-auto pr-1">
+                <ul className="list-disc list-inside text-gray-300 text-xs space-y-0.5">
+                  {aeropuerto.vuelosSalientes.map((v) => <li key={v}>{v}</li>)}
+                </ul>
+              </div>
             ) : (
               <p className="text-gray-500 text-xs">Ninguno</p>
             )}

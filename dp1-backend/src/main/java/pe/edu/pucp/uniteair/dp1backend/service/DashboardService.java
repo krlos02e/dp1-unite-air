@@ -30,7 +30,7 @@ public class DashboardService {
         List<VueloDTO> vuelosActivos = List.of();
         if (state.getVuelos() != null) {
             vuelosActivos = state.getVuelos().stream()
-                    .filter(v -> v.getProgresoVuelo() > 0 && v.getProgresoVuelo() < 1.0)
+                    .filter(v -> v.getProgresoVuelo() > 0 && v.getProgresoVuelo() < 100.0)
                     .collect(Collectors.toList());
         }
 

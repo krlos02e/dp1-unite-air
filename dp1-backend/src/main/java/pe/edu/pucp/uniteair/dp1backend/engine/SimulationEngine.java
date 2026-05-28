@@ -3,6 +3,7 @@ package pe.edu.pucp.uniteair.dp1backend.engine;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import pe.edu.pucp.uniteair.dp1backend.cache.SimulationCache;
+import pe.edu.pucp.uniteair.dp1backend.config.AeropuertoCoordenadas;
 import pe.edu.pucp.uniteair.dp1backend.dto.*;
 import pe.edu.pucp.uniteair.dp1backend.entity.SimulationSession;
 import pe.edu.pucp.uniteair.dp1backend.repository.SimulationSessionRepository;
@@ -12,6 +13,7 @@ import tasf.core.EstadoOperacional;
 import tasf.core.PlanificacionUtils;
 import tasf.core.Solucion;
 import tasf.model.Aeropuerto;
+import tasf.model.Paquete;
 import tasf.model.Vuelo;
 import tasf.model.Ruta;
 import tasf.strategy.TwoPhaseOrchestrator;
@@ -29,47 +31,7 @@ import java.util.stream.Collectors;
 @Service
 public class SimulationEngine {
 
-    private static final Map<String, double[]> COORDENADAS = new HashMap<>();
-    static {
-        COORDENADAS.put("SKBO", new double[]{4.7016, -74.1469});
-        COORDENADAS.put("SKRG", new double[]{6.1645, -75.4231});
-        COORDENADAS.put("SKCL", new double[]{3.5439, -76.3816});
-        COORDENADAS.put("SKBQ", new double[]{10.8896, -74.7808});
-        COORDENADAS.put("SEGU", new double[]{-2.1574, -79.8836});
-        COORDENADAS.put("SPJC", new double[]{-12.0219, -77.1143});
-        COORDENADAS.put("SCEL", new double[]{-33.3930, -70.7858});
-        COORDENADAS.put("SAEZ", new double[]{-34.8222, -58.5358});
-        COORDENADAS.put("SBGR", new double[]{-23.4356, -46.4731});
-        COORDENADAS.put("KJFK", new double[]{40.6413, -73.7781});
-        COORDENADAS.put("KLAX", new double[]{33.9425, -118.4081});
-        COORDENADAS.put("KORD", new double[]{41.9786, -87.9047});
-        COORDENADAS.put("KATL", new double[]{33.6407, -84.4277});
-        COORDENADAS.put("KDFW", new double[]{32.8998, -97.0403});
-        COORDENADAS.put("KMIA", new double[]{25.7932, -80.2906});
-        COORDENADAS.put("KSFO", new double[]{37.6213, -122.3790});
-        COORDENADAS.put("KSEA", new double[]{47.4489, -122.3094});
-        COORDENADAS.put("PHNL", new double[]{21.3245, -157.9251});
-        COORDENADAS.put("EGLL", new double[]{51.4700, -0.4543});
-        COORDENADAS.put("LFPG", new double[]{49.0097, 2.5479});
-        COORDENADAS.put("EDDF", new double[]{50.0379, 8.5622});
-        COORDENADAS.put("EHAM", new double[]{52.3105, 4.7683});
-        COORDENADAS.put("LEMD", new double[]{40.4983, -3.5676});
-        COORDENADAS.put("LIRF", new double[]{41.8002, 12.2388});
-        COORDENADAS.put("LSZH", new double[]{47.4582, 8.5480});
-        COORDENADAS.put("UUDD", new double[]{55.5918, 37.2674});
-        COORDENADAS.put("ULLI", new double[]{59.8003, 30.2625});
-        COORDENADAS.put("RJTT", new double[]{35.5494, 139.7798});
-        COORDENADAS.put("RKSI", new double[]{37.4602, 126.4407});
-        COORDENADAS.put("ZSPD", new double[]{31.1443, 121.8083});
-        COORDENADAS.put("VHHH", new double[]{22.3080, 113.9185});
-        COORDENADAS.put("WSSS", new double[]{1.3592, 103.9894});
-        COORDENADAS.put("OMDB", new double[]{25.2532, 55.3657});
-        COORDENADAS.put("OTHH", new double[]{25.2606, 51.6140});
-        COORDENADAS.put("VIDP", new double[]{28.5562, 77.1000});
-        COORDENADAS.put("FAOR", new double[]{-26.1392, 28.2460});
-        COORDENADAS.put("CYYZ", new double[]{43.6777, -79.6248});
-        COORDENADAS.put("MMMX", new double[]{19.4363, -99.0721});
-    }
+
 
     private final SimulationCache simulationCache;
     private final SimulationSessionRepository sessionRepository;
@@ -211,7 +173,7 @@ public class SimulationEngine {
                         actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
                                 vizEntregadas, vizEnTransito, hora, duracionHoras, false, null, vizLogs, "PLANIFICANDO");
 
-                        long sleepMs = (long) (1000.0 / Math.max(1, velocidad));
+                        long sleepMs = (long) (2000.0 / Math.max(0.5, velocidad));
                         if (sleepMs > 0) {
                             try {
                                 Thread.sleep(sleepMs);
@@ -249,6 +211,15 @@ public class SimulationEngine {
                 Set<String> noAsignados = solucion.getPaquetesNoAsignados();
                 boolean hayColapso = !noAsignados.isEmpty();
                 maletasEnTransito = rutas.size();
+
+                // Calcular carga real por vuelo según rutas asignadas
+                for (Map.Entry<String, Ruta> entry : rutas.entrySet()) {
+                    Paquete paquete = dataset.getPaquetePorId(entry.getKey());
+                    int cantidad = paquete != null ? paquete.getCantidad() : 1;
+                    for (Vuelo v : entry.getValue().getVuelos()) {
+                        cargaVuelo.merge(v.getId(), cantidad, Integer::sum);
+                    }
+                }
 
                 System.out.println("=== Ejecucion Completada ===");
                 System.out.printf("Paquetes totales: %d, rutas asignadas: %d%n",
@@ -347,7 +318,7 @@ public class SimulationEngine {
                     actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
                             maletasEntregadas, maletasEnTransito, hora, duracionHoras, false, null, logs, "EJECUTANDO");
 
-                    long sleepMs = (long) (1000.0 / Math.max(1, velocidad));
+                    long sleepMs = (long) (3000.0 / Math.max(0.5, velocidad));
                     if (sleepMs > 0) {
                         Thread.sleep(sleepMs);
                     }
@@ -427,9 +398,33 @@ public class SimulationEngine {
                                           int maletasEntregadas, int maletasEnTransito,
                                           int hora, int totalHoras, boolean colapsada,
                                           String motivo, List<LogEntry> logs, String status) {
+        // Monotonicity guard: never let simulation time/progress go backwards
+        SimulationState prevState = simulationCache.get(sessionId);
+        int prevHora = 0;
+        int prevProgreso = 0;
+        int prevEntregadas = 0;
+        int prevTransito = 0;
+        if (prevState != null) {
+            prevHora = (prevState.getProgreso() * totalHoras) / 100;
+            prevProgreso = prevState.getProgreso();
+            prevEntregadas = prevState.getMaletasEntregadas();
+            prevTransito = prevState.getMaletasEnTransito();
+        }
+        int horaEfectiva = Math.max(hora, prevHora);
+        int progresoSim = Math.min(100, totalHoras > 0 ? (horaEfectiva * 100) / totalHoras : 0);
+        progresoSim = Math.max(progresoSim, prevProgreso);
+        maletasEntregadas = Math.max(maletasEntregadas, prevEntregadas);
+        maletasEnTransito = Math.max(maletasEnTransito, prevTransito);
+
         int[] vuelosCulminados = {0};
         int[] vuelosEnTransito = {0};
         int[] vuelosCancelados = {0};
+
+        long vuelosConCarga = cargaVuelo.values().stream().filter(c -> c > 0).count();
+        if (!cargaVuelo.isEmpty()) {
+            System.out.printf("[DEBUG actualizarEstadoEnCache] status=%s cargaVuelo.size=%d vuelosConCarga=%d totalMaletas=%d%n",
+                    status, cargaVuelo.size(), vuelosConCarga, cargaVuelo.values().stream().mapToInt(Integer::intValue).sum());
+        }
 
         List<VueloDTO> vuelosDTO = dataset.getVuelos().stream().map(v -> {
             double progreso = 0.0;
@@ -446,8 +441,8 @@ public class SimulationEngine {
             else if (progreso > 0.0) vuelosEnTransito[0]++;
             else if (simTime != null && v.getSalidaUtc() != null && simTime.isAfter(v.getSalidaUtc())) vuelosCancelados[0]++;
 
-            double[] origCoord = COORDENADAS.getOrDefault(v.getOrigen().getCodigoOACI(), new double[]{0, 0});
-            double[] destCoord = COORDENADAS.getOrDefault(v.getDestino().getCodigoOACI(), new double[]{0, 0});
+            double[] origCoord = AeropuertoCoordenadas.get(v.getOrigen().getCodigoOACI());
+            double[] destCoord = AeropuertoCoordenadas.get(v.getDestino().getCodigoOACI());
             return VueloDTO.builder()
                     .id(v.getId())
                     .origen(v.getOrigen().getCodigoOACI())
@@ -462,8 +457,9 @@ public class SimulationEngine {
                     .build();
         }).collect(Collectors.toList());
 
+        int totalVuelosDataset = dataset.getVuelos() != null ? dataset.getVuelos().size() : 0;
         List<AeropuertoDTO> aeropuertosDTO = dataset.getAeropuertos().values().stream().map(a -> {
-            double[] coord = COORDENADAS.getOrDefault(a.getCodigoOACI(), new double[]{0, 0});
+            double[] coord = AeropuertoCoordenadas.get(a.getCodigoOACI());
             int ocup = ocupacionAeropuerto.getOrDefault(a.getCodigoOACI(), 0);
             List<String> entrantes = dataset.getVuelos().stream()
                     .filter(v -> v.getDestino().getCodigoOACI().equals(a.getCodigoOACI()))
@@ -473,6 +469,10 @@ public class SimulationEngine {
                     .filter(v -> v.getOrigen().getCodigoOACI().equals(a.getCodigoOACI()))
                     .map(Vuelo::getId)
                     .collect(Collectors.toList());
+            if (totalVuelosDataset > 0 && entrantes.size() + salientes.size() > 0) {
+                System.out.printf("[DEBUG AeropuertoDTO] %s: entrantes=%d salientes=%d%n",
+                        a.getCodigoOACI(), entrantes.size(), salientes.size());
+            }
             return AeropuertoDTO.builder()
                     .codigoOACI(a.getCodigoOACI())
                     .latitud(coord[0]).longitud(coord[1])
@@ -494,7 +494,7 @@ public class SimulationEngine {
                 .vuelosCulminados(vuelosCulminados[0])
                 .vuelosEnTransito(vuelosEnTransito[0])
                 .vuelosCancelados(vuelosCancelados[0])
-                .progreso(Math.min(100, totalHoras > 0 ? (hora * 100) / totalHoras : 0))
+                .progreso(progresoSim)
                 .colapsada(colapsada)
                 .motivoColapso(motivo)
                 .logs(new ArrayList<>(logs))
