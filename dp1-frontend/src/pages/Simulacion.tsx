@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSimulation } from '../context/SimulationContext'
 import { simulationService } from '../services/SimulationService'
 import { cargaArchivosService } from '../services/CargaArchivosService'
 import MapaAeropuertos from '../components/MapaAeropuertos'
 import VueloModal from '../components/VueloModal'
 import AeropuertoModal from '../components/AeropuertoModal'
+import ResultadosModal from '../components/ResultadosModal'
+import { formatDateTime } from '../utils/dateFormat'
 import type { VueloDTO, AeropuertoDTO } from '../types'
 
 export default function Simulacion() {
@@ -25,7 +27,12 @@ export default function Simulacion() {
   const [selectedVuelo, setSelectedVuelo] = useState<VueloDTO | null>(null)
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
 
+  const handleVueloClick = useCallback((v: VueloDTO) => {
+    setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
+  }, [])
+
   const [isPaused, setIsPaused] = useState(false)
+  const [showResultados, setShowResultados] = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
 
   // Cargar aeropuertos estáticos al montar
@@ -54,6 +61,27 @@ export default function Simulacion() {
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [simulationState?.logs])
+
+  // Keep selected flight info synced with latest poll data
+  useEffect(() => {
+    if (!selectedVuelo) return
+    if (simulationState?.vuelos) {
+      const updated = simulationState.vuelos.find((v) => v.id === selectedVuelo.id)
+      if (updated) {
+        setSelectedVuelo(updated)
+      } else if (simulationState.status === 'COMPLETADA') {
+        // Flight no longer in active list and sim completed → it reached destination
+        setSelectedVuelo((prev) => (prev ? { ...prev, progresoVuelo: 100 } : prev))
+      }
+    }
+  }, [simulationState?.vuelos, simulationState?.status])
+
+  // Show results modal when simulation completes
+  useEffect(() => {
+    if (simulationState?.status === 'COMPLETADA') {
+      setShowResultados(true)
+    }
+  }, [simulationState?.status])
 
   const handleIniciar = async () => {
     if (!fechaInicio || !horaInicio) {
@@ -142,8 +170,8 @@ export default function Simulacion() {
           <select
             value={duracion}
             onChange={(e) => setDuracion(Number(e.target.value))}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-            disabled={isRunning && !isCompleted}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            disabled={!!sessionId && !isError}
           >
             <option value={3}>3 días</option>
             <option value={5}>5 días</option>
@@ -157,8 +185,8 @@ export default function Simulacion() {
             type="date"
             value={fechaInicio}
             onChange={(e) => setFechaInicio(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-            disabled={isRunning && !isCompleted}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            disabled={!!sessionId && !isError}
           />
         </div>
 
@@ -168,8 +196,8 @@ export default function Simulacion() {
             type="time"
             value={horaInicio}
             onChange={(e) => setHoraInicio(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-            disabled={isRunning && !isCompleted}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            disabled={!!sessionId && !isError}
           />
         </div>
 
@@ -178,8 +206,8 @@ export default function Simulacion() {
           <select
             value={algoritmo}
             onChange={(e) => setAlgoritmo(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-            disabled={isRunning && !isCompleted}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            disabled={!!sessionId && !isError}
           >
             <option value="ALNS">ALNS</option>
             <option value="ACO">ACO</option>
@@ -189,15 +217,16 @@ export default function Simulacion() {
         <div className="flex items-center gap-2">
           <label className="text-sm text-gray-400 font-medium">Velocidad:</label>
           <div className="flex gap-1">
-            {[1, 2, 5, 10].map((v) => (
+            {[1, 2, 5].map((v) => (
               <button
                 key={v}
                 onClick={() => setVelocidad(v)}
+                disabled={isRunning && !isPaused && !isCompleted}
                 className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${
                   velocidad === v
                     ? 'bg-sky-600 text-white border-sky-600'
                     : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700'
-                }`}
+                } disabled:opacity-40 disabled:cursor-not-allowed`}
               >
                 {v}x
               </button>
@@ -244,7 +273,7 @@ export default function Simulacion() {
             <button
               onClick={handleIniciar}
               disabled={loading}
-              className="px-6 py-2 rounded-lg font-medium text-sm bg-slate-700 hover:bg-slate-600 text-white transition-colors disabled:bg-gray-600"
+              className="px-6 py-2 rounded-lg font-medium text-sm bg-sky-600 hover:bg-sky-700 text-white transition-colors disabled:bg-gray-600 cursor-pointer"
             >
               {loading ? 'Iniciando...' : 'Iniciar'}
             </button>
@@ -257,8 +286,9 @@ export default function Simulacion() {
         <MapaAeropuertos
           aeropuertos={aeropuertos}
           vuelos={vuelos}
+          selectedVueloId={selectedVuelo?.id || null}
           onAeropuertoClick={setSelectedAeropuerto}
-          onVueloClick={setSelectedVuelo}
+          onVueloClick={handleVueloClick}
         />
       </div>
 
@@ -296,7 +326,7 @@ export default function Simulacion() {
                   log.tipo === 'COLAPSO' ? 'text-red-500 font-bold' :
                   'text-gray-400'
                 }`}>
-                  [{log.timestamp}] {log.tipo}: {log.mensaje}
+                  [{formatDateTime(log.timestamp)}] {log.tipo}: {log.mensaje}
                 </div>
               ))
             ) : (
@@ -312,7 +342,7 @@ export default function Simulacion() {
           <div className="space-y-2 text-xs text-gray-400">
             <div className="flex justify-between">
               <span>Inicio:</span>
-              <span className="font-mono text-gray-200">{fechaInicio || '--'}</span>
+              <span className="font-mono text-gray-200">{fechaInicio && horaInicio ? `${fechaInicio.split('-').reverse().join('/')} ${horaInicio}` : '--'}</span>
             </div>
             <div className="flex justify-between">
               <span>Transcurrido:</span>
@@ -320,7 +350,7 @@ export default function Simulacion() {
             </div>
             <div className="flex justify-between">
               <span>Actual:</span>
-              <span className="font-mono text-gray-200">{simulationState?.simulationTime ?? '--'}</span>
+              <span className="font-mono text-gray-200">{formatDateTime(simulationState?.simulationTime)}</span>
             </div>
             <div className="flex justify-between">
               <span>Día:</span>
@@ -343,6 +373,15 @@ export default function Simulacion() {
 
       <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} />
       <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} />
+      <ResultadosModal
+        state={simulationState}
+        isOpen={showResultados}
+        onClose={() => setShowResultados(false)}
+        onNuevaSimulacion={() => {
+          setShowResultados(false)
+          handleNuevaSimulacion()
+        }}
+      />
     </div>
   )
 }

@@ -83,7 +83,7 @@ export default function SimulacionConfig({ onStart }: Props) {
         <div>
           <label className="block text-sm text-gray-400 mb-1">Velocidad de simulación</label>
           <div className="flex gap-2">
-            {[1, 2, 5, 10].map((v) => (
+            {[1, 2, 5].map((v) => (
               <button key={v} onClick={() => setVelocidad(v)}
                       className={`flex-1 py-2 rounded-lg text-sm font-medium ${velocidad === v ? 'bg-sky-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>
                 {v}x
