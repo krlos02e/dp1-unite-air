@@ -39,6 +39,11 @@ public class SimulationEngine {
     private final Map<String, Boolean> cancellationFlags = new ConcurrentHashMap<>();
     private final Map<String, Boolean> pauseFlags = new ConcurrentHashMap<>();
 
+    // Precalculated caches per session to avoid O(n*m) in every update
+    private final Map<String, List<AeropuertoDTO>> airportBaseCache = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, double[]>> flightCoordCache = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, Long>> flightDurationCache = new ConcurrentHashMap<>();
+
     public SimulationEngine(SimulationCache simulationCache, SimulationSessionRepository sessionRepository) {
         this.simulationCache = simulationCache;
         this.sessionRepository = sessionRepository;
@@ -82,6 +87,9 @@ public class SimulationEngine {
                 TwoPhaseOrchestrator orchestrator = new TwoPhaseOrchestrator(planner);
 
                 PlanificacionUtils.limpiarCacheGlobal();
+
+                // Precalculate airport and flight coordinate caches once per session
+                precalcularCaches(sessionId, dataset);
 
                 // Inicializar visualización inmediatamente con datos del dataset
                 logs.add(LogEntry.builder()
@@ -129,14 +137,7 @@ public class SimulationEngine {
                             break;
                         }
 
-                        // Cálculo de carga vuelo y ocupación aeropuerto
-                        for (Vuelo vuelo : dataset.getVuelos()) {
-                            if (simTime.isAfter(vuelo.getSalidaUtc()) && simTime.isBefore(vuelo.getLlegadaUtc())) {
-                                String key = vuelo.getId();
-                                int carga = estado.getCargaVuelo(key);
-                                cargaVuelo.put(key, carga);
-                            }
-                        }
+                        // Ocupación aeropuerto (lightweight)
                         for (Aeropuerto a : dataset.getAeropuertos().values()) {
                             int ocup = estado.getOcupacionHora(a.getCodigoOACI(), simTime);
                             ocupacionAeropuerto.put(a.getCodigoOACI(), ocup);
@@ -162,7 +163,7 @@ public class SimulationEngine {
                             }
                         }
 
-                        if (hora > 0 && hora % 12 == 0) {
+                        if (hora > 0 && hora < duracionHoras && hora % 12 == 0) {
                             vizLogs.add(LogEntry.builder()
                                     .timestamp(simTime)
                                     .tipo("INFO")
@@ -173,7 +174,7 @@ public class SimulationEngine {
                         actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
                                 vizEntregadas, vizEnTransito, hora, duracionHoras, false, null, vizLogs, "PLANIFICANDO");
 
-                        long sleepMs = (long) (2000.0 / Math.max(0.5, velocidad));
+                        long sleepMs = (long) (3000.0 / Math.max(0.5, velocidad));
                         if (sleepMs > 0) {
                             try {
                                 Thread.sleep(sleepMs);
@@ -293,14 +294,6 @@ public class SimulationEngine {
                         }
                     }
 
-                    for (Vuelo vuelo : dataset.getVuelos()) {
-                        if (simTime.isAfter(vuelo.getSalidaUtc()) && simTime.isBefore(vuelo.getLlegadaUtc())) {
-                            String key = vuelo.getId();
-                            int carga = estado.getCargaVuelo(key);
-                            cargaVuelo.put(key, carga);
-                        }
-                    }
-
                     for (Aeropuerto a : dataset.getAeropuertos().values()) {
                         int ocup = estado.getOcupacionHora(a.getCodigoOACI(), simTime);
                         ocupacionAeropuerto.put(a.getCodigoOACI(), ocup);
@@ -318,7 +311,7 @@ public class SimulationEngine {
                     actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
                             maletasEntregadas, maletasEnTransito, hora, duracionHoras, false, null, logs, "EJECUTANDO");
 
-                    long sleepMs = (long) (3000.0 / Math.max(0.5, velocidad));
+                    long sleepMs = (long) (4000.0 / Math.max(0.5, velocidad));
                     if (sleepMs > 0) {
                         Thread.sleep(sleepMs);
                     }
@@ -341,6 +334,9 @@ public class SimulationEngine {
                                 .aeropuertos(finalState.getAeropuertos())
                                 .maletasEntregadas(finalState.getMaletasEntregadas())
                                 .maletasEnTransito(finalState.getMaletasEnTransito())
+                                .vuelosCulminados(finalState.getVuelosCulminados())
+                                .vuelosEnTransito(finalState.getVuelosEnTransito())
+                                .vuelosCancelados(finalState.getVuelosCancelados())
                                 .progreso(100)
                                 .colapsada(false)
                                 .logs(finalState.getLogs())
@@ -365,6 +361,9 @@ public class SimulationEngine {
                 activeSimulations.remove(sessionId);
                 cancellationFlags.remove(sessionId);
                 pauseFlags.remove(sessionId);
+                airportBaseCache.remove(sessionId);
+                flightCoordCache.remove(sessionId);
+                flightDurationCache.remove(sessionId);
             }
         });
 
@@ -381,6 +380,9 @@ public class SimulationEngine {
         activeSimulations.remove(sessionId);
         cancellationFlags.remove(sessionId);
         pauseFlags.remove(sessionId);
+        airportBaseCache.remove(sessionId);
+        flightCoordCache.remove(sessionId);
+        flightDurationCache.remove(sessionId);
     }
 
     private void actualizarSesionColapsada(String sessionId, String motivo, int hora, int totalHoras) {
@@ -391,6 +393,44 @@ public class SimulationEngine {
             session.setProgresoPorcentaje(Math.min(100, (hora * 100) / Math.max(1, totalHoras)));
             sessionRepository.save(session);
         }
+    }
+
+    private void precalcularCaches(String sessionId, Dataset dataset) {
+        Map<String, List<String>> entrantesMap = new HashMap<>();
+        Map<String, List<String>> salientesMap = new HashMap<>();
+        for (Vuelo v : dataset.getVuelos()) {
+            String origen = v.getOrigen().getCodigoOACI();
+            String destino = v.getDestino().getCodigoOACI();
+            entrantesMap.computeIfAbsent(destino, k -> new ArrayList<>()).add(v.getId());
+            salientesMap.computeIfAbsent(origen, k -> new ArrayList<>()).add(v.getId());
+        }
+
+        List<AeropuertoDTO> airportBase = new ArrayList<>();
+        for (Aeropuerto a : dataset.getAeropuertos().values()) {
+            double[] coord = AeropuertoCoordenadas.get(a.getCodigoOACI());
+            airportBase.add(AeropuertoDTO.builder()
+                    .codigoOACI(a.getCodigoOACI())
+                    .latitud(coord[0]).longitud(coord[1])
+                    .capacidadMaxima(a.getCapacidadMaxima())
+                    .ocupacionActual(0)
+                    .vuelosEntrantes(entrantesMap.getOrDefault(a.getCodigoOACI(), new ArrayList<>()))
+                    .vuelosSalientes(salientesMap.getOrDefault(a.getCodigoOACI(), new ArrayList<>()))
+                    .build());
+        }
+        airportBaseCache.put(sessionId, airportBase);
+
+        Map<String, double[]> flightCoords = new HashMap<>();
+        Map<String, Long> flightDurations = new HashMap<>();
+        for (Vuelo v : dataset.getVuelos()) {
+            double[] orig = AeropuertoCoordenadas.get(v.getOrigen().getCodigoOACI());
+            double[] dest = AeropuertoCoordenadas.get(v.getDestino().getCodigoOACI());
+            flightCoords.put(v.getId(), new double[]{orig[0], orig[1], dest[0], dest[1]});
+            if (v.getSalidaUtc() != null && v.getLlegadaUtc() != null) {
+                flightDurations.put(v.getId(), ChronoUnit.MINUTES.between(v.getSalidaUtc(), v.getLlegadaUtc()));
+            }
+        }
+        flightCoordCache.put(sessionId, flightCoords);
+        flightDurationCache.put(sessionId, flightDurations);
     }
 
     private void actualizarEstadoEnCache(String sessionId, LocalDateTime simTime, Dataset dataset,
@@ -416,72 +456,80 @@ public class SimulationEngine {
         maletasEntregadas = Math.max(maletasEntregadas, prevEntregadas);
         maletasEnTransito = Math.max(maletasEnTransito, prevTransito);
 
-        int[] vuelosCulminados = {0};
-        int[] vuelosEnTransito = {0};
-        int[] vuelosCancelados = {0};
+        int vuelosCulminados = 0;
+        int vuelosEnTransito = 0;
+        int vuelosCancelados = 0;
 
-        long vuelosConCarga = cargaVuelo.values().stream().filter(c -> c > 0).count();
-        if (!cargaVuelo.isEmpty()) {
-            System.out.printf("[DEBUG actualizarEstadoEnCache] status=%s cargaVuelo.size=%d vuelosConCarga=%d totalMaletas=%d%n",
-                    status, cargaVuelo.size(), vuelosConCarga, cargaVuelo.values().stream().mapToInt(Integer::intValue).sum());
-        }
-
-        List<VueloDTO> vuelosDTO = dataset.getVuelos().stream().map(v -> {
+        List<VueloDTO> vuelosDTO = new ArrayList<>();
+        Map<String, double[]> flightCoords = flightCoordCache.get(sessionId);
+        Map<String, Long> flightDurations = flightDurationCache.get(sessionId);
+        for (Vuelo v : dataset.getVuelos()) {
             double progreso = 0.0;
-            if (simTime != null && v.getSalidaUtc() != null && v.getLlegadaUtc() != null) {
-                long total = ChronoUnit.MINUTES.between(v.getSalidaUtc(), v.getLlegadaUtc());
+            Long totalMins = (flightDurations != null) ? flightDurations.get(v.getId()) : null;
+            if (simTime != null && v.getSalidaUtc() != null && v.getLlegadaUtc() != null && totalMins != null && totalMins > 0) {
                 long transcurrido = ChronoUnit.MINUTES.between(v.getSalidaUtc(), simTime);
-                if (total > 0) {
-                    progreso = Math.min(100.0, Math.max(0.0, (double) transcurrido / total * 100));
-                }
+                progreso = Math.min(100.0, Math.max(0.0, (double) transcurrido / totalMins * 100));
+                if (simTime.isAfter(v.getLlegadaUtc())) progreso = 100.0;
+                if (simTime.isBefore(v.getSalidaUtc())) progreso = 0.0;
+            } else if (simTime != null && v.getSalidaUtc() != null && v.getLlegadaUtc() != null) {
                 if (simTime.isAfter(v.getLlegadaUtc())) progreso = 100.0;
                 if (simTime.isBefore(v.getSalidaUtc())) progreso = 0.0;
             }
-            if (progreso >= 100.0) vuelosCulminados[0]++;
-            else if (progreso > 0.0) vuelosEnTransito[0]++;
-            else if (simTime != null && v.getSalidaUtc() != null && simTime.isAfter(v.getSalidaUtc())) vuelosCancelados[0]++;
+            if (progreso >= 100.0) vuelosCulminados++;
+            else if (progreso > 0.0) vuelosEnTransito++;
+            else if (simTime != null && v.getSalidaUtc() != null && simTime.isAfter(v.getSalidaUtc())) vuelosCancelados++;
 
-            double[] origCoord = AeropuertoCoordenadas.get(v.getOrigen().getCodigoOACI());
-            double[] destCoord = AeropuertoCoordenadas.get(v.getDestino().getCodigoOACI());
-            return VueloDTO.builder()
-                    .id(v.getId())
-                    .origen(v.getOrigen().getCodigoOACI())
-                    .destino(v.getDestino().getCodigoOACI())
-                    .latOrigen(origCoord[0]).lonOrigen(origCoord[1])
-                    .latDestino(destCoord[0]).lonDestino(destCoord[1])
-                    .salidaUtc(v.getSalidaUtc())
-                    .llegadaUtc(v.getLlegadaUtc())
-                    .capacidad(v.getCapacidadCarga())
-                    .cargaActual(cargaVuelo.getOrDefault(v.getId(), 0))
-                    .progresoVuelo(progreso)
-                    .build();
-        }).collect(Collectors.toList());
-
-        int totalVuelosDataset = dataset.getVuelos() != null ? dataset.getVuelos().size() : 0;
-        List<AeropuertoDTO> aeropuertosDTO = dataset.getAeropuertos().values().stream().map(a -> {
-            double[] coord = AeropuertoCoordenadas.get(a.getCodigoOACI());
-            int ocup = ocupacionAeropuerto.getOrDefault(a.getCodigoOACI(), 0);
-            List<String> entrantes = dataset.getVuelos().stream()
-                    .filter(v -> v.getDestino().getCodigoOACI().equals(a.getCodigoOACI()))
-                    .map(Vuelo::getId)
-                    .collect(Collectors.toList());
-            List<String> salientes = dataset.getVuelos().stream()
-                    .filter(v -> v.getOrigen().getCodigoOACI().equals(a.getCodigoOACI()))
-                    .map(Vuelo::getId)
-                    .collect(Collectors.toList());
-            if (totalVuelosDataset > 0 && entrantes.size() + salientes.size() > 0) {
-                System.out.printf("[DEBUG AeropuertoDTO] %s: entrantes=%d salientes=%d%n",
-                        a.getCodigoOACI(), entrantes.size(), salientes.size());
+            // Send active AND recently completed flights so frontend can show them at destination
+            if (progreso > 0.0 && flightCoords != null) {
+                double[] coords = flightCoords.get(v.getId());
+                if (coords != null) {
+                    vuelosDTO.add(VueloDTO.builder()
+                            .id(v.getId())
+                            .origen(v.getOrigen().getCodigoOACI())
+                            .destino(v.getDestino().getCodigoOACI())
+                            .latOrigen(coords[0]).lonOrigen(coords[1])
+                            .latDestino(coords[2]).lonDestino(coords[3])
+                            .salidaUtc(v.getSalidaUtc())
+                            .llegadaUtc(v.getLlegadaUtc())
+                            .capacidad(v.getCapacidadCarga())
+                            .cargaActual(cargaVuelo.getOrDefault(v.getId(), 0))
+                            .progresoVuelo(progreso)
+                            .build());
+                }
             }
-            return AeropuertoDTO.builder()
-                    .codigoOACI(a.getCodigoOACI())
-                    .latitud(coord[0]).longitud(coord[1])
-                    .capacidadMaxima(a.getCapacidadMaxima())
-                    .ocupacionActual(ocup)
-                    .vuelosEntrantes(entrantes)
-                    .vuelosSalientes(salientes)
-                    .build();
-        }).collect(Collectors.toList());
+        }
+
+        // Pre-filter active flight IDs for current simTime
+        Set<String> activeFlightIds = new HashSet<>();
+        for (Vuelo v : dataset.getVuelos()) {
+            if (simTime != null && v.getSalidaUtc() != null && v.getLlegadaUtc() != null) {
+                if (simTime.isAfter(v.getSalidaUtc()) && simTime.isBefore(v.getLlegadaUtc())) {
+                    activeFlightIds.add(v.getId());
+                }
+            }
+        }
+
+        List<AeropuertoDTO> aeropuertosDTO = new ArrayList<>();
+        List<AeropuertoDTO> airportBase = airportBaseCache.get(sessionId);
+        if (airportBase != null) {
+            for (AeropuertoDTO base : airportBase) {
+                int ocup = ocupacionAeropuerto.getOrDefault(base.getCodigoOACI(), 0);
+                List<String> entrantes = base.getVuelosEntrantes().stream()
+                        .filter(activeFlightIds::contains)
+                        .collect(Collectors.toList());
+                List<String> salientes = base.getVuelosSalientes().stream()
+                        .filter(activeFlightIds::contains)
+                        .collect(Collectors.toList());
+                aeropuertosDTO.add(AeropuertoDTO.builder()
+                        .codigoOACI(base.getCodigoOACI())
+                        .latitud(base.getLatitud()).longitud(base.getLongitud())
+                        .capacidadMaxima(base.getCapacidadMaxima())
+                        .ocupacionActual(ocup)
+                        .vuelosEntrantes(entrantes)
+                        .vuelosSalientes(salientes)
+                        .build());
+            }
+        }
 
         SimulationState state = SimulationState.builder()
                 .sessionId(sessionId)
@@ -491,9 +539,9 @@ public class SimulationEngine {
                 .aeropuertos(aeropuertosDTO)
                 .maletasEntregadas(maletasEntregadas)
                 .maletasEnTransito(maletasEnTransito)
-                .vuelosCulminados(vuelosCulminados[0])
-                .vuelosEnTransito(vuelosEnTransito[0])
-                .vuelosCancelados(vuelosCancelados[0])
+                .vuelosCulminados(vuelosCulminados)
+                .vuelosEnTransito(vuelosEnTransito)
+                .vuelosCancelados(vuelosCancelados)
                 .progreso(progresoSim)
                 .colapsada(colapsada)
                 .motivoColapso(motivo)

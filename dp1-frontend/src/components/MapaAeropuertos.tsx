@@ -4,14 +4,35 @@ import 'leaflet/dist/leaflet.css'
 import type { AeropuertoDTO, VueloDTO } from '../types'
 import { getAirportCity, AIRPORTS_DATA } from '../data/airportsData'
 
+function tooltipForFlight(v: VueloDTO): string {
+  const origen = getAirportCity(v.origen) || v.origen
+  const destino = getAirportCity(v.destino) || v.destino
+  return `Vuelo ${origen} - ${destino} (${Math.round(v.progresoVuelo)}%)`
+}
+
 interface Props {
   aeropuertos: AeropuertoDTO[]
   vuelos: VueloDTO[]
+  selectedVueloId?: string | null
   onAeropuertoClick?: (a: AeropuertoDTO) => void
   onVueloClick?: (v: VueloDTO) => void
 }
 
 const center: [number, number] = [20, 0]
+
+// ============================================================
+// CONFIGURACIÓN DE PORCENTAJE DE AVIONES VISIBLES
+// ============================================================
+const FLIGHT_DISPLAY_PERCENTAGE = 0.05
+
+function shouldDisplayFlight(flightId: string, percentage: number): boolean {
+  let hash = 0
+  for (let i = 0; i < flightId.length; i++) {
+    hash = flightId.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  const normalized = (Math.abs(hash) % 1000) / 1000
+  return normalized < percentage
+}
 
 function aeropuertoColor(ocu: number, max: number): string {
   const ratio = max > 0 ? ocu / max : 0
@@ -20,18 +41,30 @@ function aeropuertoColor(ocu: number, max: number): string {
   return '#ef4444'
 }
 
-const AIRPLANE_BLUE = '#0ea5e9'
+const AIRPLANE_BLUE = '#38bdf8'
+const AIRPLANE_SELECTED = '#facc15'
+const BASE_ICON_SIZE = 22
 
-function getAirplaneIcon(): L.DivIcon {
+function getAirplaneIcon(selected: boolean, scale = 1): L.DivIcon {
+  const color = selected ? AIRPLANE_SELECTED : AIRPLANE_BLUE
+  const size = Math.round(BASE_ICON_SIZE * scale)
+  const glowFilter = selected
+    ? 'filter:drop-shadow(0 0 5px #facc15) drop-shadow(0 0 10px #facc15);'
+    : 'filter:drop-shadow(0 1px 3px rgba(0,0,0,0.5));'
   return L.divIcon({
     className: '',
-    html: `<div style="width:14px;height:14px;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.5))">
-      <svg width="14" height="14" viewBox="0 0 20 20">
-        <polygon points="10,0 20,18 12,18 12,20 8,20 8,18 0,18" fill="${AIRPLANE_BLUE}" stroke="white" stroke-width="1"/>
+    html: `<div style="width:${size}px;height:${size}px;will-change:transform;${glowFilter}">
+      <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M1 13 L9 11.5 L9 12.5 Z" fill="${color}"/>
+        <path d="M23 13 L15 11.5 L15 12.5 Z" fill="${color}"/>
+        <path d="M11.5 1 C11.5 1 10.2 6 10.2 12 C10.2 19 11.2 22.5 12 23 C12.8 22.5 13.8 19 13.8 12 C13.8 6 12.5 1 12.5 1 C12.5 1 12 0 12 0 C12 0 11.5 1 11.5 1 Z" fill="${color}"/>
+        <path d="M10.5 18 L7.5 22.5 L10.5 20.5 Z" fill="${color}"/>
+        <path d="M13.5 18 L16.5 22.5 L13.5 20.5 Z" fill="${color}"/>
+        <ellipse cx="12" cy="3.5" rx="1.8" ry="2.8" fill="white" opacity="0.5"/>
       </svg>
     </div>`,
-    iconSize: [14, 14],
-    iconAnchor: [7, 7],
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
   })
 }
 
@@ -52,7 +85,6 @@ function airportIcon(color: string, label: string): L.DivIcon {
 
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3)
 
-// Bearing in degrees from start to end (0 = north, 90 = east)
 function bearing(from: [number, number], to: [number, number]): number {
   const dLon = (to[1] - from[1]) * Math.PI / 180
   const lat1 = from[0] * Math.PI / 180
@@ -63,7 +95,6 @@ function bearing(from: [number, number], to: [number, number]): number {
   return ((θ * 180 / Math.PI) + 360) % 360
 }
 
-// Simple quadratic Bezier interpolation with capped arc offset
 function interpolatePosition(from: [number, number], to: [number, number], t: number): [number, number] {
   const offset = Math.min(2.0, Math.abs(to[1] - from[1]) * 0.02)
   const midLat = (from[0] + to[0]) / 2 + offset
@@ -73,21 +104,25 @@ function interpolatePosition(from: [number, number], to: [number, number], t: nu
   return [lat, lon]
 }
 
-function applyRotation(mk: L.Marker, angle: number) {
+function applyTransform(mk: L.Marker, angle: number, scale: number) {
   const el = mk.getElement()?.querySelector('div') as HTMLElement | null
-  if (el) el.style.transform = `rotate(${angle}deg)`
+  if (el) el.style.transform = `rotate(${angle}deg) scale(${scale})`
 }
 
-function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick }: Props) {
+function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, onAeropuertoClick, onVueloClick }: Props) {
   const mapRef = useRef<L.Map | null>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const circleLayerRef = useRef<L.LayerGroup | null>(null)
   const markerLayerRef = useRef<L.LayerGroup | null>(null)
   const flightMarkersRef = useRef<Map<string, L.Marker>>(new Map())
   const airportMarkersRef = useRef<Map<string, L.Marker>>(new Map())
-  const maxProgressRef = useRef<Map<string, number>>(new Map())
   const flightAngleRef = useRef<Map<string, number>>(new Map())
   const airportDataRef = useRef<Map<string, AeropuertoDTO>>(new Map())
+  const persistentFlightsRef = useRef<Map<string, VueloDTO>>(new Map())
+  const selectedRouteRef = useRef<L.Polyline | null>(null)
+  const selectedOriginRef = useRef<L.CircleMarker | null>(null)
+  const selectedDestRef = useRef<L.CircleMarker | null>(null)
+  const zoomScaleRef = useRef(1)
   const animRef = useRef<{
     rafId: number
     startTime: number
@@ -95,6 +130,57 @@ function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick 
     startPositions: Map<string, [number, number]>
     targetPositions: Map<string, [number, number]>
   } | null>(null)
+  const onVueloClickRef = useRef(onVueloClick)
+  const onAeropuertoClickRef = useRef(onAeropuertoClick)
+
+  onVueloClickRef.current = onVueloClick
+  onAeropuertoClickRef.current = onAeropuertoClick
+
+  // Update persistent flights cache when new data arrives
+  useEffect(() => {
+    if (vuelos.length > 0) {
+      const persistedIds = new Set(persistentFlightsRef.current.keys())
+      const incomingIds = new Set(vuelos.map((v) => v.id))
+
+      // If no overlap with existing persisted flights, it's a new simulation → clear old
+      if (persistedIds.size > 0 && ![...incomingIds].some((id) => persistedIds.has(id))) {
+        persistentFlightsRef.current.clear()
+        flightMarkersRef.current.forEach((mk) => markerLayerRef.current?.removeLayer(mk))
+        flightMarkersRef.current.clear()
+        flightAngleRef.current.clear()
+      }
+
+      // Remove from cache any flight that is no longer in incoming data (completed)
+      persistedIds.forEach((id) => {
+        if (!incomingIds.has(id)) {
+          persistentFlightsRef.current.delete(id)
+          const mk = flightMarkersRef.current.get(id)
+          if (mk) {
+            markerLayerRef.current?.removeLayer(mk)
+            flightMarkersRef.current.delete(id)
+            flightAngleRef.current.delete(id)
+          }
+        }
+      })
+
+      // Update cache with incoming active flights, and remove any that reached 100%
+      vuelos.forEach((v) => {
+        if (!shouldDisplayFlight(v.id, FLIGHT_DISPLAY_PERCENTAGE)) return
+        if (v.progresoVuelo >= 100) {
+          // Completed flight — remove from cache and map
+          persistentFlightsRef.current.delete(v.id)
+          const mk = flightMarkersRef.current.get(v.id)
+          if (mk) {
+            markerLayerRef.current?.removeLayer(mk)
+            flightMarkersRef.current.delete(v.id)
+            flightAngleRef.current.delete(v.id)
+          }
+        } else {
+          persistentFlightsRef.current.set(v.id, v)
+        }
+      })
+    }
+  }, [vuelos])
 
   // Initialize map
   useEffect(() => {
@@ -114,6 +200,16 @@ function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick 
       circleLayerRef.current = L.layerGroup().addTo(map)
       markerLayerRef.current = L.layerGroup().addTo(map)
       mapRef.current = map
+
+      map.on('zoom', () => {
+        const z = map.getZoom()
+        const scale = Math.max(0.8, z / 2.5)
+        zoomScaleRef.current = scale
+        flightMarkersRef.current.forEach((mk, id) => {
+          const angle = flightAngleRef.current.get(id) ?? 0
+          applyTransform(mk, angle, scale)
+        })
+      })
     }
 
     return () => {
@@ -126,6 +222,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick 
         mapRef.current = null
         flightMarkersRef.current.clear()
         airportMarkersRef.current.clear()
+        persistentFlightsRef.current.clear()
       }
     }
   }, [])
@@ -134,7 +231,6 @@ function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick 
   useEffect(() => {
     if (!circleLayerRef.current) return
 
-    // Sync latest DTOs so click handler always reads current data
     airportDataRef.current.clear()
     aeropuertos.forEach((a) => airportDataRef.current.set(a.codigoOACI, a))
 
@@ -164,27 +260,84 @@ function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick 
         const mk = L.marker([lat, lon], { icon: airportIcon(color, label) })
         mk.on('click', () => {
           const current = airportDataRef.current.get(code)
-          if (current) onAeropuertoClick?.(current)
+          if (current) onAeropuertoClickRef.current?.(current)
         })
         circleLayerRef.current?.addLayer(mk)
         airportMarkersRef.current.set(code, mk)
       }
     })
-  }, [aeropuertos, onAeropuertoClick])
+  }, [aeropuertos])
 
-  // Update flights — RAF interpolates between polls for smooth motion
+  // Update selected flight route + origin/destiny circles
+  useEffect(() => {
+    if (!mapRef.current) return
+
+    if (selectedRouteRef.current) {
+      mapRef.current.removeLayer(selectedRouteRef.current)
+      selectedRouteRef.current = null
+    }
+    if (selectedOriginRef.current) {
+      mapRef.current.removeLayer(selectedOriginRef.current)
+      selectedOriginRef.current = null
+    }
+    if (selectedDestRef.current) {
+      mapRef.current.removeLayer(selectedDestRef.current)
+      selectedDestRef.current = null
+    }
+
+    flightMarkersRef.current.forEach((mk, id) => {
+      const isSelected = id === selectedVueloId
+      mk.setIcon(getAirplaneIcon(isSelected, zoomScaleRef.current))
+      const angle = flightAngleRef.current.get(id)
+      if (angle !== undefined) {
+        requestAnimationFrame(() => applyTransform(mk, angle, zoomScaleRef.current))
+      }
+    })
+
+    if (selectedVueloId) {
+      const selectedVuelo = persistentFlightsRef.current.get(selectedVueloId) ?? vuelos.find((v) => v.id === selectedVueloId)
+      if (selectedVuelo && mapRef.current) {
+        const from: [number, number] = [selectedVuelo.latOrigen, selectedVuelo.lonOrigen]
+        const to: [number, number] = [selectedVuelo.latDestino, selectedVuelo.lonDestino]
+
+        selectedRouteRef.current = L.polyline([from, to], {
+          dashArray: '6, 8',
+          color: '#facc15',
+          weight: 2.5,
+          opacity: 0.9,
+        }).addTo(mapRef.current)
+
+        selectedOriginRef.current = L.circleMarker(from, {
+          radius: 8,
+          color: '#22c55e',
+          fillColor: '#22c55e',
+          fillOpacity: 0.3,
+          weight: 2,
+        }).addTo(mapRef.current)
+
+        selectedDestRef.current = L.circleMarker(to, {
+          radius: 8,
+          color: '#ef4444',
+          fillColor: '#ef4444',
+          fillOpacity: 0.3,
+          weight: 2,
+        }).addTo(mapRef.current)
+      }
+    }
+  }, [selectedVueloId, vuelos])
+
+  // Update flights — render from persistent cache so completed/paused flights stay visible
   useEffect(() => {
     if (!markerLayerRef.current) return
 
-    const activeFlights = vuelos.filter((v) => v.progresoVuelo > 0 && v.progresoVuelo < 100)
-    const activeIds = new Set(activeFlights.map((v) => v.id))
+    const displayFlights = Array.from(persistentFlightsRef.current.values()).filter((v) => v.progresoVuelo > 0 && v.progresoVuelo < 100)
+    const displayIds = new Set(displayFlights.map((v) => v.id))
 
-    // Remove inactive
+    // Remove markers for flights that are no longer in display set
     flightMarkersRef.current.forEach((mk, id) => {
-      if (!activeIds.has(id)) {
+      if (!displayIds.has(id)) {
         markerLayerRef.current?.removeLayer(mk)
         flightMarkersRef.current.delete(id)
-        maxProgressRef.current.delete(id)
         flightAngleRef.current.delete(id)
       }
     })
@@ -195,51 +348,79 @@ function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick 
       animRef.current = null
     }
 
-    // Compute target positions and update icons/tooltips immediately
-    const targetPositions = new Map<string, [number, number]>()
-    activeFlights.forEach((v) => {
-      const prevMax = maxProgressRef.current.get(v.id) || 0
-      const effectiveProgress = Math.max(v.progresoVuelo, prevMax)
-      maxProgressRef.current.set(v.id, effectiveProgress)
-
-      const from: [number, number] = [v.latOrigen, v.lonOrigen]
-      const to: [number, number] = [v.latDestino, v.lonDestino]
-      const [lat, lon] = interpolatePosition(from, to, effectiveProgress / 100)
-      targetPositions.set(v.id, [lat, lon])
-
-      const angle = bearing([v.latOrigen, v.lonOrigen], [v.latDestino, v.lonDestino])
-      flightAngleRef.current.set(v.id, angle)
-
-      let mk = flightMarkersRef.current.get(v.id)
-      if (!mk) {
-        // Spawn at origin airport so the plane appears to depart from the node
-        mk = L.marker(from, { icon: getAirplaneIcon() })
-        mk.bindTooltip(`${v.id} (${Math.round(effectiveProgress)}%)`, { direction: 'top', offset: L.point(0, -10) })
-        mk.on('click', () => onVueloClick?.(v))
-        markerLayerRef.current?.addLayer(mk)
-        flightMarkersRef.current.set(v.id, mk)
-        applyRotation(mk, angle)
-      } else {
-        mk.setTooltipContent(`${v.id} (${Math.round(effectiveProgress)}%)`)
-      }
-    })
-
-    // Capture current positions as start positions for interpolation
+    // Capture current positions as start positions
     const startPositions = new Map<string, [number, number]>()
     flightMarkersRef.current.forEach((mk, id) => {
-      if (activeIds.has(id)) {
+      if (displayIds.has(id)) {
         const ll = mk.getLatLng()
         startPositions.set(id, [ll.lat, ll.lng])
       }
     })
-    // New flights: animate from origin (from) to current target
-    activeFlights.forEach((v) => {
+
+    // Compute target positions and update markers
+    const targetPositions = new Map<string, [number, number]>()
+    displayFlights.forEach((v) => {
+      const from: [number, number] = [v.latOrigen, v.lonOrigen]
+      const to: [number, number] = [v.latDestino, v.lonDestino]
+      const [lat, lon] = interpolatePosition(from, to, v.progresoVuelo / 100)
+      targetPositions.set(v.id, [lat, lon])
+
+      const currentPos: [number, number] = startPositions.has(v.id)
+        ? (startPositions.get(v.id) as [number, number])
+        : [v.latOrigen, v.lonOrigen]
+      const targetPos: [number, number] = targetPositions.get(v.id) as [number, number]
+
+      let angle: number
+      // If flight has completed (position ~= target), keep its route bearing
+      const dx = Math.abs(currentPos[0] - targetPos[0])
+      const dy = Math.abs(currentPos[1] - targetPos[1])
+      if (dx < 0.0001 && dy < 0.0001) {
+        angle = bearing([v.latOrigen, v.lonOrigen], [v.latDestino, v.lonDestino])
+      } else {
+        angle = bearing(currentPos, targetPos)
+      }
+      flightAngleRef.current.set(v.id, angle)
+
+      const isSelected = v.id === selectedVueloId
+      const tooltipText = tooltipForFlight(v)
+      let mk = flightMarkersRef.current.get(v.id)
+      if (!mk) {
+        mk = L.marker(currentPos, { icon: getAirplaneIcon(isSelected, zoomScaleRef.current) })
+        mk.bindTooltip(tooltipText, { direction: 'top', offset: L.point(0, -14) })
+        mk.on('click', () => onVueloClickRef.current?.(v))
+        markerLayerRef.current?.addLayer(mk)
+        flightMarkersRef.current.set(v.id, mk)
+        applyTransform(mk, angle, zoomScaleRef.current)
+      } else {
+        mk.setIcon(getAirplaneIcon(isSelected, zoomScaleRef.current))
+        mk.setTooltipContent(tooltipText)
+      }
+    })
+
+    // New flights: animate from origin
+    displayFlights.forEach((v) => {
       if (!startPositions.has(v.id)) {
         startPositions.set(v.id, [v.latOrigen, v.lonOrigen])
       }
     })
 
-    const duration = 150
+    let hasMovement = false
+    targetPositions.forEach((target, id) => {
+      const start = startPositions.get(id)
+      if (start && (Math.abs(start[0] - target[0]) > 0.0001 || Math.abs(start[1] - target[1]) > 0.0001)) {
+        hasMovement = true
+      }
+    })
+
+    if (!hasMovement) {
+      targetPositions.forEach((target, id) => {
+        const mk = flightMarkersRef.current.get(id)
+        if (mk) mk.setLatLng(target)
+      })
+      return
+    }
+
+    const duration = 2200
 
     const animate = (time: number) => {
       if (!animRef.current) return
@@ -272,7 +453,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, onAeropuertoClick, onVueloClick 
       targetPositions,
     }
     animRef.current.rafId = requestAnimationFrame(animate)
-  }, [vuelos, onVueloClick])
+  }, [vuelos, selectedVueloId])
 
   return <div ref={mapContainerRef} className="w-full h-full rounded-lg" />
 }

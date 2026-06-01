@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useSimulation } from '../context/SimulationContext'
 import { simulationService } from '../services/SimulationService'
 import MapaAeropuertos from '../components/MapaAeropuertos'
 import VueloModal from '../components/VueloModal'
 import AeropuertoModal from '../components/AeropuertoModal'
+import ResultadosModal from '../components/ResultadosModal'
+import { formatDateTime } from '../utils/dateFormat'
 import type { SimulationState, VueloDTO, AeropuertoDTO } from '../types'
 
 interface Props {
@@ -17,7 +19,33 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
   const [selectedVuelo, setSelectedVuelo] = useState<VueloDTO | null>(null)
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
   const [isPaused, setIsPaused] = useState(false)
+  const [showResultados, setShowResultados] = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
+
+  const handleVueloClick = useCallback((v: VueloDTO) => {
+    setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
+  }, [])
+
+  // Keep selected flight synced with latest poll
+  useEffect(() => {
+    if (!selectedVuelo) return
+    if (simulationState?.vuelos) {
+      const updated = simulationState.vuelos.find((v) => v.id === selectedVuelo.id)
+      if (updated) {
+        setSelectedVuelo(updated)
+      } else if (simulationState.status === 'COMPLETADA') {
+        // Flight no longer in active list and sim completed → it reached destination
+        setSelectedVuelo((prev) => (prev ? { ...prev, progresoVuelo: 100 } : prev))
+      }
+    }
+  }, [simulationState?.vuelos, simulationState?.status])
+
+  // Show results modal on completion
+  useEffect(() => {
+    if (simulationState?.status === 'COMPLETADA') {
+      setShowResultados(true)
+    }
+  }, [simulationState?.status])
 
   useEffect(() => {
     startPolling(sessionId)
@@ -150,15 +178,16 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
           <MapaAeropuertos
             aeropuertos={simulationState.aeropuertos}
             vuelos={simulationState.vuelos}
+            selectedVueloId={selectedVuelo?.id || null}
             onAeropuertoClick={setSelectedAeropuerto}
-            onVueloClick={setSelectedVuelo}
+            onVueloClick={handleVueloClick}
           />
         </div>
 
         <div className="space-y-2">
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
             <p className="text-gray-400 text-sm">Tiempo de simulación</p>
-            <p className="text-2xl font-mono font-bold text-sky-400">{simulationState.simulationTime}</p>
+            <p className="text-2xl font-mono font-bold text-sky-400">{formatDateTime(simulationState.simulationTime)}</p>
           </div>
 
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
@@ -174,7 +203,7 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
             <div className="h-24 lg:h-32 overflow-y-auto space-y-1 text-xs font-mono">
               {simulationState.logs.map((log, i) => (
                 <div key={i} className={`${log.tipo === 'ERROR' ? 'text-red-400' : log.tipo === 'WARN' ? 'text-yellow-400' : log.tipo === 'COLAPSO' ? 'text-red-500 font-bold' : 'text-gray-400'}`}>
-                  [{log.timestamp}] {log.tipo}: {log.mensaje}
+                  [{formatDateTime(log.timestamp)}] {log.tipo}: {log.mensaje}
                 </div>
               ))}
               <div ref={logEndRef} />
@@ -185,6 +214,15 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
 
       <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} />
       <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} />
+      <ResultadosModal
+        state={simulationState}
+        isOpen={showResultados}
+        onClose={() => setShowResultados(false)}
+        onNuevaSimulacion={() => {
+          setShowResultados(false)
+          handleNuevaSimulacion()
+        }}
+      />
     </div>
   )
 }
