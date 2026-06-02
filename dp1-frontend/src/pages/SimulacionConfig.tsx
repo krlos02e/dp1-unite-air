@@ -10,7 +10,6 @@ export default function SimulacionConfig({ onStart }: Props) {
   const [fechaInicio, setFechaInicio] = useState('')
   const [horaInicio, setHoraInicio] = useState('')
   const [algoritmo, setAlgoritmo] = useState('ALNS')
-  const [velocidad, setVelocidad] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -29,7 +28,7 @@ export default function SimulacionConfig({ onStart }: Props) {
         fechaInicio,
         horaInicio,
         algoritmo,
-        velocidad,
+        velocidad: 1,
       })
       onStart(state.sessionId)
     } catch (err: any) {
@@ -77,18 +76,6 @@ export default function SimulacionConfig({ onStart }: Props) {
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-200">
             <option value="ALNS">ALNS</option>
           </select>
-        </div>
-
-        <div>
-          <label className="block text-sm text-gray-400 mb-1">Velocidad de simulación</label>
-          <div className="flex gap-2">
-            {[1, 2].map((v) => (
-              <button key={v} onClick={() => setVelocidad(v)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-medium ${velocidad === v ? 'bg-sky-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>
-                {v}x
-              </button>
-            ))}
-          </div>
         </div>
 
         {error && (

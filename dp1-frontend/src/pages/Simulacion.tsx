@@ -22,7 +22,7 @@ const aeropuertosFallback: AeropuertoDTO[] = Object.values(AIRPORTS_DATA).map((a
 }))
 
 export default function Simulacion() {
-  const { simulationState, startPolling, stopPolling, isRunning } = useSimulation()
+  const { simulationState, startPolling, stopPolling } = useSimulation()
   const [sessionId, setSessionId] = useState<string>('')
   const [aeropuertosEstaticos, setAeropuertosEstaticos] = useState<AeropuertoDTO[]>(aeropuertosFallback)
 
@@ -31,7 +31,6 @@ export default function Simulacion() {
   const [fechaInicio, setFechaInicio] = useState('')
   const [horaInicio, setHoraInicio] = useState('')
   const [algoritmo, setAlgoritmo] = useState('ALNS')
-  const [velocidad, setVelocidad] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -108,7 +107,7 @@ export default function Simulacion() {
         fechaInicio,
         horaInicio,
         algoritmo,
-        velocidad,
+        velocidad: 1,
       })
       if (state.status === 'ERROR') {
         setError(state.logs?.[0]?.mensaje || 'Error al iniciar simulación')
@@ -116,7 +115,7 @@ export default function Simulacion() {
         return
       }
       setSessionId(state.sessionId)
-      startPolling(state.sessionId, Math.max(600, 3000 / velocidad))
+      startPolling(state.sessionId, 3000)
     } catch (err: any) {
       const msg = err?.response?.data?.logs?.[0]?.mensaje
         || err?.response?.data?.message
@@ -172,8 +171,6 @@ export default function Simulacion() {
   const vuelosCulminados = simulationState?.vuelosCulminados ?? 0
   const vuelosEnTransitoCount = simulationState?.vuelosEnTransito ?? 0
   const vuelosCancelados = simulationState?.vuelosCancelados ?? 0
-  const maletasEntregadas = simulationState?.maletasEntregadas ?? 0
-  const maletasEnTransito = simulationState?.maletasEnTransito ?? 0
 
   return (
     <div className="flex flex-col gap-4">
@@ -225,26 +222,6 @@ export default function Simulacion() {
           >
             <option value="ALNS">ALNS</option>
           </select>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-400 font-medium">Velocidad:</label>
-          <div className="flex gap-1">
-            {[1, 2].map((v) => (
-              <button
-                key={v}
-                onClick={() => setVelocidad(v)}
-                disabled={isRunning && !isPaused && !isCompleted}
-                className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${
-                  velocidad === v
-                    ? 'bg-sky-600 text-white border-sky-600'
-                    : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700'
-                } disabled:opacity-40 disabled:cursor-not-allowed`}
-              >
-                {v}x
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="ml-auto flex items-center gap-2">
@@ -300,7 +277,7 @@ export default function Simulacion() {
           aeropuertos={aeropuertos}
           vuelos={vuelos}
           selectedVueloId={selectedVuelo?.id || null}
-          velocidad={velocidad}
+          velocidad={1}
           onAeropuertoClick={setSelectedAeropuerto}
           onVueloClick={handleVueloClick}
         />
@@ -323,14 +300,6 @@ export default function Simulacion() {
             <div className="flex items-center justify-between bg-red-900/30 border border-red-800/50 rounded-lg px-3 py-2">
               <span className="text-xs text-red-400 font-medium">Vuelos Cancelados</span>
               <span className="text-sm font-bold text-red-300 bg-red-800/50 px-2 py-0.5 rounded">{vuelosCancelados}</span>
-            </div>
-            <div className="flex items-center justify-between bg-sky-900/30 border border-sky-800/50 rounded-lg px-3 py-2">
-              <span className="text-xs text-sky-400 font-medium">Maletas Entregadas</span>
-              <span className="text-sm font-bold text-sky-300 bg-sky-800/50 px-2 py-0.5 rounded">{maletasEntregadas}</span>
-            </div>
-            <div className="flex items-center justify-between bg-violet-900/30 border border-violet-800/50 rounded-lg px-3 py-2">
-              <span className="text-xs text-violet-400 font-medium">Maletas en Transito</span>
-              <span className="text-sm font-bold text-violet-300 bg-violet-800/50 px-2 py-0.5 rounded">{maletasEnTransito}</span>
             </div>
           </div>
 
