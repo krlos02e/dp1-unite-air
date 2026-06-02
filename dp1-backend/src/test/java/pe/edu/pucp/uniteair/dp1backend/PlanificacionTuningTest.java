@@ -9,7 +9,7 @@ import tasf.core.Dataset;
 import tasf.core.PlanificacionUtils;
 import tasf.core.Solucion;
 import tasf.strategy.TwoPhaseOrchestrator;
-import tasf.strategy.aco.ACO_RutasPlanner;
+import tasf.strategy.alns.ALNS_RutasPlanner;
 
 import java.time.Duration;
 import java.time.LocalDate;
@@ -20,44 +20,38 @@ class PlanificacionTuningTest {
     @Autowired
     private CargaArchivosService cargaArchivosService;
 
-    record ConfigACO(int iter, int hormigas, int maxRutas, int escalas, double evaporacion, double alpha, double beta, int horizonteHoras, int minConexionMin) {}
+    record ConfigALNS(int iter, double evaporacion) {}
 
     @Test
-    void tunearACO() {
+    void tunearALNS() {
         cargaArchivosService.cargarDatasetConFechas(LocalDate.of(2026, 5, 12), 5);
         Dataset dataset = cargaArchivosService.obtenerUltimoDataset();
         int totalPaquetes = dataset.getPaquetes().size();
 
-        System.out.println("\n=== ULTIMO TEST: RELAJANDO RESTRICCIONES ===");
+        System.out.println("\n=== TEST DE AJUSTE PARÁMETROS ALNS ===");
         System.out.println("Total paquetes: " + totalPaquetes + "\n");
-        System.out.printf("%-65s | %10s | %10s | %10s | %10s%n",
+        System.out.printf("%-50s | %10s | %10s | %10s | %10s%n",
                 "Config", "Asignados", "NA", "Costo", "Duración");
-        System.out.println("-".repeat(120));
+        System.out.println("-".repeat(100));
 
-        ConfigACO[] configs = {
-                new ConfigACO(10, 4,  4, 2, 0.4, 0.9, 3.2,  72, 30),
-                new ConfigACO(10, 4,  4, 2, 0.4, 0.9, 3.2, 168, 15),
-                new ConfigACO(50, 8, 10, 4, 0.3, 0.8, 2.8, 168, 10),
+        ConfigALNS[] configs = {
+                new ConfigALNS(20, 0.4),
+                new ConfigALNS(50, 0.3),
+                new ConfigALNS(100, 0.2),
         };
 
-        for (ConfigACO cfg : configs) {
+        for (ConfigALNS cfg : configs) {
             PlanificacionUtils.limpiarCacheGlobal();
-            TwoPhaseOrchestrator orchestrator = new TwoPhaseOrchestrator(new ACO_RutasPlanner(17L));
+            TwoPhaseOrchestrator orchestrator = new TwoPhaseOrchestrator(new ALNS_RutasPlanner(17L));
 
             Config_Simulacion config = new Config_Simulacion();
             config.setAeropuertoHub("SKBO");
-            config.setMinimaConexion(Duration.ofMinutes(cfg.minConexionMin));
-            config.setIteracionesACO(cfg.iter);
-            config.setHormigasACO(cfg.hormigas);
-            config.setMaxRutasPorPaquete(cfg.maxRutas);
-            config.setMaxEscalas(cfg.escalas);
+            config.setMinimaConexion(Duration.ofMinutes(30));
+            config.setIteracionesALNS(cfg.iter);
             config.setEvaporacionFeromona(cfg.evaporacion);
-            config.setAlphaACO(cfg.alpha);
-            config.setBetaACO(cfg.beta);
-            config.setTopRutasACO(Math.max(2, cfg.hormigas / 2));
-            config.setHormigasEliteACO(Math.max(1, cfg.hormigas / 3));
+            config.setMaxRutasPorPaquete(4);
+            config.setMaxEscalas(2);
             config.setVentanaActualizacionPesos(5);
-            config.setHorizonteBusqueda(Duration.ofHours(cfg.horizonteHoras));
 
             long t0 = System.nanoTime();
             Solucion solucion = orchestrator.ejecutarFlujoCompleto(dataset, config);
@@ -68,9 +62,9 @@ class PlanificacionTuningTest {
             long costo = (long) solucion.getCostoTotal();
             long dur = (t1 - t0) / 1_000_000;
 
-            String label = String.format("iter=%d horm=%d maxR=%d esc=%d conn=%dmin h=%dh",
-                    cfg.iter, cfg.hormigas, cfg.maxRutas, cfg.escalas, cfg.minConexionMin, cfg.horizonteHoras);
-            System.out.printf("%-65s | %6d/%d | %4d %s | %8d | %3ds%n",
+            String label = String.format("iter=%d evap=%.1f",
+                    cfg.iter, cfg.evaporacion);
+            System.out.printf("%-50s | %6d/%d | %4d %s | %8d | %3ds%n",
                     label, asignados, totalPaquetes, na, na == 0 ? " " : "⚠",
                     costo, dur / 1000);
         }

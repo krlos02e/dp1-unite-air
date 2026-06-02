@@ -13,7 +13,7 @@ import tasf.model.Paquete;
 import tasf.model.Ruta;
 import tasf.model.Vuelo;
 import tasf.strategy.TwoPhaseOrchestrator;
-import tasf.strategy.aco.ACO_RutasPlanner;
+import tasf.strategy.alns.ALNS_RutasPlanner;
 
 import java.time.Duration;
 import java.time.LocalDate;
@@ -34,16 +34,13 @@ class PlanificacionDiagnosticoTest {
         Dataset dataset = cargaArchivosService.obtenerUltimoDataset();
 
         PlanificacionUtils.limpiarCacheGlobal();
-        TwoPhaseOrchestrator orchestrator = new TwoPhaseOrchestrator(new ACO_RutasPlanner());
+        TwoPhaseOrchestrator orchestrator = new TwoPhaseOrchestrator(new ALNS_RutasPlanner());
 
         Config_Simulacion config = new Config_Simulacion();
         config.setAeropuertoHub("SKBO");
         config.setMinimaConexion(Duration.ofMinutes(30));
-        config.setIteracionesACO(10);
-        config.setHormigasACO(4);
+        config.setIteracionesALNS(20);
         config.setMaxRutasPorPaquete(4);
-        config.setTopRutasACO(2);
-        config.setHormigasEliteACO(1);
         config.setMaxEscalas(2);
         config.setVentanaActualizacionPesos(5);
         config.setEvaporacionFeromona(0.4);

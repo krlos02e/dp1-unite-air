@@ -12,7 +12,6 @@ import tasf.model.Ruta;
 import tasf.strategy.TwoPhaseOrchestrator;
 import tasf.strategy.PlanificadorRutasStrategy;
 import tasf.strategy.alns.ALNS_RutasPlanner;
-import tasf.strategy.aco.ACO_RutasPlanner;
 
 import java.time.Duration;
 import java.time.LocalDate;
@@ -32,11 +31,7 @@ class PlanificacionIntegrationTest {
         config.setAeropuertoHub("SKBO");
         config.setMinimaConexion(Duration.ofMinutes(30));
         config.setIteracionesALNS(20);
-        config.setIteracionesACO(10);
-        config.setHormigasACO(4);
         config.setMaxRutasPorPaquete(4);
-        config.setTopRutasACO(2);
-        config.setHormigasEliteACO(1);
         config.setMaxEscalas(2);
         config.setVentanaActualizacionPesos(5);
         config.setEvaporacionFeromona(0.4);
@@ -84,11 +79,6 @@ class PlanificacionIntegrationTest {
     @Test
     void testPlanificacionConALNS() {
         testPlanificar("ALNS", new ALNS_RutasPlanner());
-    }
-
-    @Test
-    void testPlanificacionConACO() {
-        testPlanificar("ACO", new ACO_RutasPlanner());
     }
 
     @Test

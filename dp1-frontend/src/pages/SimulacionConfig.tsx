@@ -76,7 +76,6 @@ export default function SimulacionConfig({ onStart }: Props) {
           <select value={algoritmo} onChange={(e) => setAlgoritmo(e.target.value)}
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-200">
             <option value="ALNS">ALNS</option>
-            <option value="ACO">ACO</option>
           </select>
         </div>
 

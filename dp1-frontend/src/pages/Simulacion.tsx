@@ -224,7 +224,6 @@ export default function Simulacion() {
             disabled={!!sessionId && !isError}
           >
             <option value="ALNS">ALNS</option>
-            <option value="ACO">ACO</option>
           </select>
         </div>
 

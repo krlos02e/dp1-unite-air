@@ -19,7 +19,6 @@ import tasf.model.Ruta;
 import tasf.strategy.TwoPhaseOrchestrator;
 import tasf.strategy.PlanificadorRutasStrategy;
 import tasf.strategy.alns.ALNS_RutasPlanner;
-import tasf.strategy.aco.ACO_RutasPlanner;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -81,9 +80,7 @@ public class SimulationEngine {
                 int maletasEntregadas = 0;
                 int maletasEnTransito = 0;
 
-                PlanificadorRutasStrategy planner = "ACO".equalsIgnoreCase(algoritmo)
-                        ? new ACO_RutasPlanner()
-                        : new ALNS_RutasPlanner();
+        PlanificadorRutasStrategy planner = new ALNS_RutasPlanner();
                 TwoPhaseOrchestrator orchestrator = new TwoPhaseOrchestrator(planner);
 
                 PlanificacionUtils.limpiarCacheGlobal();
