@@ -7,12 +7,24 @@ import VueloModal from '../components/VueloModal'
 import AeropuertoModal from '../components/AeropuertoModal'
 import ResultadosModal from '../components/ResultadosModal'
 import { formatDateTime } from '../utils/dateFormat'
+import { AIRPORTS_DATA } from '../data/airportsData'
 import type { VueloDTO, AeropuertoDTO } from '../types'
+
+const aeropuertosFallback: AeropuertoDTO[] = Object.values(AIRPORTS_DATA).map((a) => ({
+  codigoOACI: a.codigoOACI,
+  latitud: a.latitud,
+  longitud: a.longitud,
+  ciudad: a.ciudad,
+  capacidadMaxima: a.capacidad,
+  ocupacionActual: 0,
+  vuelosEntrantes: [],
+  vuelosSalientes: [],
+}))
 
 export default function Simulacion() {
   const { simulationState, startPolling, stopPolling, isRunning } = useSimulation()
   const [sessionId, setSessionId] = useState<string>('')
-  const [aeropuertosEstaticos, setAeropuertosEstaticos] = useState<AeropuertoDTO[]>([])
+  const [aeropuertosEstaticos, setAeropuertosEstaticos] = useState<AeropuertoDTO[]>(aeropuertosFallback)
 
   // Config state
   const [duracion, setDuracion] = useState(3)
@@ -104,7 +116,7 @@ export default function Simulacion() {
         return
       }
       setSessionId(state.sessionId)
-      startPolling(state.sessionId)
+      startPolling(state.sessionId, Math.max(600, 3000 / velocidad))
     } catch (err: any) {
       const msg = err?.response?.data?.logs?.[0]?.mensaje
         || err?.response?.data?.message
@@ -160,6 +172,8 @@ export default function Simulacion() {
   const vuelosCulminados = simulationState?.vuelosCulminados ?? 0
   const vuelosEnTransitoCount = simulationState?.vuelosEnTransito ?? 0
   const vuelosCancelados = simulationState?.vuelosCancelados ?? 0
+  const maletasEntregadas = simulationState?.maletasEntregadas ?? 0
+  const maletasEnTransito = simulationState?.maletasEnTransito ?? 0
 
   return (
     <div className="flex flex-col gap-4">
@@ -217,7 +231,7 @@ export default function Simulacion() {
         <div className="flex items-center gap-2">
           <label className="text-sm text-gray-400 font-medium">Velocidad:</label>
           <div className="flex gap-1">
-            {[1, 2, 5].map((v) => (
+            {[1, 2].map((v) => (
               <button
                 key={v}
                 onClick={() => setVelocidad(v)}
@@ -244,7 +258,7 @@ export default function Simulacion() {
                 <>
                   <button
                     onClick={handleTogglePause}
-                    className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                    className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors cursor-pointer ${
                       isPaused
                         ? 'bg-sky-600 hover:bg-sky-700 text-white'
                         : 'bg-amber-600 hover:bg-amber-700 text-white'
@@ -254,7 +268,7 @@ export default function Simulacion() {
                   </button>
                   <button
                     onClick={handleDetener}
-                    className="px-4 py-2 rounded-lg font-medium text-sm bg-red-600 hover:bg-red-700 text-white transition-colors"
+                    className="px-4 py-2 rounded-lg font-medium text-sm bg-red-600 hover:bg-red-700 text-white transition-colors cursor-pointer"
                   >
                     Detener
                   </button>
@@ -287,6 +301,7 @@ export default function Simulacion() {
           aeropuertos={aeropuertos}
           vuelos={vuelos}
           selectedVueloId={selectedVuelo?.id || null}
+          velocidad={velocidad}
           onAeropuertoClick={setSelectedAeropuerto}
           onVueloClick={handleVueloClick}
         />
@@ -309,6 +324,14 @@ export default function Simulacion() {
             <div className="flex items-center justify-between bg-red-900/30 border border-red-800/50 rounded-lg px-3 py-2">
               <span className="text-xs text-red-400 font-medium">Vuelos Cancelados</span>
               <span className="text-sm font-bold text-red-300 bg-red-800/50 px-2 py-0.5 rounded">{vuelosCancelados}</span>
+            </div>
+            <div className="flex items-center justify-between bg-sky-900/30 border border-sky-800/50 rounded-lg px-3 py-2">
+              <span className="text-xs text-sky-400 font-medium">Maletas Entregadas</span>
+              <span className="text-sm font-bold text-sky-300 bg-sky-800/50 px-2 py-0.5 rounded">{maletasEntregadas}</span>
+            </div>
+            <div className="flex items-center justify-between bg-violet-900/30 border border-violet-800/50 rounded-lg px-3 py-2">
+              <span className="text-xs text-violet-400 font-medium">Maletas en Transito</span>
+              <span className="text-sm font-bold text-violet-300 bg-violet-800/50 px-2 py-0.5 rounded">{maletasEnTransito}</span>
             </div>
           </div>
 

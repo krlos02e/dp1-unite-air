@@ -9,7 +9,7 @@ interface SimulationContextType {
   setSimulationState: (state: SimulationState | null) => void
   setIsRunning: (running: boolean) => void
   setPollingInterval: (ms: number) => void
-  startPolling: (sessionId: string) => void
+  startPolling: (sessionId: string, interval?: number) => void
   stopPolling: () => void
 }
 
@@ -29,10 +29,12 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     setIsRunning(false)
   }, [])
 
-  const startPolling = useCallback((sessionId: string) => {
+  const startPolling = useCallback((sessionId: string, interval?: number) => {
     stopPolling()
     setSimulationState(null)
     setIsRunning(true)
+
+    const effectiveInterval = interval ?? pollingInterval
 
     const poll = async () => {
       try {
@@ -47,7 +49,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     }
 
     poll()
-    intervalRef.current = setInterval(poll, pollingInterval)
+    intervalRef.current = setInterval(poll, effectiveInterval)
   }, [pollingInterval, stopPolling])
 
   return (
