@@ -95,7 +95,7 @@ public class SimulationEngine {
                         .mensaje("Planificando rutas...")
                         .build());
                 actualizarEstadoEnCache(sessionId, fechaInicio, dataset, cargaVuelo, ocupacionAeropuerto,
-                        0, 0, 0, duracionHoras, false, null, logs, "PLANIFICANDO");
+                        0, 0, 0, duracionHoras, false, null, logs, "PLANIFICANDO", fechaInicio);
 
                 // Variables compartidas entre hilos
                 final int[] horaRef = {0};
@@ -169,7 +169,7 @@ public class SimulationEngine {
                         }
 
                         actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
-                                vizEntregadas, vizEnTransito, hora, duracionHoras, false, null, vizLogs, "PLANIFICANDO");
+                                vizEntregadas, vizEnTransito, hora, duracionHoras, false, null, vizLogs, "PLANIFICANDO", fechaInicio);
 
                         long sleepMs = (long) (3000.0 / Math.max(0.5, velocidad));
                         if (sleepMs > 0) {
@@ -339,7 +339,7 @@ public class SimulationEngine {
                     }
 
                     actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
-                            maletasEntregadas, maletasEnTransito, hora, duracionHoras, false, null, logs, "EJECUTANDO");
+                            maletasEntregadas, maletasEnTransito, hora, duracionHoras, false, null, logs, "EJECUTANDO", fechaInicio);
 
                     long sleepMs = (long) (4000.0 / Math.max(0.5, velocidad));
                     if (sleepMs > 0) {
@@ -467,7 +467,8 @@ public class SimulationEngine {
                                           Map<String, Integer> cargaVuelo, Map<String, Integer> ocupacionAeropuerto,
                                           int maletasEntregadas, int maletasEnTransito,
                                           int hora, int totalHoras, boolean colapsada,
-                                          String motivo, List<LogEntry> logs, String status) {
+                                          String motivo, List<LogEntry> logs, String status,
+                                          LocalDateTime fechaInicio) {
         // Monotonicity guard: never let simulation time/progress go backwards
         SimulationState prevState = simulationCache.get(sessionId);
         int prevHora = 0;
@@ -494,6 +495,7 @@ public class SimulationEngine {
         Map<String, double[]> flightCoords = flightCoordCache.get(sessionId);
         Map<String, Long> flightDurations = flightDurationCache.get(sessionId);
         for (Vuelo v : dataset.getVuelos()) {
+            if (v.getSalidaUtc() != null && v.getSalidaUtc().isBefore(fechaInicio)) continue;
             double progreso = 0.0;
             Long totalMins = (flightDurations != null) ? flightDurations.get(v.getId()) : null;
             if (simTime != null && v.getSalidaUtc() != null && v.getLlegadaUtc() != null && totalMins != null && totalMins > 0) {
@@ -532,6 +534,7 @@ public class SimulationEngine {
         // Pre-filter active flight IDs for current simTime
         Set<String> activeFlightIds = new HashSet<>();
         for (Vuelo v : dataset.getVuelos()) {
+            if (v.getSalidaUtc() != null && v.getSalidaUtc().isBefore(fechaInicio)) continue;
             if (simTime != null && v.getSalidaUtc() != null && v.getLlegadaUtc() != null) {
                 if (simTime.isAfter(v.getSalidaUtc()) && simTime.isBefore(v.getLlegadaUtc())) {
                     activeFlightIds.add(v.getId());
