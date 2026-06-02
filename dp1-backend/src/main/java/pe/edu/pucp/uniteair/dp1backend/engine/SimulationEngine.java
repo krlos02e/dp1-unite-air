@@ -222,6 +222,37 @@ public class SimulationEngine {
                     }
                 }
 
+                // Calcular ocupación real de aeropuertos basada en las rutas asignadas
+                Map<String, Map<LocalDateTime, Integer>> ocupacionReal = new HashMap<>();
+                for (Map.Entry<String, Ruta> entry : rutas.entrySet()) {
+                    Paquete paquete = dataset.getPaquetePorId(entry.getKey());
+                    int cantidad = paquete != null ? paquete.getCantidad() : 1;
+                    Ruta ruta = entry.getValue();
+                    List<Vuelo> vuelosRuta = ruta.getVuelos();
+                    
+                    if (vuelosRuta.isEmpty()) continue;
+                    
+                    LocalDateTime instanteActual = PlanificacionUtils.getCreacionUtc(paquete, dataset, config);
+                    String aeropuertoActual = paquete.getOrigenOACI();
+                    
+                    for (int i = 0; i < vuelosRuta.size(); i++) {
+                        Vuelo vuelo = vuelosRuta.get(i);
+                        LocalDateTime salida = vuelo.getSalidaUtc();
+                        
+                        // El paquete está en el aeropuerto desde instanteActual hasta salida
+                        LocalDateTime hora = instanteActual.truncatedTo(ChronoUnit.HOURS);
+                        while (hora.isBefore(salida)) {
+                            ocupacionReal
+                                .computeIfAbsent(aeropuertoActual, k -> new HashMap<>())
+                                .merge(hora, cantidad, Integer::sum);
+                            hora = hora.plusHours(1);
+                        }
+                        
+                        aeropuertoActual = vuelo.getDestino().getCodigoOACI();
+                        instanteActual = vuelo.getLlegadaUtc();
+                    }
+                }
+
                 System.out.println("=== Ejecucion Completada ===");
                 System.out.printf("Paquetes totales: %d, rutas asignadas: %d%n",
                         dataset.getPaquetes().size(), rutas.size());
@@ -295,7 +326,9 @@ public class SimulationEngine {
                     }
 
                     for (Aeropuerto a : dataset.getAeropuertos().values()) {
-                        int ocup = estado.getOcupacionHora(a.getCodigoOACI(), simTime);
+                        int ocup = ocupacionReal
+                            .getOrDefault(a.getCodigoOACI(), Map.of())
+                            .getOrDefault(simTime.truncatedTo(ChronoUnit.HOURS), 0);
                         ocupacionAeropuerto.put(a.getCodigoOACI(), ocup);
                     }
 

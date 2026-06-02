@@ -11,6 +11,11 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose }: Props) 
   if (!isOpen || !aeropuerto) return null
 
   const cityName = aeropuerto.ciudad || getAirportCity(aeropuerto.codigoOACI) || ''
+  const ocupacionPorcentaje = aeropuerto.capacidadMaxima > 0
+    ? Math.round((aeropuerto.ocupacionActual / aeropuerto.capacidadMaxima) * 100)
+    : 0
+  const ocupacionColor = ocupacionPorcentaje < 70 ? 'bg-emerald-500' : ocupacionPorcentaje < 90 ? 'bg-amber-500' : 'bg-red-500'
+  const ocupacionTextColor = ocupacionPorcentaje < 70 ? 'text-emerald-400' : ocupacionPorcentaje < 90 ? 'text-amber-400' : 'text-red-400'
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60" onClick={onClose}>
@@ -22,6 +27,21 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose }: Props) 
           <div className="flex justify-between">
             <span className="text-gray-400">Capacidad máxima</span>
             <span className="font-medium">{aeropuerto.capacidadMaxima}</span>
+          </div>
+
+          <div>
+            <div className="flex justify-between mb-1">
+              <span className="text-gray-400">Capacidad actual</span>
+              <span className={`font-medium ${ocupacionTextColor}`}>
+                {aeropuerto.ocupacionActual} / {aeropuerto.capacidadMaxima} ({ocupacionPorcentaje}%)
+              </span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-2">
+              <div
+                className={`${ocupacionColor} h-2 rounded-full transition-all`}
+                style={{ width: `${Math.min(100, ocupacionPorcentaje)}%` }}
+              />
+            </div>
           </div>
 
           <div>
