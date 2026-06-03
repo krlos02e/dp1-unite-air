@@ -9,7 +9,7 @@ export default function SimulacionConfig({ onStart }: Props) {
   const [duracion, setDuracion] = useState(3)
   const [fechaInicio, setFechaInicio] = useState('')
   const [horaInicio, setHoraInicio] = useState('')
-  const [algoritmo, setAlgoritmo] = useState('ALNS')
+  const algoritmo = 'ALNS'
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -72,10 +72,7 @@ export default function SimulacionConfig({ onStart }: Props) {
 
         <div>
           <label className="block text-sm text-gray-400 mb-1">Algoritmo</label>
-          <select value={algoritmo} onChange={(e) => setAlgoritmo(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-200">
-            <option value="ALNS">ALNS</option>
-          </select>
+          <div className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-200 font-medium">ALNS</div>
         </div>
 
         {error && (

@@ -174,7 +174,7 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
           </div>
         )}
 
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-2 h-[42vh] lg:h-[52vh]">
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-2 h-[38vh] lg:h-[48vh]">
           <MapaAeropuertos
             aeropuertos={simulationState.aeropuertos}
             vuelos={simulationState.vuelos}
@@ -200,7 +200,7 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
 
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 flex-1">
             <h3 className="text-sm font-semibold text-gray-300 mb-1">Registro Operativo</h3>
-            <div className="h-24 lg:h-32 overflow-y-auto space-y-1 text-xs font-mono">
+            <div className="h-20 lg:h-28 overflow-y-auto space-y-1 text-xs font-mono">
               {simulationState.logs.map((log, i) => (
                 <div key={i} className={`${log.tipo === 'ERROR' ? 'text-red-400' : log.tipo === 'WARN' ? 'text-yellow-400' : log.tipo === 'COLAPSO' ? 'text-red-500 font-bold' : 'text-gray-400'}`}>
                   [{formatDateTime(log.timestamp)}] {log.tipo}: {log.mensaje}

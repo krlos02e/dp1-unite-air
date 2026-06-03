@@ -30,7 +30,7 @@ export default function Simulacion() {
   const [duracion, setDuracion] = useState(3)
   const [fechaInicio, setFechaInicio] = useState('')
   const [horaInicio, setHoraInicio] = useState('')
-  const [algoritmo, setAlgoritmo] = useState('ALNS')
+  const algoritmo = 'ALNS'
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -213,15 +213,8 @@ export default function Simulacion() {
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-400 font-medium">Algoritmo:</label>
-          <select
-            value={algoritmo}
-            onChange={(e) => setAlgoritmo(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-            disabled={!!sessionId && !isError}
-          >
-            <option value="ALNS">ALNS</option>
-          </select>
+          <span className="text-sm text-gray-400 font-medium">Algoritmo:</span>
+          <span className="text-sm text-gray-200 font-semibold">ALNS</span>
         </div>
 
         <div className="ml-auto flex items-center gap-2">
@@ -272,7 +265,7 @@ export default function Simulacion() {
       </div>
 
       {/* Mapa siempre visible con altura fija */}
-      <div className="relative h-[48vh] bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+      <div className="relative h-[42vh] bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
         <MapaAeropuertos
           aeropuertos={aeropuertos}
           vuelos={vuelos}
@@ -308,7 +301,7 @@ export default function Simulacion() {
         {/* Eventos Simulación */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 flex flex-col">
           <h3 className="text-sm font-bold text-gray-100 mb-1">Eventos Simulación</h3>
-          <div className="flex-1 overflow-y-auto max-h-28 space-y-1 text-xs font-mono">
+          <div className="flex-1 overflow-y-auto max-h-24 space-y-1 text-xs font-mono">
             {simulationState && simulationState.logs.length > 0 ? (
               simulationState.logs.slice(-20).map((log, i) => (
                 <div key={i} className={`${
