@@ -46,6 +46,15 @@ export default function Simulacion() {
   const [showResultados, setShowResultados] = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
 
+  // Real elapsed timer (pauses when simulation is paused)
+  const [elapsedRealSeconds, setElapsedRealSeconds] = useState(0)
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const timerRunningRef = useRef(false)
+
+  const isCompleted = simulationState?.status === 'COMPLETADA'
+  const isColapsada = simulationState?.status === 'COLAPSADA'
+  const isError = simulationState?.status === 'ERROR'
+
   // Cargar aeropuertos estáticos al montar
   useEffect(() => {
     cargaArchivosService.obtenerAeropuertos()
@@ -94,6 +103,38 @@ export default function Simulacion() {
     }
   }, [simulationState?.status])
 
+  // Real-time timer: runs only while simulation is active and not paused
+  useEffect(() => {
+    const isRunning = !!sessionId && !isCompleted && !isError && !isColapsada
+    const shouldRun = isRunning && !isPaused
+
+    if (shouldRun && !timerRunningRef.current) {
+      timerRunningRef.current = true
+      timerIntervalRef.current = setInterval(() => {
+        setElapsedRealSeconds((prev) => prev + 1)
+      }, 1000)
+    } else if (!shouldRun && timerRunningRef.current) {
+      timerRunningRef.current = false
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current)
+        timerIntervalRef.current = null
+      }
+    }
+
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current)
+        timerIntervalRef.current = null
+      }
+    }
+  }, [sessionId, isCompleted, isError, isColapsada, isPaused])
+
+  function formatElapsed(seconds: number): string {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  }
+
   const handleIniciar = async () => {
     if (!fechaInicio || !horaInicio) {
       setError('Complete todos los campos')
@@ -101,6 +142,7 @@ export default function Simulacion() {
     }
     setError(null)
     setLoading(true)
+    setElapsedRealSeconds(0)
     try {
       const state = await simulationService.iniciar({
         duracionDias: duracion,
@@ -152,17 +194,16 @@ export default function Simulacion() {
     stopPolling()
     setSessionId('')
     setIsPaused(false)
+    setElapsedRealSeconds(0)
   }
 
   const handleNuevaSimulacion = () => {
     stopPolling()
     setSessionId('')
     setIsPaused(false)
+    setElapsedRealSeconds(0)
   }
 
-  const isCompleted = simulationState?.status === 'COMPLETADA'
-  const isColapsada = simulationState?.status === 'COLAPSADA'
-  const isError = simulationState?.status === 'ERROR'
   const showActionButton = sessionId && !isColapsada && !isError
 
   const aeropuertos = simulationState?.aeropuertos?.length ? simulationState.aeropuertos : aeropuertosEstaticos
@@ -331,6 +372,10 @@ export default function Simulacion() {
             <div className="flex justify-between">
               <span>Transcurrido:</span>
               <span className="font-mono text-gray-200">{simulationState?.simulationTime ? `${simulationState.progreso}%` : '--'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Tiempo real transcurrido:</span>
+              <span className="font-mono text-gray-200">{formatElapsed(elapsedRealSeconds)}</span>
             </div>
             <div className="flex justify-between">
               <span>Actual:</span>
