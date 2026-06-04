@@ -7,7 +7,7 @@ import { getAirportCity, AIRPORTS_DATA } from '../data/airportsData'
 function tooltipForFlight(v: VueloDTO): string {
   const origen = getAirportCity(v.origen) || v.origen
   const destino = getAirportCity(v.destino) || v.destino
-  return `Vuelo ${origen} → ${destino} (${Math.round(v.progresoVuelo)}%) | Carga: ${v.cargaActual}/${v.capacidad} maletas`
+  return `Vuelo ${origen} → ${destino} (${Math.round(v.progresoVuelo)}%)`
 }
 
 interface Props {
@@ -21,7 +21,7 @@ interface Props {
 
 const center: [number, number] = [20, 0]
 
-const FLIGHT_DISPLAY_PERCENTAGE = 0.10
+const FLIGHT_DISPLAY_PERCENTAGE = 0.15
 
 function shouldDisplayFlight(flightId: string, percentage: number): boolean {
   let hash = 0

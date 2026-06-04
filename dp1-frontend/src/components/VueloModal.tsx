@@ -43,10 +43,6 @@ export default function VueloModal({ vuelo, isOpen, onClose }: Props) {
             <span className="font-medium">{vuelo.capacidad}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-400">Carga actual</span>
-            <span className="font-medium">{vuelo.cargaActual}</span>
-          </div>
-          <div className="flex justify-between">
             <span className="text-gray-400">Salida UTC</span>
             <span className="font-medium">{formatDateTime(vuelo.salidaUtc)}</span>
           </div>
