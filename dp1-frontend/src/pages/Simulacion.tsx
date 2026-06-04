@@ -8,7 +8,9 @@ import AeropuertoModal from '../components/AeropuertoModal'
 import ResultadosModal from '../components/ResultadosModal'
 import { formatDateTime } from '../utils/dateFormat'
 import { AIRPORTS_DATA } from '../data/airportsData'
-import type { VueloDTO, AeropuertoDTO } from '../types'
+import type { VueloDTO, AeropuertoDTO, SimulationState } from '../types'
+
+const SIM_CONFIG_KEY = 'uniteair_simConfig'
 
 const aeropuertosFallback: AeropuertoDTO[] = Object.values(AIRPORTS_DATA).map((a) => ({
   codigoOACI: a.codigoOACI,
@@ -22,7 +24,15 @@ const aeropuertosFallback: AeropuertoDTO[] = Object.values(AIRPORTS_DATA).map((a
 }))
 
 export default function Simulacion() {
-  const { simulationState, startPolling, stopPolling } = useSimulation()
+  const {
+    simulationState,
+    startPolling,
+    stopPolling,
+    elapsedRealSeconds,
+    isPaused,
+    setIsPaused,
+    resetElapsedTimer,
+  } = useSimulation()
   const [sessionId, setSessionId] = useState<string>('')
   const [aeropuertosEstaticos, setAeropuertosEstaticos] = useState<AeropuertoDTO[]>(aeropuertosFallback)
 
@@ -42,26 +52,34 @@ export default function Simulacion() {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
   }, [])
 
-  const [isPaused, setIsPaused] = useState(false)
   const [showResultados, setShowResultados] = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
+  const hasShownResults = useRef(false)
+  const [resultSnapshot, setResultSnapshot] = useState<SimulationState | null>(null)
 
-  // Real elapsed timer (pauses when simulation is paused)
-  const [elapsedRealSeconds, setElapsedRealSeconds] = useState(0)
-  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const timerRunningRef = useRef(false)
-
-  const isCompleted = simulationState?.status === 'COMPLETADA'
+  const isCompleted = simulationState?.status === 'COMPLETADA' || (simulationState && simulationState.progreso >= 100)
   const isColapsada = simulationState?.status === 'COLAPSADA'
   const isError = simulationState?.status === 'ERROR'
 
-  // Cargar aeropuertos estáticos al montar
+  // Restore config from sessionStorage on mount
   useEffect(() => {
     cargaArchivosService.obtenerAeropuertos()
       .then((data) => {
         setAeropuertosEstaticos(data)
       })
       .catch(() => {})
+
+    const saved = sessionStorage.getItem(SIM_CONFIG_KEY)
+    if (saved) {
+      try {
+        const cfg = JSON.parse(saved)
+        if (cfg.duracion) setDuracion(cfg.duracion)
+        if (cfg.fechaInicio) setFechaInicio(cfg.fechaInicio)
+        if (cfg.horaInicio) setHoraInicio(cfg.horaInicio)
+      } catch {
+        // ignore parse errors
+      }
+    }
   }, [])
 
   // Detectar simulación activa al montar (permite ver simulación en otras pestañas)
@@ -98,41 +116,26 @@ export default function Simulacion() {
 
   // Show results modal when simulation completes
   useEffect(() => {
-    if (simulationState?.status === 'COMPLETADA') {
+    const shouldShow = simulationState && (simulationState.status === 'COMPLETADA' || simulationState.progreso >= 100)
+    if (shouldShow && !hasShownResults.current) {
+      hasShownResults.current = true
+      setResultSnapshot({ ...simulationState })
       setShowResultados(true)
     }
-  }, [simulationState?.status])
-
-  // Real-time timer: runs only while simulation is active and not paused
-  useEffect(() => {
-    const isRunning = !!sessionId && !isCompleted && !isError && !isColapsada
-    const shouldRun = isRunning && !isPaused
-
-    if (shouldRun && !timerRunningRef.current) {
-      timerRunningRef.current = true
-      timerIntervalRef.current = setInterval(() => {
-        setElapsedRealSeconds((prev) => prev + 1)
-      }, 1000)
-    } else if (!shouldRun && timerRunningRef.current) {
-      timerRunningRef.current = false
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current)
-        timerIntervalRef.current = null
-      }
-    }
-
-    return () => {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current)
-        timerIntervalRef.current = null
-      }
-    }
-  }, [sessionId, isCompleted, isError, isColapsada, isPaused])
+  }, [simulationState])
 
   function formatElapsed(seconds: number): string {
     const m = Math.floor(seconds / 60)
     const s = seconds % 60
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  }
+
+  const saveConfigToStorage = (cfg: { duracion: number; fechaInicio: string; horaInicio: string }) => {
+    sessionStorage.setItem(SIM_CONFIG_KEY, JSON.stringify(cfg))
+  }
+
+  const clearConfigStorage = () => {
+    sessionStorage.removeItem(SIM_CONFIG_KEY)
   }
 
   const handleIniciar = async () => {
@@ -142,7 +145,6 @@ export default function Simulacion() {
     }
     setError(null)
     setLoading(true)
-    setElapsedRealSeconds(0)
     try {
       const state = await simulationService.iniciar({
         duracionDias: duracion,
@@ -156,6 +158,8 @@ export default function Simulacion() {
         setLoading(false)
         return
       }
+      saveConfigToStorage({ duracion, fechaInicio, horaInicio })
+      hasShownResults.current = false
       setSessionId(state.sessionId)
       startPolling(state.sessionId, 3000)
     } catch (err: any) {
@@ -194,14 +198,18 @@ export default function Simulacion() {
     stopPolling()
     setSessionId('')
     setIsPaused(false)
-    setElapsedRealSeconds(0)
+    resetElapsedTimer()
+    clearConfigStorage()
+    hasShownResults.current = false
   }
 
   const handleNuevaSimulacion = () => {
     stopPolling()
     setSessionId('')
     setIsPaused(false)
-    setElapsedRealSeconds(0)
+    resetElapsedTimer()
+    clearConfigStorage()
+    hasShownResults.current = false
   }
 
   const showActionButton = sessionId && !isColapsada && !isError
@@ -370,10 +378,6 @@ export default function Simulacion() {
               <span className="font-mono text-gray-200">{fechaInicio && horaInicio ? `${fechaInicio.split('-').reverse().join('/')} ${horaInicio}` : '--'}</span>
             </div>
             <div className="flex justify-between">
-              <span>Transcurrido:</span>
-              <span className="font-mono text-gray-200">{simulationState?.simulationTime ? `${simulationState.progreso}%` : '--'}</span>
-            </div>
-            <div className="flex justify-between">
               <span>Tiempo real transcurrido:</span>
               <span className="font-mono text-gray-200">{formatElapsed(elapsedRealSeconds)}</span>
             </div>
@@ -403,7 +407,7 @@ export default function Simulacion() {
       <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} />
       <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} />
       <ResultadosModal
-        state={simulationState}
+        state={resultSnapshot}
         isOpen={showResultados}
         onClose={() => setShowResultados(false)}
         onNuevaSimulacion={() => {

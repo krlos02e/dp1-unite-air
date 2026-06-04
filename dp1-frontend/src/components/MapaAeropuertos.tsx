@@ -21,7 +21,7 @@ interface Props {
 
 const center: [number, number] = [20, 0]
 
-const FLIGHT_DISPLAY_PERCENTAGE = 0.10
+const FLIGHT_DISPLAY_PERCENTAGE = 0.15
 
 function shouldDisplayFlight(flightId: string, percentage: number): boolean {
   let hash = 0
