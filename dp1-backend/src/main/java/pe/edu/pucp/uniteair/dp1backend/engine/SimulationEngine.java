@@ -5,7 +5,6 @@ import org.springframework.stereotype.Service;
 import pe.edu.pucp.uniteair.dp1backend.cache.SimulationCache;
 import pe.edu.pucp.uniteair.dp1backend.config.AeropuertoCoordenadas;
 import pe.edu.pucp.uniteair.dp1backend.dto.*;
-import pe.edu.pucp.uniteair.dp1backend.entity.SimulationSession;
 import pe.edu.pucp.uniteair.dp1backend.repository.SimulationSessionRepository;
 import tasf.config.Config_Simulacion;
 import tasf.core.Dataset;
@@ -582,46 +581,6 @@ public class SimulationEngine {
                 .build();
 
         simulationCache.put(sessionId, state);
-    }
-
-    private void actualizarEstadoPlanificando(String sessionId, String mensaje) {
-        SimulationState current = simulationCache.get(sessionId);
-        if (current == null) return;
-        List<LogEntry> logs = new ArrayList<>(current.getLogs() != null ? current.getLogs() : new ArrayList<>());
-        logs.add(LogEntry.builder()
-                .timestamp(LocalDateTime.now())
-                .tipo("INFO")
-                .mensaje(mensaje)
-                .build());
-        SimulationState updated = SimulationState.builder()
-                .sessionId(sessionId)
-                .status("PLANIFICANDO")
-                .simulationTime(current.getSimulationTime())
-                .vuelos(current.getVuelos())
-                .aeropuertos(current.getAeropuertos())
-                .maletasEntregadas(0)
-                .maletasEnTransito(0)
-                .progreso(0)
-                .colapsada(false)
-                .logs(logs)
-                .build();
-        simulationCache.put(sessionId, updated);
-    }
-
-    private void actualizarEstadoEjecutando(String sessionId, LocalDateTime fechaInicio, List<LogEntry> logs) {
-        SimulationState updated = SimulationState.builder()
-                .sessionId(sessionId)
-                .status("EJECUTANDO")
-                .simulationTime(fechaInicio)
-                .vuelos(new ArrayList<>())
-                .aeropuertos(new ArrayList<>())
-                .maletasEntregadas(0)
-                .maletasEnTransito(0)
-                .progreso(0)
-                .colapsada(false)
-                .logs(logs)
-                .build();
-        simulationCache.put(sessionId, updated);
     }
 
     private void actualizarEstadoColapsado(String sessionId, LocalDateTime simTime, String motivo, List<LogEntry> logs) {

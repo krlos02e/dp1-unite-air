@@ -2,7 +2,7 @@ package pe.edu.pucp.uniteair.dp1backend.service;
 
 import org.springframework.stereotype.Service;
 import pe.edu.pucp.uniteair.dp1backend.cache.SimulationCache;
-import pe.edu.pucp.uniteair.dp1backend.dto.AeropuertoDTO;
+
 import pe.edu.pucp.uniteair.dp1backend.dto.DashboardData;
 import pe.edu.pucp.uniteair.dp1backend.dto.VueloDTO;
 

@@ -11,14 +11,12 @@ import tasf.core.Solucion;
 import tasf.model.Aeropuerto;
 import tasf.model.Paquete;
 import tasf.model.Ruta;
-import tasf.model.Vuelo;
 import tasf.strategy.TwoPhaseOrchestrator;
 import tasf.strategy.alns.ALNS_RutasPlanner;
 
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @SpringBootTest
 class PlanificacionDiagnosticoTest {
