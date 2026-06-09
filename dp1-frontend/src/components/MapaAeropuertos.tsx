@@ -366,7 +366,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       const tooltipText = tooltipForFlight(v)
 
       const existingAnim = flightAnimsRef.current.get(v.id)
-      const prevProgress = existingAnim ? existingAnim.targetProgress : 0
+      const prevProgress = existingAnim ? existingAnim.targetProgress : v.progresoVuelo
 
       flightAnimsRef.current.set(v.id, {
         from,

@@ -5,9 +5,12 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import pe.edu.pucp.uniteair.dp1backend.config.AeropuertoCoordenadas;
 import pe.edu.pucp.uniteair.dp1backend.dto.AeropuertoDTO;
+import pe.edu.pucp.uniteair.dp1backend.dto.VueloDTO;
 import pe.edu.pucp.uniteair.dp1backend.service.CargaArchivosService;
 import tasf.core.Dataset;
+import tasf.model.Vuelo;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -61,5 +64,33 @@ public class CargaArchivosController {
                 })
                 .collect(Collectors.toList());
         return ResponseEntity.ok(aeropuertos);
+    }
+
+    @GetMapping("/vuelos")
+    public ResponseEntity<List<VueloDTO>> obtenerVuelos() {
+        Dataset dataset = cargaArchivosService.obtenerUltimoDataset();
+        if (dataset == null) {
+            return ResponseEntity.ok(List.of());
+        }
+        List<VueloDTO> vuelos = new ArrayList<>();
+        for (Vuelo v : dataset.getVuelos()) {
+            double[] orig = AeropuertoCoordenadas.get(v.getOrigen().getCodigoOACI());
+            double[] dest = AeropuertoCoordenadas.get(v.getDestino().getCodigoOACI());
+            vuelos.add(VueloDTO.builder()
+                    .id(v.getId())
+                    .origen(v.getOrigen().getCodigoOACI())
+                    .destino(v.getDestino().getCodigoOACI())
+                    .latOrigen(orig[0])
+                    .lonOrigen(orig[1])
+                    .latDestino(dest[0])
+                    .lonDestino(dest[1])
+                    .salidaUtc(v.getSalidaUtc())
+                    .llegadaUtc(v.getLlegadaUtc())
+                    .capacidad(v.getCapacidadCarga())
+                    .cargaActual(0)
+                    .progresoVuelo(0)
+                    .build());
+        }
+        return ResponseEntity.ok(vuelos);
     }
 }
