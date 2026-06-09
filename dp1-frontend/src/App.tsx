@@ -36,19 +36,24 @@ function AppContent({ checking }: { checking: boolean }) {
   const isSimBlocking = isRunning && !isFinished
 
   const handleNav = (p: Page) => () => {
-    if (isSimBlocking && p !== 'simulacion') {
+    if (isSimBlocking && p !== 'simulacion' && p !== 'operacion-diaria') {
       setShowBlockModal(true)
     } else {
       setPage(p)
     }
   }
 
-  const navButtonClass = (p: Page) =>
-    `text-sm sm:text-base shrink-0 transition-colors ${
-      isSimBlocking && p !== 'simulacion'
+  const navButtonClass = (p: Page) => {
+    const isActive = page === p
+    const isBlocked = isSimBlocking && p !== 'simulacion' && p !== 'operacion-diaria'
+    return `text-sm sm:text-base shrink-0 transition-colors ${
+      isBlocked
         ? 'text-gray-600 cursor-not-allowed'
-        : 'hover:text-sky-300 cursor-pointer'
+        : isActive
+          ? 'text-sky-400 font-bold cursor-pointer'
+          : 'hover:text-sky-300 cursor-pointer'
     }`
+  }
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
