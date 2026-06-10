@@ -143,6 +143,8 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
   const onVueloClickRef = useRef(onVueloClick)
   const onAeropuertoClickRef = useRef(onAeropuertoClick)
   const selectedVueloIdRef = useRef(selectedVueloId)
+  const prevSelectedVueloIdRef = useRef<string | null>(null)
+  const prevViewRef = useRef<{ center: L.LatLng; zoom: number } | null>(null)
 
   onVueloClickRef.current = onVueloClick
   onAeropuertoClickRef.current = onAeropuertoClick
@@ -225,6 +227,15 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       })
     }
 
+    const resizeObserver = new ResizeObserver(() => {
+      if (mapRef.current) {
+        mapRef.current.invalidateSize()
+      }
+    })
+    if (mapContainerRef.current) {
+      resizeObserver.observe(mapContainerRef.current)
+    }
+
     return () => {
       if (rafIdRef.current) {
         cancelAnimationFrame(rafIdRef.current)
@@ -238,6 +249,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
         persistentFlightsRef.current.clear()
         flightAnimsRef.current.clear()
       }
+      resizeObserver.disconnect()
     }
   }, [])
 
@@ -297,21 +309,19 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       selectedDestRef.current = null
     }
 
-    flightMarkersRef.current.forEach((mk, id) => {
-      const isSelected = id === selectedVueloId
-      mk.setIcon(getAirplaneIcon(isSelected, zoomScaleRef.current))
-      const angle = flightAngleRef.current.get(id)
-      if (angle !== undefined) {
-        requestAnimationFrame(() => applyTransform(mk, angle, zoomScaleRef.current))
-      }
-    })
-
     if (selectedVueloId) {
       const selectedVuelo = persistentFlightsRef.current.get(selectedVueloId) ?? vuelos.find((v) => v.id === selectedVueloId)
       if (selectedVuelo && mapRef.current) {
+        if (prevSelectedVueloIdRef.current === null) {
+          prevViewRef.current = { center: mapRef.current.getCenter(), zoom: mapRef.current.getZoom() }
+          const from: [number, number] = [selectedVuelo.latOrigen, selectedVuelo.lonOrigen]
+          const to: [number, number] = [selectedVuelo.latDestino, selectedVuelo.lonDestino]
+          const pos = interpolatePosition(from, to, selectedVuelo.progresoVuelo / 100)
+          mapRef.current.setView(pos, Math.min(mapRef.current.getZoom() + 1, 5), { animate: false })
+        }
+
         const from: [number, number] = [selectedVuelo.latOrigen, selectedVuelo.lonOrigen]
         const to: [number, number] = [selectedVuelo.latDestino, selectedVuelo.lonDestino]
-
         const pts = bezierPoints(from, to, 40)
 
         selectedRouteRef.current = L.polyline(pts, {
@@ -337,7 +347,23 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
           weight: 2,
         }).addTo(mapRef.current)
       }
+    } else {
+      if (prevSelectedVueloIdRef.current !== null && prevViewRef.current && mapRef.current) {
+        mapRef.current.setView(prevViewRef.current.center, prevViewRef.current.zoom, { animate: false })
+        prevViewRef.current = null
+      }
     }
+
+    prevSelectedVueloIdRef.current = selectedVueloId ?? null
+
+    flightMarkersRef.current.forEach((mk, id) => {
+      const isSelected = id === selectedVueloId
+      mk.setIcon(getAirplaneIcon(isSelected, zoomScaleRef.current))
+      const angle = flightAngleRef.current.get(id)
+      if (angle !== undefined) {
+        requestAnimationFrame(() => applyTransform(mk, angle, zoomScaleRef.current))
+      }
+    })
   }, [selectedVueloId, vuelos])
 
   useEffect(() => {

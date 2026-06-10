@@ -23,7 +23,7 @@ function App() {
 }
 
 function AppContent({ checking }: { checking: boolean }) {
-  const [page, setPage] = useState<Page>('simulacion')
+  const [page, setPage] = useState<Page>('operacion-diaria')
   const [showBlockModal, setShowBlockModal] = useState(false)
   const { simulationState, isRunning } = useSimulation()
 
