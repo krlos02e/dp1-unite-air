@@ -186,7 +186,7 @@ export default function Simulacion() {
       hasShownResults.current = false
       setResultSnapshot(null)
       setSessionId(state.sessionId)
-      startPolling(state.sessionId, 3000)
+      startPolling(state.sessionId, 15000)
     } catch (err: any) {
       const msg = err?.response?.data?.logs?.[0]?.mensaje
         || err?.response?.data?.message
@@ -284,7 +284,7 @@ export default function Simulacion() {
               <span className="text-[10px] text-sky-300/80 leading-tight">Día</span>
               <span className="font-mono text-xs text-sky-200 leading-tight">{Math.ceil((simulationState.progreso / 100) * DURACION_FIJA)}</span>
             </div>
-            <div className="flex flex-col w-[280px]">
+            <div className="flex flex-col w-[350px]">
               <div className="w-full bg-gray-800 rounded-full h-2.5">
                 <div
                   className="bg-emerald-500 h-2.5 rounded-full transition-all"

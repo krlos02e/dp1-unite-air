@@ -174,7 +174,7 @@ public class SimulationEngine {
                         actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
                                 vizEntregadas, vizEnTransito, hora, duracionHoras, false, null, vizLogs, "PLANIFICANDO", fechaInicio);
 
-                        long sleepMs = (long) (3000.0 / Math.max(0.5, velocidad));
+                        long sleepMs = (long) (15000.0 / Math.max(0.5, velocidad));
                         if (sleepMs > 0) {
                             try {
                                 Thread.sleep(sleepMs);
@@ -333,7 +333,7 @@ public class SimulationEngine {
                     actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
                             maletasEntregadas, maletasEnTransito, hora, duracionHoras, false, null, logs, "EJECUTANDO", fechaInicio);
 
-                    long sleepMs = (long) (4000.0 / Math.max(0.5, velocidad));
+                    long sleepMs = (long) (15000.0 / Math.max(0.5, velocidad));
                     if (sleepMs > 0) {
                         Thread.sleep(sleepMs);
                     }

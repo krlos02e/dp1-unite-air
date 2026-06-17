@@ -383,7 +383,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
     if (!markerLayerRef.current) return
 
     const now = performance.now()
-    const pollInterval = 3000 / velocidadRef.current
+    const pollInterval = 15000 / velocidadRef.current
     const animDuration = pollInterval * 1.1
 
     const displayFlights = Array.from(persistentFlightsRef.current.values()).filter((v) => v.progresoVuelo > 0 && v.progresoVuelo < 100)
