@@ -28,17 +28,10 @@ export default function ResultadosModal({ state, isOpen, onClose, onNuevaSimulac
         </div>
 
         <div className="space-y-3 text-sm">
+          <p className="text-gray-300 text-center">La simulación ha terminado exitosamente.</p>
           <div className="flex justify-between border-b border-gray-800 pb-2">
             <span className="text-gray-400">Progreso total</span>
             <span className="font-bold text-emerald-400">{state.progreso}%</span>
-          </div>
-          <div className="flex justify-between border-b border-gray-800 pb-2">
-            <span className="text-gray-400">Maletas entregadas</span>
-            <span className="font-bold text-sky-400">{state.maletasEntregadas}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-400">Maletas en tránsito</span>
-            <span className="font-bold text-amber-400">{state.maletasEnTransito}</span>
           </div>
         </div>
 

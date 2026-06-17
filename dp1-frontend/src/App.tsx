@@ -36,7 +36,7 @@ function AppContent({ checking }: { checking: boolean }) {
   const isSimBlocking = isRunning && !isFinished
 
   const handleNav = (p: Page) => () => {
-    if (isSimBlocking && p !== 'simulacion' && p !== 'operacion-diaria') {
+    if (isSimBlocking && p !== 'simulacion') {
       setShowBlockModal(true)
     } else {
       setPage(p)
@@ -45,7 +45,7 @@ function AppContent({ checking }: { checking: boolean }) {
 
   const navButtonClass = (p: Page) => {
     const isActive = page === p
-    const isBlocked = isSimBlocking && p !== 'simulacion' && p !== 'operacion-diaria'
+    const isBlocked = isSimBlocking && p !== 'simulacion'
     return `text-sm sm:text-base shrink-0 transition-colors ${
       isBlocked
         ? 'text-gray-600 cursor-not-allowed'
@@ -91,7 +91,7 @@ function AppContent({ checking }: { checking: boolean }) {
               <div className="bg-gray-900 border border-amber-700 rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl">
                 <h3 className="text-lg font-bold text-amber-400 mb-2">Simulación en curso</h3>
                 <p className="text-gray-300 text-sm mb-6">
-                  No puedes cambiar de pestaña mientras la simulación está en ejecución. Detén o pausa la simulación para navegar.
+                  No puedes cambiar de pestaña mientras la simulación está en ejecución. Detén la simulación para navegar.
                 </p>
                 <button
                   onClick={() => setShowBlockModal(false)}

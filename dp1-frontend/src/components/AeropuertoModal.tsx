@@ -31,7 +31,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose }: Props) 
 
           <div>
             <div className="flex justify-between mb-1">
-              <span className="text-gray-400">Capacidad actual</span>
+              <span className="text-gray-400">Maletas en almacén</span>
               <span className={`font-medium ${ocupacionTextColor}`}>
                 {aeropuerto.ocupacionActual} / {aeropuerto.capacidadMaxima} ({ocupacionPorcentaje}%)
               </span>

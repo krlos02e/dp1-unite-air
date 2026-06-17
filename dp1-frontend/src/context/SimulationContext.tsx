@@ -15,6 +15,7 @@ interface SimulationContextType {
   resetElapsedTimer: () => void
   startPolling: (sessionId: string, interval?: number) => void
   stopPolling: () => void
+  resetSimulation: () => void
 }
 
 const SimulationContext = createContext<SimulationContextType | null>(null)
@@ -24,6 +25,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   const [isRunning, setIsRunning] = useState(false)
   const [pollingInterval, setPollingInterval] = useState(3000)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollingActiveRef = useRef(false)
 
   const [elapsedRealSeconds, setElapsedRealSeconds] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
@@ -39,8 +41,16 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       clearInterval(intervalRef.current)
       intervalRef.current = null
     }
+    pollingActiveRef.current = false
     setIsRunning(false)
   }, [])
+
+  const resetSimulation = useCallback(() => {
+    stopPolling()
+    setSimulationState(null)
+    setIsPaused(false)
+    setElapsedRealSeconds(0)
+  }, [stopPolling])
 
   const startPolling = useCallback((sessionId: string, interval?: number) => {
     stopPolling()
@@ -48,12 +58,15 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     setIsRunning(true)
     setIsPaused(false)
     setElapsedRealSeconds(0)
+    pollingActiveRef.current = true
 
     const effectiveInterval = interval ?? pollingInterval
 
     const poll = async () => {
+      if (!pollingActiveRef.current) return
       try {
         const state = await simulationService.poll(sessionId)
+        if (!pollingActiveRef.current) return
         setSimulationState(state)
         if (state.colapsada || state.status === 'COMPLETADA') {
           stopPolling()
@@ -109,6 +122,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       resetElapsedTimer,
       startPolling,
       stopPolling,
+      resetSimulation,
     }}>
       {children}
     </SimulationContext.Provider>

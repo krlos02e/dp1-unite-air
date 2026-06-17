@@ -162,9 +162,9 @@ export default function OperacionDiaria() {
   const { fecha } = getPeruDateParts()
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-2">
       {/* Barra superior: Hora actual, fecha, selector de vuelos */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3">
+      <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-2 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
           <span className="text-base text-gray-400 font-medium">Hora actual (Perú, UTC-5):</span>
           <span className="text-xl font-mono font-bold text-emerald-400">{horaPeru}</span>
@@ -202,7 +202,7 @@ export default function OperacionDiaria() {
       </div>
 
       {/* Mapa */}
-      <div className="relative h-[50vh] bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+      <div className="relative h-[calc(100vh-10rem)] bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
         {loading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60">
             <div className="text-center">
@@ -219,12 +219,9 @@ export default function OperacionDiaria() {
           onAeropuertoClick={handleAeropuertoClick}
           onVueloClick={handleVueloClick}
         />
-      </div>
 
-      {/* Panel de detalle del vuelo seleccionado */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {selectedVuelo && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+          <div className="absolute bottom-4 right-4 z-[1001] bg-gray-900/95 border border-gray-700 rounded-xl p-3 w-80 shadow-2xl backdrop-blur-sm">
             <h3 className="text-sm font-bold text-gray-100 mb-2">Detalle del Vuelo</h3>
             <div className="space-y-2 text-sm text-gray-400">
               <div className="flex justify-between">
@@ -242,6 +239,14 @@ export default function OperacionDiaria() {
               <div className="flex justify-between">
                 <span>Progreso:</span>
                 <span className="font-mono text-emerald-300">{Math.round(selectedVuelo.progresoVuelo)}%</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Capacidad:</span>
+                <span className="font-mono text-gray-200">{selectedVuelo.capacidad}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Maletas a bordo:</span>
+                <span className="font-mono text-amber-300">{selectedVuelo.cargaActual}</span>
               </div>
             </div>
             <div className="mt-3 flex justify-end">

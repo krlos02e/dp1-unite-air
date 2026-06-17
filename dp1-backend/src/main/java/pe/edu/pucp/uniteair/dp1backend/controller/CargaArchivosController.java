@@ -10,6 +10,7 @@ import pe.edu.pucp.uniteair.dp1backend.service.CargaArchivosService;
 import tasf.core.Dataset;
 import tasf.model.Vuelo;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -49,15 +50,17 @@ public class CargaArchivosController {
         if (dataset == null) {
             return ResponseEntity.ok(List.of());
         }
+        LocalDateTime ahora = LocalDateTime.now();
         List<AeropuertoDTO> aeropuertos = dataset.getAeropuertos().values().stream()
                 .map(a -> {
                     double[] coord = AeropuertoCoordenadas.get(a.getCodigoOACI());
+                    int ocup = cargaArchivosService.getOcupacionAeropuerto(a.getCodigoOACI(), ahora);
                     return AeropuertoDTO.builder()
                             .codigoOACI(a.getCodigoOACI())
                             .latitud(coord[0])
                             .longitud(coord[1])
                             .capacidadMaxima(a.getCapacidadMaxima())
-                            .ocupacionActual(0)
+                            .ocupacionActual(ocup)
                             .vuelosEntrantes(List.of())
                             .vuelosSalientes(List.of())
                             .build();
@@ -76,6 +79,7 @@ public class CargaArchivosController {
         for (Vuelo v : dataset.getVuelos()) {
             double[] orig = AeropuertoCoordenadas.get(v.getOrigen().getCodigoOACI());
             double[] dest = AeropuertoCoordenadas.get(v.getDestino().getCodigoOACI());
+            int carga = cargaArchivosService.getCargaVuelo(v.getId());
             vuelos.add(VueloDTO.builder()
                     .id(v.getId())
                     .origen(v.getOrigen().getCodigoOACI())
@@ -87,7 +91,7 @@ public class CargaArchivosController {
                     .salidaUtc(v.getSalidaUtc())
                     .llegadaUtc(v.getLlegadaUtc())
                     .capacidad(v.getCapacidadCarga())
-                    .cargaActual(0)
+                    .cargaActual(carga)
                     .progresoVuelo(0)
                     .build());
         }
