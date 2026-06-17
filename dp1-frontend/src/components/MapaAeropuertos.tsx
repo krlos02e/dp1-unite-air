@@ -7,7 +7,7 @@ import { getAirportCity, AIRPORTS_DATA } from '../data/airportsData'
 function tooltipForFlight(v: VueloDTO): string {
   const origen = getAirportCity(v.origen) || v.origen
   const destino = getAirportCity(v.destino) || v.destino
-  return `Vuelo ${origen} → ${destino} (${Math.round(v.progresoVuelo)}%)`
+  return `Vuelo ${origen} → ${destino} (${Math.round(v.progresoVuelo)}%) — Maletas: ${v.cargaActual}/${v.capacidad}`
 }
 
 interface Props {
@@ -70,14 +70,19 @@ function airportIcon(color: string, label: string): L.DivIcon {
   return L.divIcon({
     className: '',
     html: `<div style="display:flex;flex-direction:column;align-items:center;pointer-events:auto;">
-      <svg width="24" height="32" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 0C5.373 0 0 5.373 0 12c0 9 12 20 12 20s12-11 12-20c0-6.627-5.373-12-12-12z" fill="${color}" stroke="white" stroke-width="1.5"/>
-        <circle cx="12" cy="12" r="4" fill="white"/>
-      </svg>
+      <div style="width:34px;height:34px;border-radius:50%;background-color:${color};border:2px solid white;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.5);">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <g stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+            <path d="M3.59 7h8.82a1 1 0 0 1 .902 1.433l-1.44 3a1 1 0 0 1-.901.567H5.029a1 1 0 0 1-.901-.567l-1.44-3A1 1 0 0 1 3.589 7"/>
+            <path d="m6 7l-.78-2.342A.5.5 0 0 1 5.693 4h4.612a.5.5 0 0 1 .475.658L10 7M8 2v2m-2 8v9h4v-9m-7 9h18m1-16h-6l-1-1"/>
+            <path d="m18 3l2 2l-2 2m-8 10h7a2 2 0 0 1 2 2v2"/>
+          </g>
+        </svg>
+      </div>
       <span style="font-size:10px;font-weight:bold;color:white;text-shadow:0 1px 3px rgba(0,0,0,0.8);white-space:nowrap;margin-top:2px;">${label}</span>
     </div>`,
-    iconSize: [24, 52],
-    iconAnchor: [12, 48],
+    iconSize: [34, 54],
+    iconAnchor: [17, 50],
   })
 }
 
@@ -152,54 +157,62 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
   selectedVueloIdRef.current = selectedVueloId
 
   useEffect(() => {
-    if (vuelos.length > 0) {
-      const persistedIds = new Set(persistentFlightsRef.current.keys())
-      const incomingIds = new Set(vuelos.map((v) => v.id))
-
-      if (persistedIds.size > 0 && ![...incomingIds].some((id) => persistedIds.has(id))) {
-        persistentFlightsRef.current.clear()
-        flightMarkersRef.current.forEach((mk) => markerLayerRef.current?.removeLayer(mk))
-        flightMarkersRef.current.clear()
-        flightAngleRef.current.clear()
-        flightAnimsRef.current.clear()
-      }
-
-      persistedIds.forEach((id) => {
-        if (!incomingIds.has(id)) {
-          persistentFlightsRef.current.delete(id)
-          const mk = flightMarkersRef.current.get(id)
-          if (mk) {
-            markerLayerRef.current?.removeLayer(mk)
-            flightMarkersRef.current.delete(id)
-            flightAngleRef.current.delete(id)
-          }
-          flightAnimsRef.current.delete(id)
-        }
-      })
-
-      vuelos.forEach((v) => {
-        if (!shouldDisplayFlight(v.id, FLIGHT_DISPLAY_PERCENTAGE)) return
-        if (v.progresoVuelo >= 100) {
-          persistentFlightsRef.current.delete(v.id)
-          const mk = flightMarkersRef.current.get(v.id)
-          if (mk) {
-            markerLayerRef.current?.removeLayer(mk)
-            flightMarkersRef.current.delete(v.id)
-            flightAngleRef.current.delete(v.id)
-          }
-          flightAnimsRef.current.delete(v.id)
-        } else {
-          persistentFlightsRef.current.set(v.id, v)
-        }
-      })
+    if (vuelos.length === 0) {
+      // Limpiar todos los aviones cuando no hay vuelos
+      persistentFlightsRef.current.clear()
+      flightMarkersRef.current.forEach((mk) => markerLayerRef.current?.removeLayer(mk))
+      flightMarkersRef.current.clear()
+      flightAngleRef.current.clear()
+      flightAnimsRef.current.clear()
+      return
     }
+
+    const persistedIds = new Set(persistentFlightsRef.current.keys())
+    const incomingIds = new Set(vuelos.map((v) => v.id))
+
+    if (persistedIds.size > 0 && ![...incomingIds].some((id) => persistedIds.has(id))) {
+      persistentFlightsRef.current.clear()
+      flightMarkersRef.current.forEach((mk) => markerLayerRef.current?.removeLayer(mk))
+      flightMarkersRef.current.clear()
+      flightAngleRef.current.clear()
+      flightAnimsRef.current.clear()
+    }
+
+    persistedIds.forEach((id) => {
+      if (!incomingIds.has(id)) {
+        persistentFlightsRef.current.delete(id)
+        const mk = flightMarkersRef.current.get(id)
+        if (mk) {
+          markerLayerRef.current?.removeLayer(mk)
+          flightMarkersRef.current.delete(id)
+          flightAngleRef.current.delete(id)
+        }
+        flightAnimsRef.current.delete(id)
+      }
+    })
+
+    vuelos.forEach((v) => {
+      if (!shouldDisplayFlight(v.id, FLIGHT_DISPLAY_PERCENTAGE)) return
+      if (v.progresoVuelo >= 100) {
+        persistentFlightsRef.current.delete(v.id)
+        const mk = flightMarkersRef.current.get(v.id)
+        if (mk) {
+          markerLayerRef.current?.removeLayer(mk)
+          flightMarkersRef.current.delete(v.id)
+          flightAngleRef.current.delete(v.id)
+        }
+        flightAnimsRef.current.delete(v.id)
+      } else {
+        persistentFlightsRef.current.set(v.id, v)
+      }
+    })
   }, [vuelos])
 
   useEffect(() => {
     if (mapContainerRef.current && !mapRef.current) {
       const map = L.map(mapContainerRef.current, {
         center,
-        zoom: 2,
+        zoom: 2.5,
         zoomControl: true,
         preferCanvas: true,
         zoomSnap: 0.25,
@@ -370,7 +383,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
     if (!markerLayerRef.current) return
 
     const now = performance.now()
-    const pollInterval = 3000 / velocidadRef.current
+    const pollInterval = 15000 / velocidadRef.current
     const animDuration = pollInterval * 1.1
 
     const displayFlights = Array.from(persistentFlightsRef.current.values()).filter((v) => v.progresoVuelo > 0 && v.progresoVuelo < 100)

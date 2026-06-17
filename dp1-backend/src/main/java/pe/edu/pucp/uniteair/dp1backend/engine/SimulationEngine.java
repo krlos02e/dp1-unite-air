@@ -145,16 +145,20 @@ public class SimulationEngine {
                         Solucion sol = solucionRef[0];
                         if (sol != null) {
                             Map<String, Ruta> rutasViz = sol.getRutasAsignadas();
-                            vizEnTransito = rutasViz.size();
                             for (Map.Entry<String, Ruta> entry : rutasViz.entrySet()) {
+                                Paquete paquete = dataset.getPaquetePorId(entry.getKey());
+                                int cantidad = paquete != null ? paquete.getCantidad() : 1;
                                 Ruta ruta = entry.getValue();
                                 if (!ruta.getVuelos().isEmpty()) {
                                     Vuelo ultimo = ruta.getVuelos().get(ruta.getVuelos().size() - 1);
                                     if (simTime.isAfter(ultimo.getLlegadaUtc())) {
-                                        vizEntregadas++;
-                                        vizEnTransito--;
+                                        vizEntregadas += cantidad;
                                         rutasEntregadasViz.add(entry.getKey());
+                                    } else {
+                                        vizEnTransito += cantidad;
                                     }
+                                } else {
+                                    vizEnTransito += cantidad;
                                 }
                             }
                         }
@@ -170,7 +174,7 @@ public class SimulationEngine {
                         actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
                                 vizEntregadas, vizEnTransito, hora, duracionHoras, false, null, vizLogs, "PLANIFICANDO", fechaInicio);
 
-                        long sleepMs = (long) (3000.0 / Math.max(0.5, velocidad));
+                        long sleepMs = (long) (15000.0 / Math.max(0.5, velocidad));
                         if (sleepMs > 0) {
                             try {
                                 Thread.sleep(sleepMs);
@@ -207,47 +211,29 @@ public class SimulationEngine {
                 Map<String, Ruta> rutas = solucion.getRutasAsignadas();
                 Set<String> noAsignados = solucion.getPaquetesNoAsignados();
                 boolean hayColapso = !noAsignados.isEmpty();
-                maletasEnTransito = rutas.size();
-
-                // Calcular carga real por vuelo según rutas asignadas
+                maletasEnTransito = 0;
                 for (Map.Entry<String, Ruta> entry : rutas.entrySet()) {
                     Paquete paquete = dataset.getPaquetePorId(entry.getKey());
                     int cantidad = paquete != null ? paquete.getCantidad() : 1;
-                    for (Vuelo v : entry.getValue().getVuelos()) {
-                        cargaVuelo.merge(v.getId(), cantidad, Integer::sum);
-                    }
+                    maletasEnTransito += cantidad;
                 }
 
-                // Calcular ocupación real de aeropuertos basada en las rutas asignadas
-                Map<String, Map<LocalDateTime, Integer>> ocupacionReal = new HashMap<>();
-                for (Map.Entry<String, Ruta> entry : rutas.entrySet()) {
-                    Paquete paquete = dataset.getPaquetePorId(entry.getKey());
-                    int cantidad = paquete != null ? paquete.getCantidad() : 1;
-                    Ruta ruta = entry.getValue();
-                    List<Vuelo> vuelosRuta = ruta.getVuelos();
-                    
-                    if (vuelosRuta.isEmpty()) continue;
-                    
-                    LocalDateTime instanteActual = PlanificacionUtils.getCreacionUtc(paquete, dataset, config);
-                    String aeropuertoActual = paquete.getOrigenOACI();
-                    
-                    for (int i = 0; i < vuelosRuta.size(); i++) {
-                        Vuelo vuelo = vuelosRuta.get(i);
-                        LocalDateTime salida = vuelo.getSalidaUtc();
-                        
-                        // El paquete está en el aeropuerto desde instanteActual hasta salida
-                        LocalDateTime hora = instanteActual.truncatedTo(ChronoUnit.HOURS);
-                        while (hora.isBefore(salida)) {
-                            ocupacionReal
-                                .computeIfAbsent(aeropuertoActual, k -> new HashMap<>())
-                                .merge(hora, cantidad, Integer::sum);
-                            hora = hora.plusHours(1);
-                        }
-                        
-                        aeropuertoActual = vuelo.getDestino().getCodigoOACI();
-                        instanteActual = vuelo.getLlegadaUtc();
+                // Construir EstadoOperacional de referencia con las rutas asignadas
+                // Esto es la fuente de verdad para carga de vuelos y ocupacion de aeropuertos
+                EstadoOperacional estadoRef = PlanificacionUtils.construirEstadoConAsignaciones(rutas, dataset, config);
+
+                // Poblar cargaVuelo desde el estado operacional (fuente de verdad)
+                cargaVuelo.clear();
+                for (Vuelo v : dataset.getVuelos()) {
+                    int carga = estadoRef.getCargaVuelo(v.getId());
+                    if (carga > 0) {
+                        cargaVuelo.put(v.getId(), carga);
                     }
                 }
+                System.out.println("[DIAG] cargaVuelo size=" + cargaVuelo.size());
+                cargaVuelo.entrySet().stream().limit(5).forEach(e ->
+                    System.out.println("[DIAG]   " + e.getKey() + " -> " + e.getValue())
+                );
 
                 System.out.println("=== Ejecucion Completada ===");
                 System.out.printf("Paquetes totales: %d, rutas asignadas: %d%n",
@@ -288,17 +274,24 @@ public class SimulationEngine {
                 LocalDateTime simTimeActual = simTimeRef[0];
                 int horaActual = horaRef[0];
 
+                maletasEntregadas = 0;
+                maletasEnTransito = 0;
                 for (Map.Entry<String, Ruta> entry : rutas.entrySet()) {
+                    Paquete paquete = dataset.getPaquetePorId(entry.getKey());
+                    int cantidad = paquete != null ? paquete.getCantidad() : 1;
                     Ruta ruta = entry.getValue();
                     if (!ruta.getVuelos().isEmpty()) {
                         Vuelo ultimo = ruta.getVuelos().get(ruta.getVuelos().size() - 1);
                         if (simTimeActual.isAfter(ultimo.getLlegadaUtc())) {
-                            maletasEntregadas++;
+                            maletasEntregadas += cantidad;
                             rutasEntregadas.add(entry.getKey());
+                        } else {
+                            maletasEnTransito += cantidad;
                         }
+                    } else {
+                        maletasEnTransito += cantidad;
                     }
                 }
-                maletasEnTransito = rutas.size() - maletasEntregadas;
 
                 // Continuar simulación desde horaActual
                 for (int hora = horaActual; hora <= duracionHoras; hora++) {
@@ -310,21 +303,21 @@ public class SimulationEngine {
                     for (Map.Entry<String, Ruta> entry : rutas.entrySet()) {
                         String rutaId = entry.getKey();
                         if (rutasEntregadas.contains(rutaId)) continue;
+                        Paquete paquete = dataset.getPaquetePorId(rutaId);
+                        int cantidad = paquete != null ? paquete.getCantidad() : 1;
                         Ruta ruta = entry.getValue();
                         if (!ruta.getVuelos().isEmpty()) {
                             Vuelo ultimo = ruta.getVuelos().get(ruta.getVuelos().size() - 1);
                             if (simTime.isAfter(ultimo.getLlegadaUtc())) {
-                                maletasEntregadas++;
-                                maletasEnTransito--;
+                                maletasEntregadas += cantidad;
+                                maletasEnTransito -= cantidad;
                                 rutasEntregadas.add(rutaId);
                             }
                         }
                     }
 
                     for (Aeropuerto a : dataset.getAeropuertos().values()) {
-                        int ocup = ocupacionReal
-                            .getOrDefault(a.getCodigoOACI(), Map.of())
-                            .getOrDefault(simTime.truncatedTo(ChronoUnit.HOURS), 0);
+                        int ocup = estadoRef.getOcupacionHora(a.getCodigoOACI(), simTime);
                         ocupacionAeropuerto.put(a.getCodigoOACI(), ocup);
                     }
 
@@ -340,7 +333,7 @@ public class SimulationEngine {
                     actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
                             maletasEntregadas, maletasEnTransito, hora, duracionHoras, false, null, logs, "EJECUTANDO", fechaInicio);
 
-                    long sleepMs = (long) (4000.0 / Math.max(0.5, velocidad));
+                    long sleepMs = (long) (15000.0 / Math.max(0.5, velocidad));
                     if (sleepMs > 0) {
                         Thread.sleep(sleepMs);
                     }

@@ -3,8 +3,15 @@ package pe.edu.pucp.uniteair.dp1backend.service;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import tasf.config.Config_Simulacion;
 import tasf.core.Dataset;
+import tasf.core.EstadoOperacional;
+import tasf.core.PlanificacionUtils;
 import tasf.io.DatasetTextoLoader;
+import tasf.model.Ruta;
+import tasf.model.Vuelo;
+import tasf.strategy.TwoPhaseOrchestrator;
+import tasf.strategy.alns.ALNS_RutasPlanner;
 
 import java.io.File;
 import java.io.IOException;
@@ -13,7 +20,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -21,6 +31,14 @@ import java.util.stream.IntStream;
 public class CargaArchivosService {
 
     private Dataset lastDataset;
+    private volatile EstadoOperacional estadoOperacional;
+    private volatile Map<String, Integer> cargaVueloCache;
+    private volatile boolean planificando = false;
+    private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "planificador-bg");
+        t.setDaemon(true);
+        return t;
+    });
 
     public record CargaResult(boolean success, String message, int aeropuertosCount, int vuelosCount,
                               int paquetesCount, String datasetId) {}
@@ -37,7 +55,12 @@ public class CargaArchivosService {
             copiarRecursosACarpeta(tempDir);
             Dataset dataset = cargarDatasetEnTemp(tempDir, LocalDate.now(), 3);
             this.lastDataset = dataset;
+            this.estadoOperacional = null;
+            this.cargaVueloCache = null;
+            this.planificando = false;
             deleteTempDir(tempDir);
+            System.out.println("[CargaArchivosService] Dataset por defecto cargado. Paquetes: " + dataset.getPaquetes().size());
+            lanzarPlanificacionEnBackground(dataset);
         } catch (Exception e) {
             System.err.println("No se pudo cargar dataset por defecto: " + e.getMessage());
         }
@@ -49,10 +72,27 @@ public class CargaArchivosService {
             copiarRecursosACarpeta(tempDir);
             Dataset dataset = cargarDatasetEnTemp(tempDir, fechaInicio, dias);
             this.lastDataset = dataset;
+            this.estadoOperacional = null;
+            this.cargaVueloCache = null;
+            this.planificando = false;
             deleteTempDir(tempDir);
+            lanzarPlanificacionEnBackground(dataset);
         } catch (Exception e) {
             System.err.println("No se pudo cargar dataset con fechas: " + e.getMessage());
         }
+    }
+
+    private void lanzarPlanificacionEnBackground(Dataset dataset) {
+        if (dataset == null || dataset.getPaquetes().isEmpty()) return;
+        if (planificando) return;
+        planificando = true;
+        executor.submit(() -> {
+            try {
+                planificarDataset(dataset);
+            } finally {
+                planificando = false;
+            }
+        });
     }
 
     private Dataset cargarDatasetEnTemp(Path tempDir, LocalDate fechaInicio, int dias) throws IOException {
@@ -119,6 +159,10 @@ public class CargaArchivosService {
 
             String datasetId = UUID.randomUUID().toString();
             this.lastDataset = dataset;
+            this.estadoOperacional = null;
+            this.cargaVueloCache = null;
+            this.planificando = false;
+            lanzarPlanificacionEnBackground(dataset);
 
             deleteTempDir(tempDir);
 
@@ -130,6 +174,64 @@ public class CargaArchivosService {
 
     public synchronized Dataset obtenerUltimoDataset() {
         return lastDataset;
+    }
+
+    public synchronized EstadoOperacional obtenerEstadoOperacional() {
+        return estadoOperacional;
+    }
+
+    public synchronized boolean isPlanificando() {
+        return planificando;
+    }
+
+    public int getCargaVuelo(String vueloId) {
+        Map<String, Integer> cache = cargaVueloCache;
+        return cache != null ? cache.getOrDefault(vueloId, 0) : 0;
+    }
+
+    public int getOcupacionAeropuerto(String codigoOACI, LocalDateTime horaUtc) {
+        EstadoOperacional estado = estadoOperacional;
+        return estado != null ? estado.getOcupacionHora(codigoOACI, horaUtc) : 0;
+    }
+
+    private void planificarDataset(Dataset dataset) {
+        if (dataset == null || dataset.getPaquetes().isEmpty()) {
+            this.estadoOperacional = new EstadoOperacional();
+            this.cargaVueloCache = new HashMap<>();
+            return;
+        }
+        try {
+            Config_Simulacion config = new Config_Simulacion();
+            config.setAeropuertoHub("SKBO");
+            config.setMinimaConexion(java.time.Duration.ofMinutes(30));
+            config.setIteracionesALNS(20);
+            config.setMaxRutasPorPaquete(4);
+            config.setMaxEscalas(2);
+            config.setVentanaActualizacionPesos(5);
+            config.setEvaporacionFeromona(0.4);
+
+            PlanificacionUtils.limpiarCacheGlobal();
+            TwoPhaseOrchestrator orchestrator = new TwoPhaseOrchestrator(new ALNS_RutasPlanner());
+            var solucion = orchestrator.ejecutarFlujoCompleto(dataset, config);
+            var rutas = solucion.getRutasAsignadas();
+
+            this.estadoOperacional = PlanificacionUtils.construirEstadoConAsignaciones(rutas, dataset, config);
+            Map<String, Integer> nuevoCache = new HashMap<>();
+            for (Vuelo v : dataset.getVuelos()) {
+                int carga = this.estadoOperacional.getCargaVuelo(v.getId());
+                if (carga > 0) {
+                    nuevoCache.put(v.getId(), carga);
+                }
+            }
+            this.cargaVueloCache = nuevoCache;
+            System.out.println("[CargaArchivosService] Planificación completada. Rutas: " + rutas.size()
+                    + ", CargaVuelo entries: " + nuevoCache.size());
+        } catch (Exception e) {
+            System.err.println("[CargaArchivosService] Error en planificación: " + e.getMessage());
+            e.printStackTrace();
+            this.estadoOperacional = new EstadoOperacional();
+            this.cargaVueloCache = new HashMap<>();
+        }
     }
 
     private void saveToTemp(Path dir, MultipartFile file, String filename) throws IOException {
