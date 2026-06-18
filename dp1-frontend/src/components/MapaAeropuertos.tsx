@@ -34,17 +34,28 @@ function shouldDisplayFlight(flightId: string, percentage: number): boolean {
 
 function aeropuertoColor(ocu: number, max: number): string {
   const ratio = max > 0 ? ocu / max : 0
-  if (ratio < 0.7) return '#22c55e'
-  if (ratio < 0.9) return '#eab308'
+  if (ratio <= 0) return '#38bdf8'
+  if (ratio <= 0.7) return '#22c55e'
+  if (ratio <= 0.9) return '#eab308'
   return '#ef4444'
 }
 
-const AIRPLANE_BLUE = '#38bdf8'
+const AIRPLANE_COLOR_GREEN = '#22c55e'
+const AIRPLANE_COLOR_YELLOW = '#eab308'
+const AIRPLANE_COLOR_RED = '#ef4444'
 const AIRPLANE_SELECTED = '#facc15'
 const BASE_ICON_SIZE = 22
 
-function getAirplaneIcon(selected: boolean, scale = 1): L.DivIcon {
-  const color = selected ? AIRPLANE_SELECTED : AIRPLANE_BLUE
+function getAirplaneColor(cargaActual: number, capacidad: number): string {
+  if (capacidad <= 0 || cargaActual <= 0) return '#38bdf8'
+  const ratio = cargaActual / capacidad
+  if (ratio <= 0.7) return AIRPLANE_COLOR_GREEN
+  if (ratio <= 0.9) return AIRPLANE_COLOR_YELLOW
+  return AIRPLANE_COLOR_RED
+}
+
+function getAirplaneIcon(selected: boolean, scale: number, cargaActual: number, capacidad: number): L.DivIcon {
+  const color = selected ? AIRPLANE_SELECTED : getAirplaneColor(cargaActual, capacidad)
   const size = Math.round(BASE_ICON_SIZE * scale)
   const glowFilter = selected
     ? 'filter:drop-shadow(0 0 5px #facc15) drop-shadow(0 0 10px #facc15);'
@@ -369,9 +380,13 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
 
     prevSelectedVueloIdRef.current = selectedVueloId ?? null
 
+    const vueloMap = new Map(vuelos.map((v) => [v.id, v]))
     flightMarkersRef.current.forEach((mk, id) => {
       const isSelected = id === selectedVueloId
-      mk.setIcon(getAirplaneIcon(isSelected, zoomScaleRef.current))
+      const v = vueloMap.get(id) || persistentFlightsRef.current.get(id)
+      const carga = v?.cargaActual ?? 0
+      const cap = v?.capacidad ?? 1
+      mk.setIcon(getAirplaneIcon(isSelected, zoomScaleRef.current, carga, cap))
       const angle = flightAngleRef.current.get(id)
       if (angle !== undefined) {
         requestAnimationFrame(() => applyTransform(mk, angle, zoomScaleRef.current))
@@ -419,7 +434,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       let mk = flightMarkersRef.current.get(v.id)
       if (!mk) {
         const startPos = interpolatePosition(from, to, prevProgress / 100)
-        mk = L.marker(startPos, { icon: getAirplaneIcon(isSelected, zoomScaleRef.current) })
+        mk = L.marker(startPos, { icon: getAirplaneIcon(isSelected, zoomScaleRef.current, v.cargaActual, v.capacidad) })
         mk.bindTooltip(tooltipText, { direction: 'top', offset: L.point(0, -14) })
         mk.on('click', () => onVueloClickRef.current?.(v))
         markerLayerRef.current?.addLayer(mk)
@@ -432,7 +447,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
         flightAngleRef.current.set(v.id, angle)
         applyTransform(mk, angle, zoomScaleRef.current)
       } else {
-        mk.setIcon(getAirplaneIcon(isSelected, zoomScaleRef.current))
+        mk.setIcon(getAirplaneIcon(isSelected, zoomScaleRef.current, v.cargaActual, v.capacidad))
         mk.setTooltipContent(tooltipText)
       }
     })

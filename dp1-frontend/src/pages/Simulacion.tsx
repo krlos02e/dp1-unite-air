@@ -28,12 +28,9 @@ const aeropuertosFallback: AeropuertoDTO[] = Object.values(AIRPORTS_DATA).map((a
 export default function Simulacion() {
   const {
     simulationState,
-    setSimulationState,
     startPolling,
-    stopPolling,
     resetSimulation,
     elapsedRealSeconds,
-    isPaused,
     setIsPaused,
     resetElapsedTimer,
   } = useSimulation()
