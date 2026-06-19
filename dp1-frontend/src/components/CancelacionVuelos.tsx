@@ -1,34 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { cargaArchivosService } from '../services/CargaArchivosService'
 import { getAirportCity } from '../data/airportsData'
+import { TIMEZONE_OPTIONS, formatTimeInTimezone, formatDateInTimezone, extractUtcTime } from '../utils/timezoneFormat'
 import type { VueloDTO } from '../types'
-
-function formatTime(isoString: string): string {
-  if (!isoString) return '--'
-  try {
-    const d = new Date(isoString)
-    if (isNaN(d.getTime())) return '--'
-    const hours = String(d.getHours()).padStart(2, '0')
-    const minutes = String(d.getMinutes()).padStart(2, '0')
-    return `${hours}:${minutes}`
-  } catch {
-    return '--'
-  }
-}
-
-function formatDate(isoString: string): string {
-  if (!isoString) return '--'
-  try {
-    const d = new Date(isoString)
-    if (isNaN(d.getTime())) return '--'
-    const day = String(d.getDate()).padStart(2, '0')
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const year = d.getFullYear()
-    return `${day}/${month}/${year}`
-  } catch {
-    return '--'
-  }
-}
 
 export default function CancelacionVuelos() {
   const [vuelos, setVuelos] = useState<VueloDTO[]>([])
@@ -39,6 +13,7 @@ export default function CancelacionVuelos() {
   const [filtroDestino, setFiltroDestino] = useState('')
   const [cancelandoId, setCancelandoId] = useState<string | null>(null)
   const [mensaje, setMensaje] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null)
+  const [tz, setTz] = useState(0)
 
   const cargarDatos = useCallback(async () => {
     try {
@@ -63,9 +38,7 @@ export default function CancelacionVuelos() {
   const vuelosProgramados = useMemo(() => {
     return vuelos.filter(v => {
       if (cancelados.has(v.id)) return false
-      if (v.estado === 'CANCELADO') return false
-      if (v.progresoVuelo > 0) return false
-      return true
+      return v.estado === 'PROGRAMADO'
     })
   }, [vuelos, cancelados])
 
@@ -88,7 +61,7 @@ export default function CancelacionVuelos() {
     setCancelandoId(vuelo.id)
     setMensaje(null)
     try {
-      const horaSalida = formatTime(vuelo.salidaUtc)
+      const horaSalida = extractUtcTime(vuelo.salidaUtc)
       const result = await cargaArchivosService.cancelarVuelo(vuelo.origen, vuelo.destino, horaSalida)
       if (result.success) {
         setMensaje({ tipo: 'success', texto: `Vuelo ${vuelo.id} cancelado correctamente` })
@@ -149,6 +122,19 @@ export default function CancelacionVuelos() {
         />
       </div>
 
+      <div className="flex items-center gap-3">
+        <label className="text-sm text-gray-400 whitespace-nowrap">Zona horaria:</label>
+        <select
+          value={tz}
+          onChange={(e) => setTz(Number(e.target.value))}
+          className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-sky-500 max-w-xs"
+        >
+          {TIMEZONE_OPTIONS.map(opt => (
+            <option key={opt.offset} value={opt.offset}>{opt.label}</option>
+          ))}
+        </select>
+      </div>
+
       {vuelosFiltrados.length === 0 ? (
         <div className="text-center py-8 text-gray-500 text-sm">
           {vuelosProgramados.length === 0
@@ -170,9 +156,9 @@ export default function CancelacionVuelos() {
                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-gray-400">
                       <span>Origen: <span className="text-emerald-400">{origenCiudad}</span></span>
                       <span>Destino: <span className="text-red-400">{destinoCiudad}</span></span>
-                      <span>Fecha: <span className="text-gray-300">{formatDate(v.salidaUtc)}</span></span>
-                      <span>Salida: <span className="text-gray-300">{formatTime(v.salidaUtc)}</span></span>
-                      <span>Llegada: <span className="text-gray-300">{formatTime(v.llegadaUtc)}</span></span>
+                      <span>Fecha: <span className="text-gray-300">{formatDateInTimezone(v.salidaUtc, tz)}</span></span>
+                      <span>Salida: <span className="text-gray-300">{formatTimeInTimezone(v.salidaUtc, tz)}</span></span>
+                      <span>Llegada: <span className="text-gray-300">{formatTimeInTimezone(v.llegadaUtc, tz)}</span></span>
                       <span>Capacidad: <span className="text-gray-300">{v.capacidad}</span></span>
                     </div>
                   </div>

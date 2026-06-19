@@ -1,14 +1,15 @@
 import type { VueloDTO } from '../types'
 import { getAirportCity } from '../data/airportsData'
-import { formatDateTime } from '../utils/dateFormat'
+import { formatTimeInTimezone, formatDateInTimezone } from '../utils/timezoneFormat'
 
 interface Props {
   vuelo: VueloDTO | null
   isOpen: boolean
   onClose: () => void
+  tzOffset: number
 }
 
-export default function VueloModal({ vuelo, isOpen, onClose }: Props) {
+export default function VueloModal({ vuelo, isOpen, onClose, tzOffset }: Props) {
   if (!isOpen || !vuelo) return null
 
   const origenCiudad = getAirportCity(vuelo.origen) || vuelo.origen
@@ -43,12 +44,12 @@ export default function VueloModal({ vuelo, isOpen, onClose }: Props) {
             <span className="font-medium text-amber-400">{vuelo.cargaActual} / {vuelo.capacidad}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-400">Salida UTC</span>
-            <span className="font-medium">{formatDateTime(vuelo.salidaUtc)}</span>
+            <span className="text-gray-400">Salida</span>
+            <span className="font-medium">{formatDateInTimezone(vuelo.salidaUtc, tzOffset)} {formatTimeInTimezone(vuelo.salidaUtc, tzOffset)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-400">Llegada UTC</span>
-            <span className="font-medium">{formatDateTime(vuelo.llegadaUtc)}</span>
+            <span className="text-gray-400">Llegada</span>
+            <span className="font-medium">{formatDateInTimezone(vuelo.llegadaUtc, tzOffset)} {formatTimeInTimezone(vuelo.llegadaUtc, tzOffset)}</span>
           </div>
 
           <div className="flex justify-between pt-1">

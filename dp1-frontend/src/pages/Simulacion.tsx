@@ -49,6 +49,7 @@ export default function Simulacion() {
   const [selectedVuelo, setSelectedVuelo] = useState<VueloDTO | null>(null)
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
   const [showStopConfirm, setShowStopConfirm] = useState(false)
+  const [mapTz, setMapTz] = useState(0)
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
@@ -344,6 +345,8 @@ export default function Simulacion() {
           velocidad={1}
           onAeropuertoClick={handleAeropuertoClick}
           onVueloClick={handleVueloClick}
+          mapTz={mapTz}
+          onMapTzChange={setMapTz}
         />
 
         {/* Contadores flotantes - inferior izquierda */}
@@ -367,8 +370,8 @@ export default function Simulacion() {
         </div>
       </div>
 
-      <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} />
-      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={simulationState?.vuelos} />
+      <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} tzOffset={mapTz} />
+      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={simulationState?.vuelos} tzOffset={mapTz} />
       <ResultadosModal
         state={resultSnapshot}
         isOpen={showResultados}

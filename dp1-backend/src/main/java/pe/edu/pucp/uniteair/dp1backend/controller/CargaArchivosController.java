@@ -11,6 +11,7 @@ import tasf.core.Dataset;
 import tasf.model.Vuelo;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -52,7 +53,7 @@ public class CargaArchivosController {
         if (dataset == null) {
             return ResponseEntity.ok(List.of());
         }
-        LocalDateTime ahora = LocalDateTime.now();
+        LocalDateTime ahora = LocalDateTime.now(ZoneOffset.UTC);
         Set<String> vuelosCancelados = cargaArchivosService.obtenerVuelosCancelados();
 
         Map<String, List<String>> entrantesMap = new HashMap<>();
@@ -95,7 +96,7 @@ public class CargaArchivosController {
             return ResponseEntity.ok(List.of());
         }
         Set<String> vuelosCancelados = cargaArchivosService.obtenerVuelosCancelados();
-        LocalDateTime ahora = LocalDateTime.now();
+        LocalDateTime ahora = LocalDateTime.now(ZoneOffset.UTC);
         List<VueloDTO> vuelos = new ArrayList<>();
         for (Vuelo v : dataset.getVuelos()) {
             double[] orig = AeropuertoCoordenadas.get(v.getOrigen().getCodigoOACI());

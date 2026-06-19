@@ -20,6 +20,7 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
   const [isPaused, setIsPaused] = useState(false)
   const [showResultados, setShowResultados] = useState(false)
+  const [mapTz, setMapTz] = useState(0)
   const logEndRef = useRef<HTMLDivElement>(null)
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
@@ -187,6 +188,8 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
             selectedVueloId={selectedVuelo?.id || null}
             onAeropuertoClick={handleAeropuertoClick}
             onVueloClick={handleVueloClick}
+            mapTz={mapTz}
+            onMapTzChange={setMapTz}
           />
         </div>
 
@@ -218,8 +221,8 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
         </div>
       </div>
 
-      <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} />
-      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={simulationState?.vuelos} />
+      <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} tzOffset={mapTz} />
+      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={simulationState?.vuelos} tzOffset={mapTz} />
       <ResultadosModal
         state={simulationState}
         isOpen={showResultados}

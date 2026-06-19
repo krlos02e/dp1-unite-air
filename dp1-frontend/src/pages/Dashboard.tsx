@@ -13,6 +13,7 @@ export default function Dashboard({ sessionId }: Props) {
   const [data, setData] = useState<DashboardData | null>(null)
   const [selectedVuelo, setSelectedVuelo] = useState<VueloDTO | null>(null)
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
+  const [mapTz, setMapTz] = useState(0)
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
@@ -62,11 +63,13 @@ export default function Dashboard({ sessionId }: Props) {
           vuelos={data.vuelosActivos}
           onAeropuertoClick={handleAeropuertoClick}
           onVueloClick={handleVueloClick}
+          mapTz={mapTz}
+          onMapTzChange={setMapTz}
         />
       </div>
 
-      <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} />
-      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={data.vuelosActivos} />
+      <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} tzOffset={mapTz} />
+      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={data.vuelosActivos} tzOffset={mapTz} />
     </div>
   )
 }

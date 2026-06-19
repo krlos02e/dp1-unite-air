@@ -88,6 +88,7 @@ export default function OperacionDiaria() {
 
   const [selectedVuelo, setSelectedVuelo] = useState<VueloDTO | null>(null)
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
+  const [mapTz, setMapTz] = useState(0)
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
@@ -233,15 +234,18 @@ export default function OperacionDiaria() {
           velocidad={1}
           onAeropuertoClick={handleAeropuertoClick}
           onVueloClick={handleVueloClick}
+          mapTz={mapTz}
+          onMapTzChange={setMapTz}
         />
       </div>
 
-      <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} />
+      <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} tzOffset={mapTz} />
       <AeropuertoModal
         aeropuerto={selectedAeropuerto}
         isOpen={!!selectedAeropuerto}
         onClose={() => setSelectedAeropuerto(null)}
         vuelos={vuelos}
+        tzOffset={mapTz}
       />
     </div>
   )

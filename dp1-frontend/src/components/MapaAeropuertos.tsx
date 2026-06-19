@@ -1,8 +1,9 @@
-import { useEffect, useRef, memo } from 'react'
+import { useEffect, useRef, useState, memo } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { AeropuertoDTO, VueloDTO } from '../types'
 import { getAirportCity, AIRPORTS_DATA } from '../data/airportsData'
+import { TIMEZONE_OPTIONS } from '../utils/timezoneFormat'
 
 function tooltipForFlight(v: VueloDTO): string {
   const origen = getAirportCity(v.origen) || v.origen
@@ -17,6 +18,8 @@ interface Props {
   velocidad?: number
   onAeropuertoClick?: (a: AeropuertoDTO) => void
   onVueloClick?: (v: VueloDTO) => void
+  mapTz: number
+  onMapTzChange: (tz: number) => void
 }
 
 const center: [number, number] = [20, 0]
@@ -138,7 +141,7 @@ interface FlightAnim {
   duration: number
 }
 
-function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, onAeropuertoClick, onVueloClick }: Props) {
+function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, onAeropuertoClick, onVueloClick, mapTz, onMapTzChange }: Props) {
   const mapRef = useRef<L.Map | null>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const circleLayerRef = useRef<L.LayerGroup | null>(null)
@@ -162,11 +165,14 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
   const selectedVueloIdRef = useRef(selectedVueloId)
   const prevSelectedVueloIdRef = useRef<string | null>(null)
   const prevViewRef = useRef<{ center: L.LatLng; zoom: number } | null>(null)
+  const [showRouteLines, setShowRouteLines] = useState(true)
+  const showRouteLinesRef = useRef(showRouteLines)
 
   onVueloClickRef.current = onVueloClick
   onAeropuertoClickRef.current = onAeropuertoClick
   velocidadRef.current = velocidad
   selectedVueloIdRef.current = selectedVueloId
+  showRouteLinesRef.current = showRouteLines
 
   useEffect(() => {
     if (vuelos.length === 0) {
@@ -473,7 +479,8 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       const existingLine = routeLinesRef.current.get(v.id)
       if (existingLine) {
         existingLine.setLatLngs(pts)
-      } else {
+        existingLine.setStyle({ opacity: showRouteLinesRef.current ? 0.15 : 0 })
+      } else if (showRouteLinesRef.current) {
         const line = L.polyline(pts, {
           dashArray: '4, 6',
           color: '#6b7280',
@@ -487,6 +494,12 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
 
     lastUpdateTimeRef.current = now
   }, [vuelos])
+
+  useEffect(() => {
+    routeLinesRef.current.forEach((line) => {
+      line.setStyle({ opacity: showRouteLines ? 0.15 : 0 })
+    })
+  }, [showRouteLines])
 
   useEffect(() => {
     const animate = (time: number) => {
@@ -524,7 +537,34 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
     }
   }, [])
 
-  return <div ref={mapContainerRef} className="w-full h-full rounded-lg" />
+  return (
+    <div className="relative w-full h-full">
+      <div className="absolute top-2 right-2 z-[1000] bg-gray-800/90 rounded-lg border border-gray-600 p-2 space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-300">Rutas</span>
+          <button
+            onClick={() => setShowRouteLines(!showRouteLines)}
+            className={`relative w-10 h-5 rounded-full transition-colors ${showRouteLines ? 'bg-emerald-500' : 'bg-gray-600'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${showRouteLines ? 'translate-x-5' : ''}`} />
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-300">Zona horaria:</span>
+          <select
+            value={mapTz}
+            onChange={(e) => onMapTzChange(Number(e.target.value))}
+            className="bg-gray-700 text-xs text-white rounded px-1 py-0.5 border border-gray-600 focus:outline-none focus:border-sky-500"
+          >
+            {TIMEZONE_OPTIONS.map(opt => (
+              <option key={opt.offset} value={opt.offset}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div ref={mapContainerRef} className="w-full h-full rounded-lg" />
+    </div>
+  )
 }
 
 export default memo(MapaAeropuertos)

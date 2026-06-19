@@ -1,16 +1,17 @@
 import { useState, useMemo } from 'react'
 import type { AeropuertoDTO, VueloDTO } from '../types'
 import { AIRPORTS_DATA, getAirportCity } from '../data/airportsData'
-import { formatDateTime } from '../utils/dateFormat'
+import { formatTimeInTimezone, formatDateInTimezone } from '../utils/timezoneFormat'
 
 interface Props {
   aeropuerto: AeropuertoDTO | null
   isOpen: boolean
   onClose: () => void
   vuelos?: VueloDTO[]
+  tzOffset: number
 }
 
-export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = [] }: Props) {
+export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = [], tzOffset }: Props) {
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedSection, setExpandedSection] = useState<'entrantes' | 'salientes' | 'cancelados' | null>(null)
   const [filtroEntrantes, setFiltroEntrantes] = useState<'id' | 'ciudad'>('ciudad')
@@ -197,7 +198,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
                         </div>
                         {vuelo && (
                           <div className="text-gray-500">
-                            Llegada: {formatDateTime(vuelo.llegadaUtc)}
+                            Llegada: {formatDateInTimezone(vuelo.llegadaUtc, tzOffset)} {formatTimeInTimezone(vuelo.llegadaUtc, tzOffset)}
                           </div>
                         )}
                       </div>
@@ -255,7 +256,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
                         </div>
                         {vuelo && (
                           <div className="text-gray-500">
-                            Salida: {formatDateTime(vuelo.salidaUtc)}
+                            Salida: {formatDateInTimezone(vuelo.salidaUtc, tzOffset)} {formatTimeInTimezone(vuelo.salidaUtc, tzOffset)}
                           </div>
                         )}
                       </div>
@@ -313,7 +314,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
                         </div>
                         {vuelo && (
                           <div className="text-gray-500">
-                            Salida programada: {formatDateTime(vuelo.salidaUtc)}
+                            Salida programada: {formatDateInTimezone(vuelo.salidaUtc, tzOffset)} {formatTimeInTimezone(vuelo.salidaUtc, tzOffset)}
                           </div>
                         )}
                       </div>

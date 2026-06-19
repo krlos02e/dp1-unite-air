@@ -16,6 +16,7 @@ import tasf.model.Vuelo;
 import tasf.strategy.TwoPhaseOrchestrator;
 import tasf.strategy.alns.ALNS_RutasPlanner;
 
+import java.time.ZoneOffset;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -370,7 +371,7 @@ public class CargaArchivosService {
             throw new IllegalStateException("No hay dataset cargado");
         }
 
-        LocalDateTime ahoraUtc = LocalDateTime.now();
+        LocalDateTime ahoraUtc = LocalDateTime.now(ZoneOffset.UTC);
         LocalTime horaSalida = LocalTime.parse(horaSalidaLocal);
         LocalDate hoy = ahoraUtc.toLocalDate();
 

@@ -16,6 +16,7 @@ import tasf.strategy.alns.ALNS_RutasPlanner;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.Set;
 
@@ -45,7 +46,7 @@ public class PlanificacionPeriodicaService {
         }
 
         long startTime = System.nanoTime();
-        LocalDateTime ahora = LocalDateTime.now();
+        LocalDateTime ahora = LocalDateTime.now(ZoneOffset.UTC);
         LocalDateTime inicio = ahora.minusHours(horizontePasadoHoras);
         LocalDateTime fin = ahora.plusHours(horizonteFuturoHoras);
 
