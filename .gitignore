@@ -6,3 +6,4 @@
 *.tmp
 *.cache
 *.env
+dp1-backend/data/output
