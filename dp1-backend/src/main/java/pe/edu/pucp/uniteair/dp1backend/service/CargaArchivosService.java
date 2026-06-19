@@ -322,15 +322,13 @@ public class CargaArchivosService {
         }
 
         List<Vuelo> vuelosFiltrados = new ArrayList<>();
+        LocalDateTime finVuelos = fin.plusHours(48);
         for (Vuelo v : lastDataset.getVuelos()) {
             if (vuelosCancelados.contains(v.getId())) continue;
 
             LocalDateTime salida = v.getSalidaUtc();
-            if (!salida.isBefore(inicio) && !salida.isAfter(fin)) {
-                if (aeropuertosInvolucrados.contains(v.getOrigen().getCodigoOACI())
-                        || aeropuertosInvolucrados.contains(v.getDestino().getCodigoOACI())) {
-                    vuelosFiltrados.add(v);
-                }
+            if (!salida.isBefore(inicio) && !salida.isAfter(finVuelos)) {
+                vuelosFiltrados.add(v);
             }
         }
 

@@ -182,6 +182,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
   const prevViewRef = useRef<{ center: L.LatLng; zoom: number } | null>(null)
   const [showRouteLines, setShowRouteLines] = useState(true)
   const showRouteLinesRef = useRef(showRouteLines)
+  const isZoomingRef = useRef(false)
   const [searchVuelo, setSearchVuelo] = useState('')
   const [filtroVuelo, setFiltroVuelo] = useState<'id' | 'origen' | 'destino'>('id')
   const [searchAeropuerto, setSearchAeropuerto] = useState('')
@@ -333,11 +334,18 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
         zoomSnap: 0.25,
         zoomDelta: 0.25,
         wheelPxPerZoomLevel: 120,
+        minZoom: 2.5,
+        maxZoom: 13,
+        maxBounds: L.latLngBounds(
+          L.latLng(-60, -160),
+          L.latLng(60, 160)
+        ),
+        maxBoundsViscosity: 1.0
       })
 
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-        maxZoom: 18,
+        maxZoom: 13,
       }).addTo(map)
 
       circleLayerRef.current = L.layerGroup().addTo(map)
@@ -350,6 +358,30 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
           const angle = flightAngleRef.current.get(id) ?? 0
           applyTransform(mk, angle)
         })
+      })
+
+      map.on('zoomstart', () => {
+        isZoomingRef.current = true
+        routeLinesRef.current.forEach((line) => {
+          line.setStyle({ opacity: 0 })
+        })
+      })
+
+      map.on('zoomend', () => {
+        routeLinesRef.current.forEach((line) => {
+          line.setStyle({ opacity: showRouteLinesRef.current ? 0.15 : 0 })
+        })
+        isZoomingRef.current = false
+
+        const currentZoom = map.getZoom()
+        if (currentZoom <= 2.5) {
+          map.setMaxBounds(map.getBounds())
+        } else {
+          map.setMaxBounds(L.latLngBounds(
+            L.latLng(-60, -160),
+            L.latLng(60, 160)
+          ))
+        }
       })
     }
 
@@ -557,9 +589,11 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       const pts = bezierPoints(from, to, 40)
       const existingLine = routeLinesRef.current.get(v.id)
       if (existingLine) {
-        existingLine.setLatLngs(pts)
-        existingLine.setStyle({ opacity: showRouteLinesRef.current ? 0.15 : 0 })
-      } else if (showRouteLinesRef.current) {
+        if (!isZoomingRef.current) {
+          existingLine.setLatLngs(pts)
+          existingLine.setStyle({ opacity: showRouteLinesRef.current ? 0.15 : 0 })
+        }
+      } else if (showRouteLinesRef.current && !isZoomingRef.current) {
         const line = L.polyline(pts, {
           dashArray: '4, 6',
           color: '#6b7280',
@@ -592,7 +626,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
           flightAngleRef.current.delete(id)
           flightAnimsRef.current.delete(id)
           const ln = routeLinesRef.current.get(id)
-          if (ln) {
+          if (ln && !isZoomingRef.current) {
             routeLayerRef.current?.removeLayer(ln)
             routeLinesRef.current.delete(id)
           }
@@ -602,6 +636,10 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
         const tNorm = currentProgress / 100
         const pos = interpolatePosition(anim.from, anim.to, tNorm)
         mk.setLatLng(pos)
+
+        if (mk.isTooltipOpen()) {
+          mk.closeTooltip()
+        }
 
         const delta = 0.005
         const tBefore = Math.max(0, tNorm - delta)
