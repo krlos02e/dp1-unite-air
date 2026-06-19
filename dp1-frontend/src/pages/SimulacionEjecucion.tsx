@@ -4,9 +4,10 @@ import { simulationService } from '../services/SimulationService'
 import MapaAeropuertos from '../components/MapaAeropuertos'
 import VueloModal from '../components/VueloModal'
 import AeropuertoModal from '../components/AeropuertoModal'
+import EnvioModal from '../components/EnvioModal'
 import ResultadosModal from '../components/ResultadosModal'
 import { formatDateTime } from '../utils/dateFormat'
-import type { SimulationState, VueloDTO, AeropuertoDTO } from '../types'
+import type { SimulationState, VueloDTO, AeropuertoDTO, EnvioEstado } from '../types'
 
 interface Props {
   sessionId: string
@@ -18,6 +19,7 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
   const { simulationState, startPolling, stopPolling } = useSimulation()
   const [selectedVuelo, setSelectedVuelo] = useState<VueloDTO | null>(null)
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
+  const [selectedEnvio, setSelectedEnvio] = useState<EnvioEstado | null>(null)
   const [isPaused, setIsPaused] = useState(false)
   const [showResultados, setShowResultados] = useState(false)
   const [mapTz, setMapTz] = useState(0)
@@ -26,12 +28,28 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
     setSelectedAeropuerto(null)
+    setSelectedEnvio(null)
   }, [])
 
   const handleAeropuertoClick = useCallback((a: AeropuertoDTO) => {
     setSelectedAeropuerto((prev) => (prev?.codigoOACI === a.codigoOACI ? null : a))
     setSelectedVuelo(null)
+    setSelectedEnvio(null)
   }, [])
+
+  const handleEnvioSelect = useCallback((envio: EnvioEstado) => {
+    setSelectedEnvio((prev) => (prev?.id === envio.id ? null : envio))
+    setSelectedVuelo(null)
+    setSelectedAeropuerto(null)
+  }, [])
+
+  const handleIrAVueloDesdeEnvio = useCallback((vueloId: string) => {
+    const vuelo = simulationState?.vuelos.find((v) => v.id === vueloId)
+    if (vuelo) {
+      setSelectedVuelo(vuelo)
+      setSelectedEnvio(null)
+    }
+  }, [simulationState])
 
   // Keep selected flight synced with latest poll
   useEffect(() => {
@@ -188,6 +206,7 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
             selectedVueloId={selectedVuelo?.id || null}
             onAeropuertoClick={handleAeropuertoClick}
             onVueloClick={handleVueloClick}
+            onEnvioSelect={handleEnvioSelect}
             mapTz={mapTz}
             onMapTzChange={setMapTz}
           />
@@ -223,6 +242,7 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
 
       <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} tzOffset={mapTz} />
       <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={simulationState?.vuelos} tzOffset={mapTz} />
+      <EnvioModal envio={selectedEnvio} isOpen={!!selectedEnvio} onClose={() => setSelectedEnvio(null)} onIrAVuelo={handleIrAVueloDesdeEnvio} vuelos={simulationState?.vuelos} />
       <ResultadosModal
         state={simulationState}
         isOpen={showResultados}

@@ -45,6 +45,16 @@ export function getAirportCity(oaci: string): string | undefined {
   return AIRPORTS_DATA[oaci]?.ciudad;
 }
 
+export function getAirportCountry(oaci: string): string | undefined {
+  return AIRPORTS_DATA[oaci]?.pais;
+}
+
+export function getAirportCityCountry(oaci: string): string {
+  const data = AIRPORTS_DATA[oaci];
+  if (!data) return oaci;
+  return `${data.ciudad}, ${data.pais}`;
+}
+
 export function getAirportTimezone(oaci: string): string | undefined {
   return AIRPORTS_DATA[oaci]?.gmtOffset;
 }

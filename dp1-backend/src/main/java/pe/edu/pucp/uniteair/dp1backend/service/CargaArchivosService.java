@@ -484,5 +484,104 @@ public class CargaArchivosService {
         return new ArrayList<>(paquetesIncrementales);
     }
 
+    public synchronized Map<String, Object> buscarEnvio(String id) {
+        if (lastDataset == null) {
+            return null;
+        }
+
+        Paquete paquete = null;
+        for (Paquete p : lastDataset.getPaquetes()) {
+            if (p.getId().equals(id)) {
+                paquete = p;
+                break;
+            }
+        }
+        if (paquete == null) {
+            for (Paquete p : paquetesIncrementales) {
+                if (p.getId().equals(id)) {
+                    paquete = p;
+                    break;
+                }
+            }
+        }
+        if (paquete == null) {
+            return null;
+        }
+
+        LocalDateTime ahoraUtc = LocalDateTime.now(ZoneOffset.UTC);
+        Ruta ruta = rutasAsignadas.get(paquete.getId());
+
+        String estado;
+        String aeropuertoActual = paquete.getOrigenOACI();
+        String vueloEsperado = null;
+        String vueloActual = null;
+
+        if (ruta == null || ruta.getVuelos().isEmpty()) {
+            estado = "EN_ESPERA";
+        } else {
+            List<Vuelo> vuelosRuta = ruta.getVuelos();
+            Vuelo vueloEnCurso = null;
+            Vuelo proximoVuelo = null;
+
+            for (Vuelo v : vuelosRuta) {
+                if (!ahoraUtc.isBefore(v.getSalidaUtc()) && ahoraUtc.isBefore(v.getLlegadaUtc())) {
+                    vueloEnCurso = v;
+                    break;
+                }
+                if (ahoraUtc.isBefore(v.getSalidaUtc()) && proximoVuelo == null) {
+                    proximoVuelo = v;
+                }
+            }
+
+            if (vueloEnCurso != null) {
+                estado = "EN_VUELO";
+                vueloActual = vueloEnCurso.getId();
+                aeropuertoActual = vueloEnCurso.getOrigen().getCodigoOACI();
+            } else if (ahoraUtc.isAfter(vuelosRuta.get(vuelosRuta.size() - 1).getLlegadaUtc())) {
+                estado = "ENTREGADO";
+                aeropuertoActual = paquete.getDestinoOACI();
+            } else if (proximoVuelo != null) {
+                estado = "EMBARCADO";
+                vueloEsperado = proximoVuelo.getId();
+                aeropuertoActual = proximoVuelo.getOrigen().getCodigoOACI();
+            } else {
+                estado = "EN_ESPERA";
+            }
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", paquete.getId());
+        result.put("origen", paquete.getOrigenOACI());
+        result.put("destino", paquete.getDestinoOACI());
+        result.put("estado", estado);
+        result.put("aeropuertoActual", aeropuertoActual);
+        result.put("vueloEsperado", vueloEsperado);
+        result.put("vueloActual", vueloActual);
+        result.put("cantidad", paquete.getCantidad());
+        return result;
+    }
+
+    public synchronized List<Map<String, Object>> buscarEnvios(String searchTerm) {
+        List<Map<String, Object>> resultados = new ArrayList<>();
+        if (lastDataset == null || searchTerm == null || searchTerm.isEmpty()) {
+            return resultados;
+        }
+
+        String term = searchTerm.toLowerCase();
+        List<Paquete> todos = new ArrayList<>(lastDataset.getPaquetes());
+        todos.addAll(paquetesIncrementales);
+
+        for (Paquete p : todos) {
+            if (p.getId().toLowerCase().contains(term)) {
+                Map<String, Object> info = buscarEnvio(p.getId());
+                if (info != null) {
+                    resultados.add(info);
+                }
+            }
+            if (resultados.size() >= 20) break;
+        }
+        return resultados;
+    }
+
     public record EnvioEntrada(String origen, String destino, LocalDate fecha, LocalTime hora, int cantidad, String remitente) {}
 }

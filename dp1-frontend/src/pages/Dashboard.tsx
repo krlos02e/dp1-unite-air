@@ -3,7 +3,8 @@ import { dashboardService } from '../services/DashboardService'
 import MapaAeropuertos from '../components/MapaAeropuertos'
 import VueloModal from '../components/VueloModal'
 import AeropuertoModal from '../components/AeropuertoModal'
-import type { DashboardData, VueloDTO, AeropuertoDTO } from '../types'
+import EnvioModal from '../components/EnvioModal'
+import type { DashboardData, VueloDTO, AeropuertoDTO, EnvioEstado } from '../types'
 
 interface Props {
   sessionId: string
@@ -13,17 +14,34 @@ export default function Dashboard({ sessionId }: Props) {
   const [data, setData] = useState<DashboardData | null>(null)
   const [selectedVuelo, setSelectedVuelo] = useState<VueloDTO | null>(null)
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
+  const [selectedEnvio, setSelectedEnvio] = useState<EnvioEstado | null>(null)
   const [mapTz, setMapTz] = useState(0)
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
     setSelectedAeropuerto(null)
+    setSelectedEnvio(null)
   }, [])
 
   const handleAeropuertoClick = useCallback((a: AeropuertoDTO) => {
     setSelectedAeropuerto((prev) => (prev?.codigoOACI === a.codigoOACI ? null : a))
     setSelectedVuelo(null)
+    setSelectedEnvio(null)
   }, [])
+
+  const handleEnvioSelect = useCallback((envio: EnvioEstado) => {
+    setSelectedEnvio((prev) => (prev?.id === envio.id ? null : envio))
+    setSelectedVuelo(null)
+    setSelectedAeropuerto(null)
+  }, [])
+
+  const handleIrAVueloDesdeEnvio = useCallback((vueloId: string) => {
+    const vuelo = data?.vuelosActivos.find((v) => v.id === vueloId)
+    if (vuelo) {
+      setSelectedVuelo(vuelo)
+      setSelectedEnvio(null)
+    }
+  }, [data])
 
   const fetchData = useCallback(async () => {
     try {
@@ -63,6 +81,7 @@ export default function Dashboard({ sessionId }: Props) {
           vuelos={data.vuelosActivos}
           onAeropuertoClick={handleAeropuertoClick}
           onVueloClick={handleVueloClick}
+          onEnvioSelect={handleEnvioSelect}
           mapTz={mapTz}
           onMapTzChange={setMapTz}
         />
@@ -70,6 +89,7 @@ export default function Dashboard({ sessionId }: Props) {
 
       <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} tzOffset={mapTz} />
       <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={data.vuelosActivos} tzOffset={mapTz} />
+      <EnvioModal envio={selectedEnvio} isOpen={!!selectedEnvio} onClose={() => setSelectedEnvio(null)} onIrAVuelo={handleIrAVueloDesdeEnvio} vuelos={data.vuelosActivos} />
     </div>
   )
 }

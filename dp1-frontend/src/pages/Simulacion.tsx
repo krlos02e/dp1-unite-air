@@ -5,10 +5,11 @@ import { cargaArchivosService } from '../services/CargaArchivosService'
 import MapaAeropuertos from '../components/MapaAeropuertos'
 import VueloModal from '../components/VueloModal'
 import AeropuertoModal from '../components/AeropuertoModal'
+import EnvioModal from '../components/EnvioModal'
 import ResultadosModal from '../components/ResultadosModal'
 import { formatDateTime } from '../utils/dateFormat'
 import { AIRPORTS_DATA } from '../data/airportsData'
-import type { VueloDTO, AeropuertoDTO, SimulationState } from '../types'
+import type { VueloDTO, AeropuertoDTO, SimulationState, EnvioEstado } from '../types'
 
 const SIM_CONFIG_KEY = 'uniteair_simConfig'
 const SIM_STOPPED_KEY = 'uniteair_simStopped'
@@ -48,18 +49,35 @@ export default function Simulacion() {
   // Modals
   const [selectedVuelo, setSelectedVuelo] = useState<VueloDTO | null>(null)
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
+  const [selectedEnvio, setSelectedEnvio] = useState<EnvioEstado | null>(null)
   const [showStopConfirm, setShowStopConfirm] = useState(false)
   const [mapTz, setMapTz] = useState(0)
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
     setSelectedAeropuerto(null)
+    setSelectedEnvio(null)
   }, [])
 
   const handleAeropuertoClick = useCallback((a: AeropuertoDTO) => {
     setSelectedAeropuerto((prev) => (prev?.codigoOACI === a.codigoOACI ? null : a))
     setSelectedVuelo(null)
+    setSelectedEnvio(null)
   }, [])
+
+  const handleEnvioSelect = useCallback((envio: EnvioEstado) => {
+    setSelectedEnvio((prev) => (prev?.id === envio.id ? null : envio))
+    setSelectedVuelo(null)
+    setSelectedAeropuerto(null)
+  }, [])
+
+  const handleIrAVueloDesdeEnvio = useCallback((vueloId: string) => {
+    const vuelo = simulationState?.vuelos.find((v) => v.id === vueloId)
+    if (vuelo) {
+      setSelectedVuelo(vuelo)
+      setSelectedEnvio(null)
+    }
+  }, [simulationState])
 
   const [showResultados, setShowResultados] = useState(false)
   const hasShownResults = useRef(false)
@@ -345,13 +363,15 @@ export default function Simulacion() {
           velocidad={1}
           onAeropuertoClick={handleAeropuertoClick}
           onVueloClick={handleVueloClick}
+          onEnvioSelect={handleEnvioSelect}
           mapTz={mapTz}
           onMapTzChange={setMapTz}
         />
 
         {/* Contadores flotantes - inferior izquierda */}
-        <div className="absolute bottom-4 left-4 z-[1001] group">
-          <div className="bg-gray-900/40 border border-gray-700/40 rounded-xl p-2 backdrop-blur-[2px] transition-all duration-300 group-hover:bg-gray-900/95 group-hover:border-gray-700 group-hover:backdrop-blur-sm group-hover:shadow-2xl">
+        <div className="absolute bottom-4 left-4 z-[999] group">
+          <div className="bg-gray-900/40 border border-gray-700/40 rounded-xl p-3 backdrop-blur-[2px] transition-all duration-300 group-hover:bg-gray-900/95 group-hover:border-gray-700 group-hover:backdrop-blur-sm group-hover:shadow-2xl">
+            <h4 className="text-xs font-semibold text-gray-300 mb-2 pb-1 border-b border-gray-700/50">Estado de Vuelos</h4>
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-1.5 bg-emerald-900/30 border border-emerald-800/50 rounded-lg px-2 py-1">
                 <span className="text-[10px] text-emerald-400 font-medium">Culminados</span>
@@ -372,6 +392,7 @@ export default function Simulacion() {
 
       <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} tzOffset={mapTz} />
       <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={simulationState?.vuelos} tzOffset={mapTz} />
+      <EnvioModal envio={selectedEnvio} isOpen={!!selectedEnvio} onClose={() => setSelectedEnvio(null)} onIrAVuelo={handleIrAVueloDesdeEnvio} vuelos={simulationState?.vuelos} />
       <ResultadosModal
         state={resultSnapshot}
         isOpen={showResultados}

@@ -1,5 +1,5 @@
 import { HttpClient } from './HttpClient'
-import type { CargaResult, AeropuertoDTO, VueloDTO, CancelarVueloResult, EnvioEntrada, AgregarEnviosResult, EnviosIncrementalesResponse } from '../types'
+import type { CargaResult, AeropuertoDTO, VueloDTO, CancelarVueloResult, EnvioEntrada, AgregarEnviosResult, EnviosIncrementalesResponse, EnvioBusquedaResponse } from '../types'
 
 class CargaArchivosService extends HttpClient {
   upload(
@@ -45,6 +45,10 @@ class CargaArchivosService extends HttpClient {
 
   obtenerEnviosIncrementales(): Promise<EnviosIncrementalesResponse> {
     return this.get<EnviosIncrementalesResponse>('/envios/incrementales')
+  }
+
+  buscarEnvios(query: string): Promise<EnvioBusquedaResponse> {
+    return this.get<EnvioBusquedaResponse>(`/envios/buscar?q=${encodeURIComponent(query)}`)
   }
 }
 

@@ -3,8 +3,9 @@ import { cargaArchivosService } from '../services/CargaArchivosService'
 import MapaAeropuertos from '../components/MapaAeropuertos'
 import VueloModal from '../components/VueloModal'
 import AeropuertoModal from '../components/AeropuertoModal'
+import EnvioModal from '../components/EnvioModal'
 import { AIRPORTS_DATA, getAirportCity } from '../data/airportsData'
-import type { VueloDTO, AeropuertoDTO } from '../types'
+import type { VueloDTO, AeropuertoDTO, EnvioEstado } from '../types'
 
 const aeropuertosFallback: AeropuertoDTO[] = Object.values(AIRPORTS_DATA).map((a) => ({
   codigoOACI: a.codigoOACI,
@@ -88,17 +89,34 @@ export default function OperacionDiaria() {
 
   const [selectedVuelo, setSelectedVuelo] = useState<VueloDTO | null>(null)
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
+  const [selectedEnvio, setSelectedEnvio] = useState<EnvioEstado | null>(null)
   const [mapTz, setMapTz] = useState(0)
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
     setSelectedAeropuerto(null)
+    setSelectedEnvio(null)
   }, [])
 
   const handleAeropuertoClick = useCallback((a: AeropuertoDTO) => {
     setSelectedAeropuerto((prev) => (prev?.codigoOACI === a.codigoOACI ? null : a))
     setSelectedVuelo(null)
+    setSelectedEnvio(null)
   }, [])
+
+  const handleEnvioSelect = useCallback((envio: EnvioEstado) => {
+    setSelectedEnvio((prev) => (prev?.id === envio.id ? null : envio))
+    setSelectedVuelo(null)
+    setSelectedAeropuerto(null)
+  }, [])
+
+  const handleIrAVueloDesdeEnvio = useCallback((vueloId: string) => {
+    const vuelo = vuelos.find((v) => v.id === vueloId)
+    if (vuelo) {
+      setSelectedVuelo(vuelo)
+      setSelectedEnvio(null)
+    }
+  }, [vuelos])
 
   // Cargar aeropuertos y vuelos del dataset
   useEffect(() => {
@@ -234,6 +252,7 @@ export default function OperacionDiaria() {
           velocidad={1}
           onAeropuertoClick={handleAeropuertoClick}
           onVueloClick={handleVueloClick}
+          onEnvioSelect={handleEnvioSelect}
           mapTz={mapTz}
           onMapTzChange={setMapTz}
         />
@@ -246,6 +265,13 @@ export default function OperacionDiaria() {
         onClose={() => setSelectedAeropuerto(null)}
         vuelos={vuelos}
         tzOffset={mapTz}
+      />
+      <EnvioModal
+        envio={selectedEnvio}
+        isOpen={!!selectedEnvio}
+        onClose={() => setSelectedEnvio(null)}
+        onIrAVuelo={handleIrAVueloDesdeEnvio}
+        vuelos={vuelos}
       />
     </div>
   )

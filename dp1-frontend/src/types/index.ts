@@ -110,3 +110,19 @@ export interface EnviosIncrementalesResponse {
   total: number;
   envios: EnvioIncremental[];
 }
+
+export interface EnvioEstado {
+  id: string;
+  origen: string;
+  destino: string;
+  estado: 'EN_ESPERA' | 'EMBARCADO' | 'EN_VUELO' | 'ENTREGADO';
+  aeropuertoActual: string;
+  vueloEsperado: string | null;
+  vueloActual: string | null;
+  cantidad: number;
+}
+
+export interface EnvioBusquedaResponse {
+  total: number;
+  envios: EnvioEstado[];
+}

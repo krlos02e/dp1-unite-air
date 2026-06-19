@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import type { AeropuertoDTO, VueloDTO } from '../types'
-import { AIRPORTS_DATA, getAirportCity } from '../data/airportsData'
+import { AIRPORTS_DATA, getAirportCityCountry } from '../data/airportsData'
 import { formatTimeInTimezone, formatDateInTimezone } from '../utils/timezoneFormat'
 
 interface Props {
@@ -36,7 +36,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
       if (filtroEntrantes === 'id') {
         return id.toLowerCase().includes(searchTerm.toLowerCase())
       } else {
-        const ciudadOrigen = getAirportCity(vuelo.origen) || vuelo.origen
+        const ciudadOrigen = getAirportCityCountry(vuelo.origen)
         return ciudadOrigen.toLowerCase().includes(searchTerm.toLowerCase())
       }
     })
@@ -51,7 +51,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
       if (filtroSalientes === 'id') {
         return id.toLowerCase().includes(searchTerm.toLowerCase())
       } else {
-        const ciudadDestino = getAirportCity(vuelo.destino) || vuelo.destino
+        const ciudadDestino = getAirportCityCountry(vuelo.destino)
         return ciudadDestino.toLowerCase().includes(searchTerm.toLowerCase())
       }
     })
@@ -66,7 +66,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
       if (filtroCancelados === 'id') {
         return id.toLowerCase().includes(searchTerm.toLowerCase())
       } else {
-        const ciudadDestino = getAirportCity(vuelo.destino) || vuelo.destino
+        const ciudadDestino = getAirportCityCountry(vuelo.destino)
         return ciudadDestino.toLowerCase().includes(searchTerm.toLowerCase())
       }
     })
@@ -95,7 +95,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-[1000] w-80 sm:w-96">
+    <div className="fixed bottom-6 right-6 z-[1000] w-[28rem] sm:w-[32rem]">
       <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-xl p-4 shadow-2xl">
         <div className="flex items-center justify-between mb-3">
           <div>
@@ -194,7 +194,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
                       <div key={id} className="text-xs text-gray-400 border-t border-gray-800 pt-1">
                         <div className="flex justify-between">
                           <span className="font-medium text-gray-300">{id}</span>
-                          <span className="text-sky-400">Desde: {vuelo ? (getAirportCity(vuelo.origen) || vuelo.origen) : '?'}</span>
+                          <span className="text-sky-400">Desde: {vuelo ? getAirportCityCountry(vuelo.origen) : '?'}</span>
                         </div>
                         {vuelo && (
                           <div className="text-gray-500">
@@ -252,7 +252,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
                       <div key={id} className="text-xs text-gray-400 border-t border-gray-800 pt-1">
                         <div className="flex justify-between">
                           <span className="font-medium text-gray-300">{id}</span>
-                          <span className="text-emerald-400">Hacia: {vuelo ? (getAirportCity(vuelo.destino) || vuelo.destino) : '?'}</span>
+                          <span className="text-emerald-400">Hacia: {vuelo ? getAirportCityCountry(vuelo.destino) : '?'}</span>
                         </div>
                         {vuelo && (
                           <div className="text-gray-500">
@@ -310,7 +310,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
                       <div key={id} className="text-xs text-gray-400 border-t border-gray-800 pt-1">
                         <div className="flex justify-between">
                           <span className="font-medium text-gray-300">{id}</span>
-                          <span className="text-red-400">Hacia: {vuelo ? (getAirportCity(vuelo.destino) || vuelo.destino) : '?'}</span>
+                          <span className="text-red-400">Hacia: {vuelo ? getAirportCityCountry(vuelo.destino) : '?'}</span>
                         </div>
                         {vuelo && (
                           <div className="text-gray-500">

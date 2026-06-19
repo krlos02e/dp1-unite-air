@@ -81,6 +81,28 @@ public class EnviosController {
         ));
     }
 
+    @GetMapping("/buscar")
+    public ResponseEntity<Map<String, Object>> buscarEnvios(@RequestParam(required = false, defaultValue = "") String q) {
+        List<Map<String, Object>> resultados = cargaArchivosService.buscarEnvios(q);
+        return ResponseEntity.ok(Map.of(
+                "total", resultados.size(),
+                "envios", resultados
+        ));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Map<String, Object>> buscarEnvio(@PathVariable String id) {
+        Map<String, Object> resultado = cargaArchivosService.buscarEnvio(id);
+        if (resultado == null) {
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "message", "Envio no encontrado: " + id
+            ));
+        }
+        resultado.put("success", true);
+        return ResponseEntity.ok(resultado);
+    }
+
     public record EnviosRequest(List<EnvioItem> envios) {}
     public record EnvioItem(String origen, String destino, String fecha, String hora, int cantidad, String remitente) {}
 }
