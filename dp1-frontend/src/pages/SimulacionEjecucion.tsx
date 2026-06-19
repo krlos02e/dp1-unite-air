@@ -24,6 +24,12 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
+    setSelectedAeropuerto(null)
+  }, [])
+
+  const handleAeropuertoClick = useCallback((a: AeropuertoDTO) => {
+    setSelectedAeropuerto((prev) => (prev?.codigoOACI === a.codigoOACI ? null : a))
+    setSelectedVuelo(null)
   }, [])
 
   // Keep selected flight synced with latest poll
@@ -179,7 +185,7 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
             aeropuertos={simulationState.aeropuertos}
             vuelos={simulationState.vuelos}
             selectedVueloId={selectedVuelo?.id || null}
-            onAeropuertoClick={setSelectedAeropuerto}
+            onAeropuertoClick={handleAeropuertoClick}
             onVueloClick={handleVueloClick}
           />
         </div>
@@ -213,7 +219,7 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
       </div>
 
       <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} />
-      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} />
+      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={simulationState?.vuelos} />
       <ResultadosModal
         state={simulationState}
         isOpen={showResultados}

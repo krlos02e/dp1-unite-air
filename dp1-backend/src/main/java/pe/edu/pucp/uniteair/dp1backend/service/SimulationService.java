@@ -54,7 +54,7 @@ public class SimulationService {
 
         Config_Simulacion config = new Config_Simulacion();
         config.setAeropuertoHub("SKBO");
-        config.setMinimaConexion(java.time.Duration.ofMinutes(30));
+        config.setMinimaConexion(java.time.Duration.ofMinutes(10));
         config.setIteracionesALNS(20);
         config.setMaxRutasPorPaquete(4);
         config.setMaxEscalas(2);

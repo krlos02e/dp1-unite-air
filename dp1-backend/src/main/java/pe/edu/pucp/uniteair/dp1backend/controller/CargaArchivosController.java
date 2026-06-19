@@ -12,8 +12,10 @@ import tasf.model.Vuelo;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
@@ -51,6 +53,22 @@ public class CargaArchivosController {
             return ResponseEntity.ok(List.of());
         }
         LocalDateTime ahora = LocalDateTime.now();
+        Set<String> vuelosCancelados = cargaArchivosService.obtenerVuelosCancelados();
+
+        Map<String, List<String>> entrantesMap = new HashMap<>();
+        Map<String, List<String>> salientesMap = new HashMap<>();
+        Map<String, List<String>> canceladosMap = new HashMap<>();
+
+        for (Vuelo v : dataset.getVuelos()) {
+            String origen = v.getOrigen().getCodigoOACI();
+            String destino = v.getDestino().getCodigoOACI();
+            entrantesMap.computeIfAbsent(destino, k -> new ArrayList<>()).add(v.getId());
+            salientesMap.computeIfAbsent(origen, k -> new ArrayList<>()).add(v.getId());
+            if (vuelosCancelados.contains(v.getId())) {
+                canceladosMap.computeIfAbsent(origen, k -> new ArrayList<>()).add(v.getId());
+            }
+        }
+
         List<AeropuertoDTO> aeropuertos = dataset.getAeropuertos().values().stream()
                 .map(a -> {
                     double[] coord = AeropuertoCoordenadas.get(a.getCodigoOACI());
@@ -61,8 +79,9 @@ public class CargaArchivosController {
                             .longitud(coord[1])
                             .capacidadMaxima(a.getCapacidadMaxima())
                             .ocupacionActual(ocup)
-                            .vuelosEntrantes(List.of())
-                            .vuelosSalientes(List.of())
+                            .vuelosEntrantes(entrantesMap.getOrDefault(a.getCodigoOACI(), List.of()))
+                            .vuelosSalientes(salientesMap.getOrDefault(a.getCodigoOACI(), List.of()))
+                            .vuelosCanceladosSalientes(canceladosMap.getOrDefault(a.getCodigoOACI(), List.of()))
                             .build();
                 })
                 .collect(Collectors.toList());
@@ -75,11 +94,25 @@ public class CargaArchivosController {
         if (dataset == null) {
             return ResponseEntity.ok(List.of());
         }
+        Set<String> vuelosCancelados = cargaArchivosService.obtenerVuelosCancelados();
+        LocalDateTime ahora = LocalDateTime.now();
         List<VueloDTO> vuelos = new ArrayList<>();
         for (Vuelo v : dataset.getVuelos()) {
             double[] orig = AeropuertoCoordenadas.get(v.getOrigen().getCodigoOACI());
             double[] dest = AeropuertoCoordenadas.get(v.getDestino().getCodigoOACI());
             int carga = cargaArchivosService.getCargaVuelo(v.getId());
+
+            String estado;
+            if (vuelosCancelados.contains(v.getId())) {
+                estado = "CANCELADO";
+            } else if (v.getLlegadaUtc() != null && ahora.isAfter(v.getLlegadaUtc())) {
+                estado = "CULMINADO";
+            } else if (v.getSalidaUtc() != null && ahora.isAfter(v.getSalidaUtc())) {
+                estado = "ACTIVO";
+            } else {
+                estado = "PROGRAMADO";
+            }
+
             vuelos.add(VueloDTO.builder()
                     .id(v.getId())
                     .origen(v.getOrigen().getCodigoOACI())
@@ -93,6 +126,7 @@ public class CargaArchivosController {
                     .capacidad(v.getCapacidadCarga())
                     .cargaActual(carga)
                     .progresoVuelo(0)
+                    .estado(estado)
                     .build());
         }
         return ResponseEntity.ok(vuelos);

@@ -24,4 +24,5 @@ public class VueloDTO {
     private int capacidad;
     private int cargaActual;
     private double progresoVuelo;
+    private String estado;
 }

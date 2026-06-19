@@ -7,7 +7,7 @@ import { getAirportCity, AIRPORTS_DATA } from '../data/airportsData'
 function tooltipForFlight(v: VueloDTO): string {
   const origen = getAirportCity(v.origen) || v.origen
   const destino = getAirportCity(v.destino) || v.destino
-  return `Vuelo ${origen} → ${destino} (${Math.round(v.progresoVuelo)}%) — Maletas: ${v.cargaActual}/${v.capacidad}`
+  return `Vuelo ${origen} → ${destino} (${Math.round(v.progresoVuelo)}%)<br>Maletas: ${v.cargaActual}/${v.capacidad}`
 }
 
 interface Props {
@@ -44,7 +44,7 @@ const AIRPLANE_COLOR_GREEN = '#22c55e'
 const AIRPLANE_COLOR_YELLOW = '#eab308'
 const AIRPLANE_COLOR_RED = '#ef4444'
 const AIRPLANE_SELECTED = '#facc15'
-const BASE_ICON_SIZE = 22
+const BASE_ICON_SIZE = 29
 
 function getAirplaneColor(cargaActual: number, capacidad: number): string {
   if (capacidad <= 0 || cargaActual <= 0) return '#38bdf8'
@@ -54,9 +54,9 @@ function getAirplaneColor(cargaActual: number, capacidad: number): string {
   return AIRPLANE_COLOR_RED
 }
 
-function getAirplaneIcon(selected: boolean, scale: number, cargaActual: number, capacidad: number): L.DivIcon {
+function getAirplaneIcon(selected: boolean, cargaActual: number, capacidad: number): L.DivIcon {
   const color = selected ? AIRPLANE_SELECTED : getAirplaneColor(cargaActual, capacidad)
-  const size = Math.round(BASE_ICON_SIZE * scale)
+  const size = BASE_ICON_SIZE
   const glowFilter = selected
     ? 'filter:drop-shadow(0 0 5px #facc15) drop-shadow(0 0 10px #facc15);'
     : 'filter:drop-shadow(0 1px 3px rgba(0,0,0,0.5));'
@@ -64,11 +64,11 @@ function getAirplaneIcon(selected: boolean, scale: number, cargaActual: number, 
     className: '',
     html: `<div class="airplane-body" style="width:${size}px;height:${size}px;will-change:transform;${glowFilter}">
       <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M1 13 L9 11.5 L9 12.5 Z" fill="${color}"/>
-        <path d="M23 13 L15 11.5 L15 12.5 Z" fill="${color}"/>
+        <path d="M1 13 L10.2 8.5 L10.5 12.5 Z" fill="${color}"/>
+        <path d="M23 13 L13.8 8.5 L13.5 12.5 Z" fill="${color}"/>
         <path d="M11.5 1 C11.5 1 10.2 6 10.2 12 C10.2 19 11.2 22.5 12 23 C12.8 22.5 13.8 19 13.8 12 C13.8 6 12.5 1 12.5 1 C12.5 1 12 0 12 0 C12 0 11.5 1 11.5 1 Z" fill="${color}"/>
-        <path d="M10.5 18 L7.5 22.5 L10.5 20.5 Z" fill="${color}"/>
-        <path d="M13.5 18 L16.5 22.5 L13.5 20.5 Z" fill="${color}"/>
+        <path d="M10.2 18 L7 23.5 L10.2 22 Z" fill="${color}"/>
+        <path d="M13.8 18 L17 23.5 L13.8 22 Z" fill="${color}"/>
         <ellipse cx="12" cy="3.5" rx="1.8" ry="2.8" fill="white" opacity="0.5"/>
       </svg>
     </div>`,
@@ -124,9 +124,9 @@ function bezierPoints(from: [number, number], to: [number, number], steps: numbe
   return pts
 }
 
-function applyTransform(mk: L.Marker, angle: number, scale: number) {
+function applyTransform(mk: L.Marker, angle: number) {
   const el = mk.getElement()?.querySelector('.airplane-body') as HTMLElement | null
-  if (el) el.style.transform = `rotate(${angle}deg) scale(${scale})`
+  if (el) el.style.transform = `rotate(${angle}deg)`
 }
 
 interface FlightAnim {
@@ -151,7 +151,8 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
   const selectedRouteRef = useRef<L.Polyline | null>(null)
   const selectedOriginRef = useRef<L.CircleMarker | null>(null)
   const selectedDestRef = useRef<L.CircleMarker | null>(null)
-  const zoomScaleRef = useRef(1)
+  const routeLayerRef = useRef<L.LayerGroup | null>(null)
+  const routeLinesRef = useRef<Map<string, L.Polyline>>(new Map())
   const flightAnimsRef = useRef<Map<string, FlightAnim>>(new Map())
   const rafIdRef = useRef<number>(0)
   const velocidadRef = useRef(velocidad)
@@ -175,6 +176,8 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       flightMarkersRef.current.clear()
       flightAngleRef.current.clear()
       flightAnimsRef.current.clear()
+      routeLinesRef.current.forEach((ln) => routeLayerRef.current?.removeLayer(ln))
+      routeLinesRef.current.clear()
       return
     }
 
@@ -187,6 +190,8 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       flightMarkersRef.current.clear()
       flightAngleRef.current.clear()
       flightAnimsRef.current.clear()
+      routeLinesRef.current.forEach((ln) => routeLayerRef.current?.removeLayer(ln))
+      routeLinesRef.current.clear()
     }
 
     persistedIds.forEach((id) => {
@@ -199,6 +204,11 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
           flightAngleRef.current.delete(id)
         }
         flightAnimsRef.current.delete(id)
+        const ln = routeLinesRef.current.get(id)
+        if (ln) {
+          routeLayerRef.current?.removeLayer(ln)
+          routeLinesRef.current.delete(id)
+        }
       }
     })
 
@@ -213,6 +223,11 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
           flightAngleRef.current.delete(v.id)
         }
         flightAnimsRef.current.delete(v.id)
+        const ln = routeLinesRef.current.get(v.id)
+        if (ln) {
+          routeLayerRef.current?.removeLayer(ln)
+          routeLinesRef.current.delete(v.id)
+        }
       } else {
         persistentFlightsRef.current.set(v.id, v)
       }
@@ -237,16 +252,14 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       }).addTo(map)
 
       circleLayerRef.current = L.layerGroup().addTo(map)
+      routeLayerRef.current = L.layerGroup().addTo(map)
       markerLayerRef.current = L.layerGroup().addTo(map)
       mapRef.current = map
 
       map.on('zoom', () => {
-        const z = map.getZoom()
-        const scale = Math.max(0.8, z / 2.5)
-        zoomScaleRef.current = scale
         flightMarkersRef.current.forEach((mk, id) => {
           const angle = flightAngleRef.current.get(id) ?? 0
-          applyTransform(mk, angle, scale)
+          applyTransform(mk, angle)
         })
       })
     }
@@ -386,10 +399,10 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       const v = vueloMap.get(id) || persistentFlightsRef.current.get(id)
       const carga = v?.cargaActual ?? 0
       const cap = v?.capacidad ?? 1
-      mk.setIcon(getAirplaneIcon(isSelected, zoomScaleRef.current, carga, cap))
+      mk.setIcon(getAirplaneIcon(isSelected, carga, cap))
       const angle = flightAngleRef.current.get(id)
       if (angle !== undefined) {
-        requestAnimationFrame(() => applyTransform(mk, angle, zoomScaleRef.current))
+        requestAnimationFrame(() => applyTransform(mk, angle))
       }
     })
   }, [selectedVueloId, vuelos])
@@ -410,6 +423,11 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
         flightMarkersRef.current.delete(id)
         flightAngleRef.current.delete(id)
         flightAnimsRef.current.delete(id)
+        const ln = routeLinesRef.current.get(id)
+        if (ln) {
+          routeLayerRef.current?.removeLayer(ln)
+          routeLinesRef.current.delete(id)
+        }
       }
     })
 
@@ -434,7 +452,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       let mk = flightMarkersRef.current.get(v.id)
       if (!mk) {
         const startPos = interpolatePosition(from, to, prevProgress / 100)
-        mk = L.marker(startPos, { icon: getAirplaneIcon(isSelected, zoomScaleRef.current, v.cargaActual, v.capacidad) })
+        mk = L.marker(startPos, { icon: getAirplaneIcon(isSelected, v.cargaActual, v.capacidad) })
         mk.bindTooltip(tooltipText, { direction: 'top', offset: L.point(0, -14) })
         mk.on('click', () => onVueloClickRef.current?.(v))
         markerLayerRef.current?.addLayer(mk)
@@ -445,10 +463,25 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
           interpolatePosition(from, to, Math.min(1, prevProgress / 100 + 0.01))
         )
         flightAngleRef.current.set(v.id, angle)
-        applyTransform(mk, angle, zoomScaleRef.current)
+        applyTransform(mk, angle)
       } else {
-        mk.setIcon(getAirplaneIcon(isSelected, zoomScaleRef.current, v.cargaActual, v.capacidad))
+        mk.setIcon(getAirplaneIcon(isSelected, v.cargaActual, v.capacidad))
         mk.setTooltipContent(tooltipText)
+      }
+
+      const pts = bezierPoints(from, to, 40)
+      const existingLine = routeLinesRef.current.get(v.id)
+      if (existingLine) {
+        existingLine.setLatLngs(pts)
+      } else {
+        const line = L.polyline(pts, {
+          dashArray: '4, 6',
+          color: '#6b7280',
+          weight: 1.5,
+          opacity: 0.15,
+        })
+        routeLayerRef.current?.addLayer(line)
+        routeLinesRef.current.set(v.id, line)
       }
     })
 
@@ -476,7 +509,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
         const posAfter = interpolatePosition(anim.from, anim.to, tAfter)
         const angle = bearing(posBefore, posAfter)
         flightAngleRef.current.set(id, angle)
-        applyTransform(mk, angle, zoomScaleRef.current)
+        applyTransform(mk, angle)
       })
 
       rafIdRef.current = requestAnimationFrame(animate)

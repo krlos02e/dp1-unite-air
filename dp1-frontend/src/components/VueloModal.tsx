@@ -15,11 +15,11 @@ export default function VueloModal({ vuelo, isOpen, onClose }: Props) {
   const destinoCiudad = getAirportCity(vuelo.destino) || vuelo.destino
 
   return (
-    <div className="fixed bottom-4 right-4 z-[1000] w-72 sm:w-80">
+    <div className="fixed bottom-6 right-6 z-[1000] w-72 sm:w-80">
       <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-xl p-4 shadow-2xl">
         {/* Header con X */}
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-bold text-sky-400 truncate">Vuelo {origenCiudad} - {destinoCiudad}</h2>
+          <h2 className="text-base font-bold text-sky-400 truncate">Detalles de vuelo</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-white transition-colors text-xl leading-none"
@@ -39,12 +39,8 @@ export default function VueloModal({ vuelo, isOpen, onClose }: Props) {
             <span className="font-medium text-red-400">{destinoCiudad}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-400">Capacidad</span>
-            <span className="font-medium">{vuelo.capacidad}</span>
-          </div>
-          <div className="flex justify-between">
             <span className="text-gray-400">Maletas a bordo</span>
-            <span className="font-medium text-amber-400">{vuelo.cargaActual}</span>
+            <span className="font-medium text-amber-400">{vuelo.cargaActual} / {vuelo.capacidad}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-400">Salida UTC</span>
@@ -56,7 +52,7 @@ export default function VueloModal({ vuelo, isOpen, onClose }: Props) {
           </div>
 
           <div className="flex justify-between pt-1">
-            <span className="text-gray-400">Progreso</span>
+            <span className="text-gray-400">Progreso de vuelo</span>
             <span className="text-sky-400 font-medium">{Math.round(vuelo.progresoVuelo)}%</span>
           </div>
         </div>

@@ -1,8 +1,55 @@
 import { useState } from 'react'
 import { cargaArchivosService } from '../services/CargaArchivosService'
+import CancelacionVuelos from '../components/CancelacionVuelos'
+import AgregarEnvios from '../components/AgregarEnvios'
 import type { CargaResult } from '../types'
 
+type Tab = 'carga' | 'cancelacion' | 'envios'
+
 export default function GestionEnvios() {
+  const [tab, setTab] = useState<Tab>('carga')
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <h2 className="text-xl sm:text-2xl font-bold mb-6">Gestión de Envíos</h2>
+
+      <div className="flex gap-1 mb-6 bg-gray-900 border border-gray-800 rounded-lg p-1">
+        <TabButton active={tab === 'carga'} onClick={() => setTab('carga')}>
+          Carga de Archivos
+        </TabButton>
+        <TabButton active={tab === 'cancelacion'} onClick={() => setTab('cancelacion')}>
+          Cancelación de Vuelos
+        </TabButton>
+        <TabButton active={tab === 'envios'} onClick={() => setTab('envios')}>
+          Agregar Envíos
+        </TabButton>
+      </div>
+
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+        {tab === 'carga' && <CargaArchivosTab />}
+        {tab === 'cancelacion' && <CancelacionVuelos />}
+        {tab === 'envios' && <AgregarEnvios />}
+      </div>
+    </div>
+  )
+}
+
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
+        active
+          ? 'bg-sky-600 text-white'
+          : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function CargaArchivosTab() {
   const [planesVuelo, setPlanesVuelo] = useState<File | null>(null)
   const [aeropuertos, setAeropuertos] = useState<File | null>(null)
   const [envios, setEnvios] = useState<File | null>(null)
@@ -35,43 +82,39 @@ export default function GestionEnvios() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <h2 className="text-xl sm:text-2xl font-bold mb-6">Gestión de Envíos</h2>
+    <div className="space-y-4">
+      <FileInput label="Archivo de vuelos (planes_vuelo.txt)" onChange={setPlanesVuelo} />
+      <FileInput label="Archivo de aeropuertos (aeropuertos.txt)" onChange={setAeropuertos} />
+      <FileInput label="Archivo de envíos (envíos.txt)" onChange={setEnvios} />
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
-        <FileInput label="Archivo de vuelos (planes_vuelo.txt)" onChange={setPlanesVuelo} />
-        <FileInput label="Archivo de aeropuertos (aeropuertos.txt)" onChange={setAeropuertos} />
-        <FileInput label="Archivo de envíos (envíos.txt)" onChange={setEnvios} />
+      <button
+        onClick={handleUpload}
+        disabled={uploading || (!planesVuelo && !aeropuertos && !envios)}
+        className="w-full bg-sky-600 hover:bg-sky-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-2.5 rounded-lg font-semibold"
+      >
+        {uploading ? 'Subiendo...' : 'Subir Archivos'}
+      </button>
 
-        <button
-          onClick={handleUpload}
-          disabled={uploading || (!planesVuelo && !aeropuertos && !envios)}
-          className="w-full bg-sky-600 hover:bg-sky-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-2.5 rounded-lg font-semibold"
-        >
-          {uploading ? 'Subiendo...' : 'Subir Archivos'}
-        </button>
+      {uploading && (
+        <div className="w-full bg-gray-700 rounded-full h-4">
+          <div className="bg-sky-500 h-4 rounded-full transition-all" style={{ width: `${progress}%` }} />
+        </div>
+      )}
 
-        {uploading && (
-          <div className="w-full bg-gray-700 rounded-full h-4">
-            <div className="bg-sky-500 h-4 rounded-full transition-all" style={{ width: `${progress}%` }} />
-          </div>
-        )}
+      {error && (
+        <div className="bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
 
-        {error && (
-          <div className="bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg text-sm">
-            {error}
-          </div>
-        )}
-
-        {result && (
-          <div className="bg-emerald-900/50 border border-emerald-700 text-emerald-300 p-4 rounded-lg space-y-1">
-            <p className="font-semibold">{result.message}</p>
-            <p>Aeropuertos: {result.aeropuertosCount}</p>
-            <p>Vuelos: {result.vuelosCount}</p>
-            <p>Paquetes: {result.paquetesCount}</p>
-          </div>
-        )}
-      </div>
+      {result && (
+        <div className="bg-emerald-900/50 border border-emerald-700 text-emerald-300 p-4 rounded-lg space-y-1">
+          <p className="font-semibold">{result.message}</p>
+          <p>Aeropuertos: {result.aeropuertosCount}</p>
+          <p>Vuelos: {result.vuelosCount}</p>
+          <p>Paquetes: {result.paquetesCount}</p>
+        </div>
+      )}
     </div>
   )
 }

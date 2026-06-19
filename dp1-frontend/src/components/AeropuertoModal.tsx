@@ -1,79 +1,329 @@
-import type { AeropuertoDTO } from '../types'
-import { getAirportCity } from '../data/airportsData'
+import { useState, useMemo } from 'react'
+import type { AeropuertoDTO, VueloDTO } from '../types'
+import { AIRPORTS_DATA, getAirportCity } from '../data/airportsData'
+import { formatDateTime } from '../utils/dateFormat'
 
 interface Props {
   aeropuerto: AeropuertoDTO | null
   isOpen: boolean
   onClose: () => void
+  vuelos?: VueloDTO[]
 }
 
-export default function AeropuertoModal({ aeropuerto, isOpen, onClose }: Props) {
+export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = [] }: Props) {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [expandedSection, setExpandedSection] = useState<'entrantes' | 'salientes' | 'cancelados' | null>(null)
+  const [filtroEntrantes, setFiltroEntrantes] = useState<'id' | 'ciudad'>('ciudad')
+  const [filtroSalientes, setFiltroSalientes] = useState<'id' | 'ciudad'>('ciudad')
+  const [filtroCancelados, setFiltroCancelados] = useState<'id' | 'ciudad'>('ciudad')
+
+  const staticData = aeropuerto ? AIRPORTS_DATA[aeropuerto.codigoOACI] : null
+  const pais = staticData?.pais || ''
+
+  const vuelosMap = useMemo(() => {
+    const map = new Map<string, VueloDTO>()
+    vuelos.forEach(v => map.set(v.id, v))
+    return map
+  }, [vuelos])
+
+  const filteredEntrantes = useMemo(() => {
+    if (!aeropuerto) return []
+    return aeropuerto.vuelosEntrantes.filter(id => {
+      const vuelo = vuelosMap.get(id)
+      if (!vuelo || vuelo.progresoVuelo <= 0 || vuelo.progresoVuelo >= 100) return false
+      if (!searchTerm) return true
+      if (filtroEntrantes === 'id') {
+        return id.toLowerCase().includes(searchTerm.toLowerCase())
+      } else {
+        const ciudadOrigen = getAirportCity(vuelo.origen) || vuelo.origen
+        return ciudadOrigen.toLowerCase().includes(searchTerm.toLowerCase())
+      }
+    })
+  }, [aeropuerto, searchTerm, vuelosMap, filtroEntrantes])
+
+  const filteredSalientes = useMemo(() => {
+    if (!aeropuerto) return []
+    return aeropuerto.vuelosSalientes.filter(id => {
+      const vuelo = vuelosMap.get(id)
+      if (!vuelo || vuelo.progresoVuelo <= 0 || vuelo.progresoVuelo >= 100) return false
+      if (!searchTerm) return true
+      if (filtroSalientes === 'id') {
+        return id.toLowerCase().includes(searchTerm.toLowerCase())
+      } else {
+        const ciudadDestino = getAirportCity(vuelo.destino) || vuelo.destino
+        return ciudadDestino.toLowerCase().includes(searchTerm.toLowerCase())
+      }
+    })
+  }, [aeropuerto, searchTerm, vuelosMap, filtroSalientes])
+
+  const filteredCancelados = useMemo(() => {
+    if (!aeropuerto) return []
+    return (aeropuerto.vuelosCanceladosSalientes || []).filter(id => {
+      const vuelo = vuelosMap.get(id)
+      if (!searchTerm) return true
+      if (!vuelo) return id.toLowerCase().includes(searchTerm.toLowerCase())
+      if (filtroCancelados === 'id') {
+        return id.toLowerCase().includes(searchTerm.toLowerCase())
+      } else {
+        const ciudadDestino = getAirportCity(vuelo.destino) || vuelo.destino
+        return ciudadDestino.toLowerCase().includes(searchTerm.toLowerCase())
+      }
+    })
+  }, [aeropuerto, searchTerm, vuelosMap, filtroCancelados])
+
+  const countEntrantesTransito = useMemo(() => {
+    if (!aeropuerto) return 0
+    return aeropuerto.vuelosEntrantes.filter(id => {
+      const vuelo = vuelosMap.get(id)
+      return vuelo && vuelo.progresoVuelo > 0 && vuelo.progresoVuelo < 100
+    }).length
+  }, [aeropuerto, vuelosMap])
+
+  const countSalientesTransito = useMemo(() => {
+    if (!aeropuerto) return 0
+    return aeropuerto.vuelosSalientes.filter(id => {
+      const vuelo = vuelosMap.get(id)
+      return vuelo && vuelo.progresoVuelo > 0 && vuelo.progresoVuelo < 100
+    }).length
+  }, [aeropuerto, vuelosMap])
+
   if (!isOpen || !aeropuerto) return null
 
-  const cityName = aeropuerto.ciudad || getAirportCity(aeropuerto.codigoOACI) || ''
-  const ocupacionPorcentaje = aeropuerto.capacidadMaxima > 0
-    ? Math.round((aeropuerto.ocupacionActual / aeropuerto.capacidadMaxima) * 100)
-    : 0
-  const ocupacionColor = ocupacionPorcentaje < 70 ? 'bg-emerald-500' : ocupacionPorcentaje < 90 ? 'bg-amber-500' : 'bg-red-500'
-  const ocupacionTextColor = ocupacionPorcentaje < 70 ? 'text-emerald-400' : ocupacionPorcentaje < 90 ? 'text-amber-400' : 'text-red-400'
+  const toggleSection = (section: 'entrantes' | 'salientes' | 'cancelados') => {
+    setExpandedSection(prev => prev === section ? null : section)
+  }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-lg mx-4" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-xl font-bold text-emerald-400 mb-1">{aeropuerto.codigoOACI}</h2>
-        {cityName && <p className="text-sm text-gray-400 mb-4">{cityName}</p>}
+    <div className="fixed bottom-6 right-6 z-[1000] w-80 sm:w-96">
+      <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-xl p-4 shadow-2xl">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-base font-bold text-emerald-400">{aeropuerto.codigoOACI}</h2>
+            <p className="text-xs text-gray-400">
+              {staticData?.ciudad || aeropuerto.ciudad || ''}{pais ? `, ${pais}` : ''}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white transition-colors text-xl leading-none"
+            aria-label="Cerrar"
+          >
+            &times;
+          </button>
+        </div>
 
-        <div className="space-y-3 text-sm">
+        <div className="space-y-2 text-sm mb-3">
           <div className="flex justify-between">
-            <span className="text-gray-400">Capacidad máxima</span>
-            <span className="font-medium">{aeropuerto.capacidadMaxima}</span>
+            <span className="text-gray-400">Maletas en almacén</span>
+            <span className="font-medium text-amber-400">{aeropuerto.ocupacionActual} / {aeropuerto.capacidadMaxima}</span>
           </div>
-
-          <div>
-            <div className="flex justify-between mb-1">
-              <span className="text-gray-400">Maletas en almacén</span>
-              <span className={`font-medium ${ocupacionTextColor}`}>
-                {aeropuerto.ocupacionActual} / {aeropuerto.capacidadMaxima} ({ocupacionPorcentaje}%)
-              </span>
-            </div>
-            <div className="w-full bg-gray-700 rounded-full h-2">
-              <div
-                className={`${ocupacionColor} h-2 rounded-full transition-all`}
-                style={{ width: `${Math.min(100, ocupacionPorcentaje)}%` }}
-              />
-            </div>
+          <div className="flex justify-between">
+            <span className="text-gray-400">Vuelos entrantes</span>
+            <span className="font-medium text-sky-400">{countEntrantesTransito}</span>
           </div>
-
-          <div>
-            <span className="text-gray-400 block mb-1">Vuelos entrantes ({aeropuerto.vuelosEntrantes.length})</span>
-            {aeropuerto.vuelosEntrantes.length > 0 ? (
-              <div className="max-h-32 overflow-y-auto pr-1">
-                <ul className="list-disc list-inside text-gray-300 text-xs space-y-0.5">
-                  {aeropuerto.vuelosEntrantes.map((v) => <li key={v}>{v}</li>)}
-                </ul>
-              </div>
-            ) : (
-              <p className="text-gray-500 text-xs">Ninguno</p>
-            )}
+          <div className="flex justify-between">
+            <span className="text-gray-400">Vuelos salientes</span>
+            <span className="font-medium text-sky-400">{countSalientesTransito}</span>
           </div>
-
-          <div>
-            <span className="text-gray-400 block mb-1">Vuelos salientes ({aeropuerto.vuelosSalientes.length})</span>
-            {aeropuerto.vuelosSalientes.length > 0 ? (
-              <div className="max-h-32 overflow-y-auto pr-1">
-                <ul className="list-disc list-inside text-gray-300 text-xs space-y-0.5">
-                  {aeropuerto.vuelosSalientes.map((v) => <li key={v}>{v}</li>)}
-                </ul>
-              </div>
-            ) : (
-              <p className="text-gray-500 text-xs">Ninguno</p>
-            )}
+          <div className="flex justify-between">
+            <span className="text-gray-400">Vuelos cancelados</span>
+            <span className="font-medium text-red-400">{(aeropuerto.vuelosCanceladosSalientes || []).length}</span>
           </div>
         </div>
 
-        <button onClick={onClose} className="mt-6 w-full bg-gray-700 hover:bg-gray-600 py-2 rounded-lg font-medium">
-          Cerrar
-        </button>
+        <div className="mb-3">
+          <input
+            type="text"
+            placeholder={
+              expandedSection === 'entrantes' 
+                ? (filtroEntrantes === 'id' ? 'Buscar por ID de vuelo...' : 'Buscar por ciudad de origen...')
+                : expandedSection === 'salientes'
+                ? (filtroSalientes === 'id' ? 'Buscar por ID de vuelo...' : 'Buscar por ciudad de destino...')
+                : expandedSection === 'cancelados'
+                ? (filtroCancelados === 'id' ? 'Buscar por ID de vuelo...' : 'Buscar por ciudad de destino...')
+                : 'Expandir una sección para buscar...'
+            }
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+          />
+        </div>
+
+        <div className="space-y-1 max-h-64 overflow-y-auto">
+          <div className="border border-gray-700 rounded-lg">
+            <button
+              onClick={() => toggleSection('entrantes')}
+              className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800 rounded-t-lg"
+            >
+              <span>Vuelos entrantes ({filteredEntrantes.length})</span>
+              <span className="text-xs">{expandedSection === 'entrantes' ? '▼' : '▶'}</span>
+            </button>
+            {expandedSection === 'entrantes' && (
+              <div className="px-3 pb-2 space-y-1">
+                <div className="flex gap-2 mb-2">
+                  <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="filtro-entrantes"
+                      value="ciudad"
+                      checked={filtroEntrantes === 'ciudad'}
+                      onChange={() => setFiltroEntrantes('ciudad')}
+                      className="w-3 h-3"
+                    />
+                    Ciudad origen
+                  </label>
+                  <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="filtro-entrantes"
+                      value="id"
+                      checked={filtroEntrantes === 'id'}
+                      onChange={() => setFiltroEntrantes('id')}
+                      className="w-3 h-3"
+                    />
+                    ID vuelo
+                  </label>
+                </div>
+                {filteredEntrantes.length === 0 ? (
+                  <p className="text-xs text-gray-500">Ninguno</p>
+                ) : (
+                  filteredEntrantes.map(id => {
+                    const vuelo = vuelosMap.get(id)
+                    return (
+                      <div key={id} className="text-xs text-gray-400 border-t border-gray-800 pt-1">
+                        <div className="flex justify-between">
+                          <span className="font-medium text-gray-300">{id}</span>
+                          <span className="text-sky-400">Desde: {vuelo ? (getAirportCity(vuelo.origen) || vuelo.origen) : '?'}</span>
+                        </div>
+                        {vuelo && (
+                          <div className="text-gray-500">
+                            Llegada: {formatDateTime(vuelo.llegadaUtc)}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="border border-gray-700 rounded-lg">
+            <button
+              onClick={() => toggleSection('salientes')}
+              className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800 rounded-t-lg"
+            >
+              <span>Vuelos salientes ({filteredSalientes.length})</span>
+              <span className="text-xs">{expandedSection === 'salientes' ? '▼' : '▶'}</span>
+            </button>
+            {expandedSection === 'salientes' && (
+              <div className="px-3 pb-2 space-y-1">
+                <div className="flex gap-2 mb-2">
+                  <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="filtro-salientes"
+                      value="ciudad"
+                      checked={filtroSalientes === 'ciudad'}
+                      onChange={() => setFiltroSalientes('ciudad')}
+                      className="w-3 h-3"
+                    />
+                    Ciudad destino
+                  </label>
+                  <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="filtro-salientes"
+                      value="id"
+                      checked={filtroSalientes === 'id'}
+                      onChange={() => setFiltroSalientes('id')}
+                      className="w-3 h-3"
+                    />
+                    ID vuelo
+                  </label>
+                </div>
+                {filteredSalientes.length === 0 ? (
+                  <p className="text-xs text-gray-500">Ninguno</p>
+                ) : (
+                  filteredSalientes.map(id => {
+                    const vuelo = vuelosMap.get(id)
+                    return (
+                      <div key={id} className="text-xs text-gray-400 border-t border-gray-800 pt-1">
+                        <div className="flex justify-between">
+                          <span className="font-medium text-gray-300">{id}</span>
+                          <span className="text-emerald-400">Hacia: {vuelo ? (getAirportCity(vuelo.destino) || vuelo.destino) : '?'}</span>
+                        </div>
+                        {vuelo && (
+                          <div className="text-gray-500">
+                            Salida: {formatDateTime(vuelo.salidaUtc)}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="border border-gray-700 rounded-lg">
+            <button
+              onClick={() => toggleSection('cancelados')}
+              className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800 rounded-t-lg"
+            >
+              <span>Vuelos cancelados ({filteredCancelados.length})</span>
+              <span className="text-xs">{expandedSection === 'cancelados' ? '▼' : '▶'}</span>
+            </button>
+            {expandedSection === 'cancelados' && (
+              <div className="px-3 pb-2 space-y-1">
+                <div className="flex gap-2 mb-2">
+                  <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="filtro-cancelados"
+                      value="ciudad"
+                      checked={filtroCancelados === 'ciudad'}
+                      onChange={() => setFiltroCancelados('ciudad')}
+                      className="w-3 h-3"
+                    />
+                    Ciudad destino
+                  </label>
+                  <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="filtro-cancelados"
+                      value="id"
+                      checked={filtroCancelados === 'id'}
+                      onChange={() => setFiltroCancelados('id')}
+                      className="w-3 h-3"
+                    />
+                    ID vuelo
+                  </label>
+                </div>
+                {filteredCancelados.length === 0 ? (
+                  <p className="text-xs text-gray-500">Ninguno</p>
+                ) : (
+                  filteredCancelados.map(id => {
+                    const vuelo = vuelosMap.get(id)
+                    return (
+                      <div key={id} className="text-xs text-gray-400 border-t border-gray-800 pt-1">
+                        <div className="flex justify-between">
+                          <span className="font-medium text-gray-300">{id}</span>
+                          <span className="text-red-400">Hacia: {vuelo ? (getAirportCity(vuelo.destino) || vuelo.destino) : '?'}</span>
+                        </div>
+                        {vuelo && (
+                          <div className="text-gray-500">
+                            Salida programada: {formatDateTime(vuelo.salidaUtc)}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )

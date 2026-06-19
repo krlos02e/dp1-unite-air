@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { cargaArchivosService } from '../services/CargaArchivosService'
 import MapaAeropuertos from '../components/MapaAeropuertos'
+import VueloModal from '../components/VueloModal'
+import AeropuertoModal from '../components/AeropuertoModal'
 import { AIRPORTS_DATA, getAirportCity } from '../data/airportsData'
 import type { VueloDTO, AeropuertoDTO } from '../types'
 
@@ -13,6 +15,7 @@ const aeropuertosFallback: AeropuertoDTO[] = Object.values(AIRPORTS_DATA).map((a
   ocupacionActual: 0,
   vuelosEntrantes: [],
   vuelosSalientes: [],
+  vuelosCanceladosSalientes: [],
 }))
 
 function parseUtc(iso: string): Date {
@@ -30,13 +33,6 @@ function calcularProgreso(vuelo: VueloDTO, now: Date): number {
   if (transcurrido < 0) return 0
   if (transcurrido > totalMs) return 100
   return (transcurrido / totalMs) * 100
-}
-
-function formatTime12h(iso: string): string {
-  if (!iso) return '--'
-  const d = parseUtc(iso)
-  const raw = d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true })
-  return raw.replace(/a\.\s*m\.?/g, 'a.m.').replace(/p\.\s*m\.?/g, 'p.m.')
 }
 
 function getPeruTimeString(): string {
@@ -95,10 +91,12 @@ export default function OperacionDiaria() {
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
+    setSelectedAeropuerto(null)
   }, [])
 
   const handleAeropuertoClick = useCallback((a: AeropuertoDTO) => {
     setSelectedAeropuerto((prev) => (prev?.codigoOACI === a.codigoOACI ? null : a))
+    setSelectedVuelo(null)
   }, [])
 
   // Cargar aeropuertos y vuelos del dataset
@@ -155,6 +153,23 @@ export default function OperacionDiaria() {
     const interval = setInterval(updateFlights, 1000)
     return () => clearInterval(interval)
   }, [dataLoaded, vuelosOriginales])
+
+  // Polling de vuelos cada 15 segundos para reflejar cancelaciones y nuevos envíos
+  useEffect(() => {
+    if (!dataLoaded) return
+
+    const pollVuelos = async () => {
+      try {
+        const vuelosData = await cargaArchivosService.obtenerVuelos()
+        setVuelosOriginales(vuelosData)
+      } catch {
+        // ignore polling errors
+      }
+    }
+
+    const interval = setInterval(pollVuelos, 15000)
+    return () => clearInterval(interval)
+  }, [dataLoaded])
 
   const vuelosEnTransito = vuelos.filter((v) => v.progresoVuelo > 0 && v.progresoVuelo < 100)
   const vuelosEnTransitoVisibles = vuelosEnTransito.filter((v) => shouldDisplayFlight(v.id, FLIGHT_DISPLAY_PERCENTAGE))
@@ -219,126 +234,15 @@ export default function OperacionDiaria() {
           onAeropuertoClick={handleAeropuertoClick}
           onVueloClick={handleVueloClick}
         />
-
-        {selectedVuelo && (
-          <div className="absolute bottom-4 right-4 z-[1001] bg-gray-900/95 border border-gray-700 rounded-xl p-3 w-80 shadow-2xl backdrop-blur-sm">
-            <h3 className="text-sm font-bold text-gray-100 mb-2">Detalle del Vuelo</h3>
-            <div className="space-y-2 text-sm text-gray-400">
-              <div className="flex justify-between">
-                <span>Vuelo:</span>
-                <span className="font-semibold text-sky-300">{getAirportCity(selectedVuelo.origen) || selectedVuelo.origen} → {getAirportCity(selectedVuelo.destino) || selectedVuelo.destino}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Salida:</span>
-                <span className="font-mono text-gray-200">{formatTime12h(selectedVuelo.salidaUtc)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Llegada:</span>
-                <span className="font-mono text-gray-200">{formatTime12h(selectedVuelo.llegadaUtc)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Progreso:</span>
-                <span className="font-mono text-emerald-300">{Math.round(selectedVuelo.progresoVuelo)}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Capacidad:</span>
-                <span className="font-mono text-gray-200">{selectedVuelo.capacidad}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Maletas a bordo:</span>
-                <span className="font-mono text-amber-300">{selectedVuelo.cargaActual}</span>
-              </div>
-            </div>
-            <div className="mt-3 flex justify-end">
-              <button
-                onClick={() => setSelectedVuelo(null)}
-                className="text-xs text-gray-500 hover:text-red-400 cursor-pointer"
-              >
-                ✕ Cerrar detalle
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Modal de Aeropuerto */}
-      {selectedAeropuerto && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-lg mx-4 shadow-2xl max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-sky-400">
-                {getAirportCity(selectedAeropuerto.codigoOACI) || selectedAeropuerto.codigoOACI}
-              </h3>
-              <button
-                onClick={() => setSelectedAeropuerto(null)}
-                className="text-gray-500 hover:text-red-400 cursor-pointer text-lg"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-4">
-              {/* Vuelos Salientes */}
-              <div>
-                <h4 className="text-sm font-bold text-emerald-400 mb-2">Vuelos Salientes</h4>
-                <div className="space-y-1">
-                  {vuelosEnTransitoVisibles
-                    .filter((v) => v.origen === selectedAeropuerto.codigoOACI)
-                    .map((v) => (
-                      <div
-                        key={v.id}
-                        className="flex justify-between items-center text-sm text-gray-300 bg-gray-800 rounded-lg px-3 py-2 cursor-pointer hover:bg-gray-700"
-                        onClick={() => {
-                          setSelectedAeropuerto(null)
-                          handleVueloClick(v)
-                        }}
-                      >
-                        <span>
-                          {getAirportCity(v.origen) || v.origen} → {getAirportCity(v.destino) || v.destino}
-                        </span>
-                        <span className="font-mono text-xs text-gray-400">
-                          Salida {formatTime12h(v.salidaUtc)} — Llegada {formatTime12h(v.llegadaUtc)}
-                        </span>
-                      </div>
-                    ))}
-                  {vuelosEnTransitoVisibles.filter((v) => v.origen === selectedAeropuerto.codigoOACI).length === 0 && (
-                    <p className="text-xs text-gray-500 text-center py-2">No hay vuelos salientes visibles</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Vuelos Entrantes */}
-              <div>
-                <h4 className="text-sm font-bold text-amber-400 mb-2">Vuelos Entrantes</h4>
-                <div className="space-y-1">
-                  {vuelosEnTransitoVisibles
-                    .filter((v) => v.destino === selectedAeropuerto.codigoOACI)
-                    .map((v) => (
-                      <div
-                        key={v.id}
-                        className="flex justify-between items-center text-sm text-gray-300 bg-gray-800 rounded-lg px-3 py-2 cursor-pointer hover:bg-gray-700"
-                        onClick={() => {
-                          setSelectedAeropuerto(null)
-                          handleVueloClick(v)
-                        }}
-                      >
-                        <span>
-                          {getAirportCity(v.origen) || v.origen} → {getAirportCity(v.destino) || v.destino}
-                        </span>
-                        <span className="font-mono text-xs text-gray-400">
-                          Salida {formatTime12h(v.salidaUtc)} — Llegada {formatTime12h(v.llegadaUtc)}
-                        </span>
-                      </div>
-                    ))}
-                  {vuelosEnTransitoVisibles.filter((v) => v.destino === selectedAeropuerto.codigoOACI).length === 0 && (
-                    <p className="text-xs text-gray-500 text-center py-2">No hay vuelos entrantes visibles</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} />
+      <AeropuertoModal
+        aeropuerto={selectedAeropuerto}
+        isOpen={!!selectedAeropuerto}
+        onClose={() => setSelectedAeropuerto(null)}
+        vuelos={vuelos}
+      />
     </div>
   )
 }

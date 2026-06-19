@@ -6,6 +6,7 @@ import pe.edu.pucp.uniteair.dp1backend.cache.SimulationCache;
 import pe.edu.pucp.uniteair.dp1backend.config.AeropuertoCoordenadas;
 import pe.edu.pucp.uniteair.dp1backend.dto.*;
 import pe.edu.pucp.uniteair.dp1backend.repository.SimulationSessionRepository;
+import pe.edu.pucp.uniteair.dp1backend.service.CargaArchivosService;
 import tasf.config.Config_Simulacion;
 import tasf.core.Dataset;
 import tasf.core.EstadoOperacional;
@@ -33,6 +34,7 @@ public class SimulationEngine {
 
     private final SimulationCache simulationCache;
     private final SimulationSessionRepository sessionRepository;
+    private final CargaArchivosService cargaArchivosService;
     private final Map<String, CompletableFuture<Void>> activeSimulations = new ConcurrentHashMap<>();
     private final Map<String, Boolean> cancellationFlags = new ConcurrentHashMap<>();
     private final Map<String, Boolean> pauseFlags = new ConcurrentHashMap<>();
@@ -42,9 +44,10 @@ public class SimulationEngine {
     private final Map<String, Map<String, double[]>> flightCoordCache = new ConcurrentHashMap<>();
     private final Map<String, Map<String, Long>> flightDurationCache = new ConcurrentHashMap<>();
 
-    public SimulationEngine(SimulationCache simulationCache, SimulationSessionRepository sessionRepository) {
+    public SimulationEngine(SimulationCache simulationCache, SimulationSessionRepository sessionRepository, CargaArchivosService cargaArchivosService) {
         this.simulationCache = simulationCache;
         this.sessionRepository = sessionRepository;
+        this.cargaArchivosService = cargaArchivosService;
     }
 
     public void pausarSimulacion(String sessionId) {
@@ -308,7 +311,8 @@ public class SimulationEngine {
                         Ruta ruta = entry.getValue();
                         if (!ruta.getVuelos().isEmpty()) {
                             Vuelo ultimo = ruta.getVuelos().get(ruta.getVuelos().size() - 1);
-                            if (simTime.isAfter(ultimo.getLlegadaUtc())) {
+                            LocalDateTime tiempoEntrega = ultimo.getLlegadaUtc().plusMinutes(15);
+                            if (simTime.isAfter(tiempoEntrega)) {
                                 maletasEntregadas += cantidad;
                                 maletasEnTransito -= cantidad;
                                 rutasEntregadas.add(rutaId);
@@ -483,11 +487,15 @@ public class SimulationEngine {
         int vuelosEnTransito = 0;
         int vuelosCancelados = 0;
 
+        Set<String> vuelosCanceladosSet = cargaArchivosService.obtenerVuelosCancelados();
+
         List<VueloDTO> vuelosDTO = new ArrayList<>();
         Map<String, double[]> flightCoords = flightCoordCache.get(sessionId);
         Map<String, Long> flightDurations = flightDurationCache.get(sessionId);
         for (Vuelo v : dataset.getVuelos()) {
             if (v.getSalidaUtc() != null && v.getSalidaUtc().isBefore(fechaInicio)) continue;
+
+            boolean isCancelled = vuelosCanceladosSet.contains(v.getId());
             double progreso = 0.0;
             Long totalMins = (flightDurations != null) ? flightDurations.get(v.getId()) : null;
             if (simTime != null && v.getSalidaUtc() != null && v.getLlegadaUtc() != null && totalMins != null && totalMins > 0) {
@@ -499,12 +507,22 @@ public class SimulationEngine {
                 if (simTime.isAfter(v.getLlegadaUtc())) progreso = 100.0;
                 if (simTime.isBefore(v.getSalidaUtc())) progreso = 0.0;
             }
-            if (progreso >= 100.0) vuelosCulminados++;
-            else if (progreso > 0.0) vuelosEnTransito++;
-            else if (simTime != null && v.getSalidaUtc() != null && simTime.isAfter(v.getSalidaUtc())) vuelosCancelados++;
 
-            // Send active AND recently completed flights so frontend can show them at destination
-            if (progreso > 0.0 && flightCoords != null) {
+            String estado;
+            if (isCancelled) {
+                estado = "CANCELADO";
+                vuelosCancelados++;
+            } else if (progreso >= 100.0) {
+                estado = "CULMINADO";
+                vuelosCulminados++;
+            } else if (progreso > 0.0) {
+                estado = "ACTIVO";
+                vuelosEnTransito++;
+            } else {
+                estado = "PROGRAMADO";
+            }
+
+            if (flightCoords != null) {
                 double[] coords = flightCoords.get(v.getId());
                 if (coords != null) {
                     vuelosDTO.add(VueloDTO.builder()
@@ -518,6 +536,7 @@ public class SimulationEngine {
                             .capacidad(v.getCapacidadCarga())
                             .cargaActual(cargaVuelo.getOrDefault(v.getId(), 0))
                             .progresoVuelo(progreso)
+                            .estado(estado)
                             .build());
                 }
             }
@@ -534,6 +553,15 @@ public class SimulationEngine {
             }
         }
 
+        // Pre-calculate cancelled flights by origin airport
+        Map<String, List<String>> canceladosPorOrigen = new HashMap<>();
+        for (Vuelo v : dataset.getVuelos()) {
+            if (vuelosCanceladosSet.contains(v.getId())) {
+                String origen = v.getOrigen().getCodigoOACI();
+                canceladosPorOrigen.computeIfAbsent(origen, k -> new ArrayList<>()).add(v.getId());
+            }
+        }
+
         List<AeropuertoDTO> aeropuertosDTO = new ArrayList<>();
         List<AeropuertoDTO> airportBase = airportBaseCache.get(sessionId);
         if (airportBase != null) {
@@ -545,6 +573,7 @@ public class SimulationEngine {
                 List<String> salientes = base.getVuelosSalientes().stream()
                         .filter(activeFlightIds::contains)
                         .collect(Collectors.toList());
+                List<String> canceladosSalientes = canceladosPorOrigen.getOrDefault(base.getCodigoOACI(), new ArrayList<>());
                 aeropuertosDTO.add(AeropuertoDTO.builder()
                         .codigoOACI(base.getCodigoOACI())
                         .latitud(base.getLatitud()).longitud(base.getLongitud())
@@ -552,6 +581,7 @@ public class SimulationEngine {
                         .ocupacionActual(ocup)
                         .vuelosEntrantes(entrantes)
                         .vuelosSalientes(salientes)
+                        .vuelosCanceladosSalientes(canceladosSalientes)
                         .build());
             }
         }

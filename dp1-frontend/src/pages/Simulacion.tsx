@@ -23,6 +23,7 @@ const aeropuertosFallback: AeropuertoDTO[] = Object.values(AIRPORTS_DATA).map((a
   ocupacionActual: 0,
   vuelosEntrantes: [],
   vuelosSalientes: [],
+  vuelosCanceladosSalientes: [],
 }))
 
 export default function Simulacion() {
@@ -51,6 +52,12 @@ export default function Simulacion() {
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
+    setSelectedAeropuerto(null)
+  }, [])
+
+  const handleAeropuertoClick = useCallback((a: AeropuertoDTO) => {
+    setSelectedAeropuerto((prev) => (prev?.codigoOACI === a.codigoOACI ? null : a))
+    setSelectedVuelo(null)
   }, [])
 
   const [showResultados, setShowResultados] = useState(false)
@@ -335,7 +342,7 @@ export default function Simulacion() {
           vuelos={vuelos}
           selectedVueloId={selectedVuelo?.id || null}
           velocidad={1}
-          onAeropuertoClick={setSelectedAeropuerto}
+          onAeropuertoClick={handleAeropuertoClick}
           onVueloClick={handleVueloClick}
         />
 
@@ -361,7 +368,7 @@ export default function Simulacion() {
       </div>
 
       <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} />
-      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} />
+      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={simulationState?.vuelos} />
       <ResultadosModal
         state={resultSnapshot}
         isOpen={showResultados}

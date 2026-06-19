@@ -1,5 +1,5 @@
 import { HttpClient } from './HttpClient'
-import type { CargaResult, AeropuertoDTO, VueloDTO } from '../types'
+import type { CargaResult, AeropuertoDTO, VueloDTO, CancelarVueloResult, EnvioEntrada, AgregarEnviosResult, EnviosIncrementalesResponse } from '../types'
 
 class CargaArchivosService extends HttpClient {
   upload(
@@ -27,6 +27,24 @@ class CargaArchivosService extends HttpClient {
 
   obtenerVuelos(): Promise<VueloDTO[]> {
     return this.get<VueloDTO[]>('/carga/vuelos')
+  }
+
+  cancelarVuelo(origen: string, destino: string, horaSalidaLocal: string): Promise<CancelarVueloResult> {
+    return this.instance.post('/vuelos/cancelar', { origen, destino, horaSalidaLocal })
+      .then((r) => r.data as CancelarVueloResult)
+  }
+
+  obtenerVuelosCancelados(): Promise<string[]> {
+    return this.get<string[]>('/vuelos/cancelados')
+  }
+
+  agregarEnvios(envios: EnvioEntrada[]): Promise<AgregarEnviosResult> {
+    return this.instance.post('/envios', { envios })
+      .then((r) => r.data as AgregarEnviosResult)
+  }
+
+  obtenerEnviosIncrementales(): Promise<EnviosIncrementalesResponse> {
+    return this.get<EnviosIncrementalesResponse>('/envios/incrementales')
   }
 }
 

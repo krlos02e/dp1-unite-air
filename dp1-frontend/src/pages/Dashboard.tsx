@@ -14,6 +14,16 @@ export default function Dashboard({ sessionId }: Props) {
   const [selectedVuelo, setSelectedVuelo] = useState<VueloDTO | null>(null)
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
 
+  const handleVueloClick = useCallback((v: VueloDTO) => {
+    setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
+    setSelectedAeropuerto(null)
+  }, [])
+
+  const handleAeropuertoClick = useCallback((a: AeropuertoDTO) => {
+    setSelectedAeropuerto((prev) => (prev?.codigoOACI === a.codigoOACI ? null : a))
+    setSelectedVuelo(null)
+  }, [])
+
   const fetchData = useCallback(async () => {
     try {
       const d = await dashboardService.obtener(sessionId)
@@ -50,13 +60,13 @@ export default function Dashboard({ sessionId }: Props) {
         <MapaAeropuertos
           aeropuertos={data.aeropuertos}
           vuelos={data.vuelosActivos}
-          onAeropuertoClick={setSelectedAeropuerto}
-          onVueloClick={setSelectedVuelo}
+          onAeropuertoClick={handleAeropuertoClick}
+          onVueloClick={handleVueloClick}
         />
       </div>
 
       <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} />
-      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} />
+      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={data.vuelosActivos} />
     </div>
   )
 }

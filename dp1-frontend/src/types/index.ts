@@ -11,6 +11,7 @@ export interface VueloDTO {
   capacidad: number;
   cargaActual: number;
   progresoVuelo: number;
+  estado?: string;
 }
 
 export interface AeropuertoDTO {
@@ -22,6 +23,7 @@ export interface AeropuertoDTO {
   ocupacionActual: number;
   vuelosEntrantes: string[];
   vuelosSalientes: string[];
+  vuelosCanceladosSalientes: string[];
 }
 
 export interface LogEntry {
@@ -71,4 +73,40 @@ export interface DashboardData {
   totalAeropuertos: number;
   aeropuertos: AeropuertoDTO[];
   vuelosActivos: VueloDTO[];
+}
+
+export interface EnvioEntrada {
+  origen: string;
+  destino: string;
+  fecha: string;
+  hora: string;
+  cantidad: number;
+  remitente: string;
+}
+
+export interface CancelarVueloResult {
+  success: boolean;
+  message: string;
+  vueloId?: string;
+}
+
+export interface AgregarEnviosResult {
+  success: boolean;
+  message: string;
+  enviosAgregados: number;
+  detalles?: { id: string; origen: string; destino: string; cantidad: number }[];
+}
+
+export interface EnvioIncremental {
+  id: string;
+  origen: string;
+  destino: string;
+  fecha: string;
+  hora: string;
+  cantidad: number;
+}
+
+export interface EnviosIncrementalesResponse {
+  total: number;
+  envios: EnvioIncremental[];
 }

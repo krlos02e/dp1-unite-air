@@ -20,4 +20,5 @@ public class AeropuertoDTO {
     private int ocupacionActual;
     private List<String> vuelosEntrantes;
     private List<String> vuelosSalientes;
+    private List<String> vuelosCanceladosSalientes;
 }
