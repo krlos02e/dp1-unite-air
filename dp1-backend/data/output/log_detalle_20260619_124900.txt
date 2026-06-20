@@ -1936,3 +1936,54 @@
 
       VIDP-000006903 | VIDP→EDDI | cant=2 | creado=2026-06-21T23:55 | deadline=2026-06-23T23:55
 
+[BUSQUEDA RUTAS] 1114 tareas de busqueda paralela completadas [1060ms]
+  [DIAG-ALNS] PAQUETES INCOMPLETOS: 2
+    [SIN RUTAS CANDIDATAS] 2 paquetes (rutas fuera de deadline o ventana):
+      LBSF-000007604 | LBSF→LDZA | cant=4 | creado=2026-06-19T22:06 | deadline=2026-06-20T22:06
+
+      LBSF-000007607 | LBSF→LATI | cant=4 | creado=2026-06-19T23:37 | deadline=2026-06-20T23:37
+
+[BUSQUEDA RUTAS] 1324 tareas de busqueda paralela completadas [1484ms]
+  [DIAG-ALNS] PAQUETES INCOMPLETOS: 2
+    [SIN RUTAS CANDIDATAS] 2 paquetes (rutas fuera de deadline o ventana):
+      LBSF-000007604 | LBSF→LDZA | cant=4 | creado=2026-06-19T22:06 | deadline=2026-06-20T22:06
+
+      LBSF-000007607 | LBSF→LATI | cant=4 | creado=2026-06-19T23:37 | deadline=2026-06-20T23:37
+
+[BUSQUEDA RUTAS] 1161 tareas de busqueda paralela completadas [1131ms]
+  [DIAG-ALNS] PAQUETES INCOMPLETOS: 2
+    [SIN RUTAS CANDIDATAS] 2 paquetes (rutas fuera de deadline o ventana):
+      LBSF-000007604 | LBSF→LDZA | cant=4 | creado=2026-06-19T22:06 | deadline=2026-06-20T22:06
+
+      LBSF-000007607 | LBSF→LATI | cant=4 | creado=2026-06-19T23:37 | deadline=2026-06-20T23:37
+
+[BUSQUEDA RUTAS] 1343 tareas de busqueda paralela completadas [1515ms]
+  [DIAG-ALNS] PAQUETES INCOMPLETOS: 2
+    [SIN RUTAS CANDIDATAS] 2 paquetes (rutas fuera de deadline o ventana):
+      LBSF-000007604 | LBSF→LDZA | cant=4 | creado=2026-06-19T22:06 | deadline=2026-06-20T22:06
+
+      LBSF-000007607 | LBSF→LATI | cant=4 | creado=2026-06-19T23:37 | deadline=2026-06-20T23:37
+
+[BUSQUEDA RUTAS] 1255 tareas de busqueda paralela completadas [1585ms]
+  [DIAG-ALNS] PAQUETES INCOMPLETOS: 2
+    [SIN RUTAS CANDIDATAS] 2 paquetes (rutas fuera de deadline o ventana):
+      LBSF-000007604 | LBSF→LDZA | cant=4 | creado=2026-06-19T22:06 | deadline=2026-06-20T22:06
+
+      LBSF-000007607 | LBSF→LATI | cant=4 | creado=2026-06-19T23:37 | deadline=2026-06-20T23:37
+
+[BUSQUEDA RUTAS] 1385 tareas de busqueda paralela completadas [1462ms]
+  [DIAG-ALNS] PAQUETES INCOMPLETOS: 1
+    [SIN RUTAS CANDIDATAS] 1 paquetes (rutas fuera de deadline o ventana):
+      LBSF-000007607 | LBSF→LATI | cant=4 | creado=2026-06-19T23:37 | deadline=2026-06-20T23:37
+
+[BUSQUEDA RUTAS] 1340 tareas de busqueda paralela completadas [1551ms]
+  [DIAG-ALNS] PAQUETES INCOMPLETOS: 4
+    [SIN RUTAS CANDIDATAS] 4 paquetes (rutas fuera de deadline o ventana):
+      LBSF-000007604 | LBSF→LDZA | cant=4 | creado=2026-06-19T22:06 | deadline=2026-06-20T22:06
+
+      LBSF-000007607 | LBSF→LATI | cant=4 | creado=2026-06-19T23:37 | deadline=2026-06-20T23:37
+
+      LBSF-000007652 | LBSF→LDZA | cant=2 | creado=2026-06-21T00:35 | deadline=2026-06-22T00:35
+
+      OPKC-000006591 | OPKC→UBBB | cant=2 | creado=2026-06-21T00:09 | deadline=2026-06-22T00:09
+
