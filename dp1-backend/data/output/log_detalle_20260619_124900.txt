@@ -1987,3 +1987,691 @@
 
       OPKC-000006591 | OPKC→UBBB | cant=2 | creado=2026-06-21T00:09 | deadline=2026-06-22T00:09
 
+[BUSQUEDA RUTAS] 1433 tareas de busqueda paralela completadas [1772ms]
+  [DIAG-ALNS] PAQUETES INCOMPLETOS: 3
+    [SIN RUTAS CANDIDATAS] 3 paquetes (rutas fuera de deadline o ventana):
+      LBSF-000007604 | LBSF→LDZA | cant=4 | creado=2026-06-19T22:06 | deadline=2026-06-20T22:06
+
+      LBSF-000007652 | LBSF→LDZA | cant=2 | creado=2026-06-21T00:35 | deadline=2026-06-22T00:35
+
+      OPKC-000006591 | OPKC→UBBB | cant=2 | creado=2026-06-21T00:09 | deadline=2026-06-22T00:09
+
+[BUSQUEDA RUTAS] 2246 tareas de busqueda paralela completadas [3719ms]
+[BUSQUEDA RUTAS] 1455 tareas de busqueda paralela completadas [2843ms]
+[BUSQUEDA RUTAS] 2246 tareas de busqueda paralela completadas [4036ms]
+[BUSQUEDA RUTAS] 1454 tareas de busqueda paralela completadas [3050ms]
+[BUSQUEDA RUTAS] 2246 tareas de busqueda paralela completadas [2923ms]
+  [DIAG-ALNS] PAQUETES INCOMPLETOS: 4
+    [SIN RUTAS CANDIDATAS] 4 paquetes (rutas fuera de deadline o ventana):
+      LBSF-000007604 | LBSF→LDZA | cant=4 | creado=2026-06-19T22:06 | deadline=2026-06-20T22:06
+
+      LBSF-000007607 | LBSF→LATI | cant=4 | creado=2026-06-19T23:37 | deadline=2026-06-20T23:37
+
+      LBSF-000007652 | LBSF→LDZA | cant=2 | creado=2026-06-21T00:35 | deadline=2026-06-22T00:35
+
+      OPKC-000006591 | OPKC→UBBB | cant=2 | creado=2026-06-21T00:09 | deadline=2026-06-22T00:09
+
+  [DIAG-ALNS] PAQUETES INCOMPLETOS: 149
+    [SIN RUTAS CANDIDATAS] 149 paquetes (rutas fuera de deadline o ventana):
+      EBCI-000008234 | EBCI→UBBB | cant=2 | creado=2026-06-19T22:10 | deadline=2026-06-21T22:10
+
+      EBCI-000008240 | EBCI→OMDB | cant=2 | creado=2026-06-19T23:15 | deadline=2026-06-21T23:15
+
+      EBCI-000008242 | EBCI→OMDB | cant=2 | creado=2026-06-19T23:32 | deadline=2026-06-21T23:32
+
+      EBCI-000008246 | EBCI→UBBB | cant=2 | creado=2026-06-20T00:10 | deadline=2026-06-22T00:10
+
+      EBCI-000008250 | EBCI→UBBB | cant=2 | creado=2026-06-20T00:59 | deadline=2026-06-22T00:59
+
+      EBCI-000008266 | EBCI→OPKC | cant=1 | creado=2026-06-20T03:38 | deadline=2026-06-22T03:38
+
+      EBCI-000008278 | EBCI→SUAA | cant=1 | creado=2026-06-20T05:37 | deadline=2026-06-22T05:37
+
+      EBCI-000008283 | EBCI→OMDB | cant=1 | creado=2026-06-20T06:28 | deadline=2026-06-22T06:28
+
+      EBCI-000008315 | EBCI→OMDB | cant=1 | creado=2026-06-20T11:42 | deadline=2026-06-22T11:42
+
+      EBCI-000008319 | EBCI→OPKC | cant=1 | creado=2026-06-20T12:21 | deadline=2026-06-22T12:21
+
+      EBCI-000008328 | EBCI→OPKC | cant=1 | creado=2026-06-20T13:55 | deadline=2026-06-22T13:55
+
+      EBCI-000008339 | EBCI→OMDB | cant=1 | creado=2026-06-20T15:41 | deadline=2026-06-22T15:41
+
+      EBCI-000008359 | EBCI→UBBB | cant=1 | creado=2026-06-20T19:03 | deadline=2026-06-22T19:03
+
+      EBCI-000008361 | EBCI→OPKC | cant=1 | creado=2026-06-20T19:24 | deadline=2026-06-22T19:24
+
+      EBCI-000008378 | EBCI→OPKC | cant=2 | creado=2026-06-21T00:48 | deadline=2026-06-23T00:48
+
+      EBCI-000008391 | EBCI→SEQM | cant=1 | creado=2026-06-21T02:59 | deadline=2026-06-23T02:59
+
+      EBCI-000008392 | EBCI→SUAA | cant=1 | creado=2026-06-21T03:08 | deadline=2026-06-23T03:08
+
+      EBCI-000008395 | EBCI→UBBB | cant=1 | creado=2026-06-21T03:33 | deadline=2026-06-23T03:33
+
+      EBCI-000008401 | EBCI→SUAA | cant=1 | creado=2026-06-21T04:35 | deadline=2026-06-23T04:35
+
+      EBCI-000008408 | EBCI→LOWW | cant=1 | creado=2026-06-21T05:48 | deadline=2026-06-22T05:48
+
+      EBCI-000008415 | EBCI→OPKC | cant=1 | creado=2026-06-21T06:52 | deadline=2026-06-23T06:52
+
+      EBCI-000008429 | EBCI→SEQM | cant=1 | creado=2026-06-21T09:16 | deadline=2026-06-23T09:16
+
+      EBCI-000008461 | EBCI→UBBB | cant=1 | creado=2026-06-21T14:32 | deadline=2026-06-23T14:32
+
+      EBCI-000008481 | EBCI→OPKC | cant=1 | creado=2026-06-21T17:55 | deadline=2026-06-23T17:55
+
+      EBCI-000008482 | EBCI→LOWW | cant=1 | creado=2026-06-21T18:06 | deadline=2026-06-22T18:06
+
+      EBCI-000008494 | EBCI→SGAS | cant=3 | creado=2026-06-21T22:23 | deadline=2026-06-23T22:23
+
+      EDDI-000008305 | EDDI→SVMI | cant=2 | creado=2026-06-21T15:07 | deadline=2026-06-23T15:07
+
+      EDDI-000008320 | EDDI→SVMI | cant=2 | creado=2026-06-21T22:17 | deadline=2026-06-23T22:17
+
+      EDDI-000008324 | EDDI→SCEL | cant=2 | creado=2026-06-21T22:51 | deadline=2026-06-23T22:51
+
+      EHAM-000006766 | EHAM→OERK | cant=2 | creado=2026-06-19T02:46 | deadline=2026-06-21T02:46
+
+      EHAM-000006768 | EHAM→EBCI | cant=2 | creado=2026-06-19T03:26 | deadline=2026-06-20T03:26
+
+      EHAM-000006776 | EHAM→EBCI | cant=2 | creado=2026-06-19T05:56 | deadline=2026-06-20T05:56
+
+      EHAM-000006785 | EHAM→OERK | cant=2 | creado=2026-06-19T08:52 | deadline=2026-06-21T08:52
+
+      EHAM-000006806 | EHAM→OERK | cant=1 | creado=2026-06-19T15:26 | deadline=2026-06-21T15:26
+
+      EHAM-000006823 | EHAM→EBCI | cant=2 | creado=2026-06-20T01:06 | deadline=2026-06-21T01:06
+
+      EHAM-000006835 | EHAM→UBBB | cant=2 | creado=2026-06-20T05:09 | deadline=2026-06-22T05:09
+
+      EHAM-000006860 | EHAM→UBBB | cant=2 | creado=2026-06-20T13:29 | deadline=2026-06-22T13:29
+
+      EHAM-000006870 | EHAM→UBBB | cant=1 | creado=2026-06-20T16:41 | deadline=2026-06-22T16:41
+
+      EHAM-000006887 | EHAM→UBBB | cant=8 | creado=2026-06-21T08:30 | deadline=2026-06-23T08:30
+
+      EKCH-000007437 | EKCH→LKPR | cant=2 | creado=2026-06-21T02:16 | deadline=2026-06-22T02:16
+
+      EKCH-000007446 | EKCH→SKBO | cant=2 | creado=2026-06-21T04:54 | deadline=2026-06-23T04:54
+
+      EKCH-000007452 | EKCH→LKPR | cant=2 | creado=2026-06-21T06:50 | deadline=2026-06-22T06:50
+
+      EKCH-000007465 | EKCH→SKBO | cant=2 | creado=2026-06-21T10:43 | deadline=2026-06-23T10:43
+
+      EKCH-000007478 | EKCH→LKPR | cant=2 | creado=2026-06-21T14:30 | deadline=2026-06-22T14:30
+
+      LBSF-000007604 | LBSF→LDZA | cant=4 | creado=2026-06-19T22:06 | deadline=2026-06-20T22:06
+
+      LBSF-000007607 | LBSF→LATI | cant=4 | creado=2026-06-19T23:37 | deadline=2026-06-20T23:37
+
+      LBSF-000007652 | LBSF→LDZA | cant=2 | creado=2026-06-21T00:35 | deadline=2026-06-22T00:35
+
+      LBSF-000007679 | LBSF→EBCI | cant=2 | creado=2026-06-21T07:40 | deadline=2026-06-22T07:40
+
+      LBSF-000007696 | LBSF→LATI | cant=2 | creado=2026-06-21T12:15 | deadline=2026-06-22T12:15
+
+      LBSF-000007708 | LBSF→LATI | cant=1 | creado=2026-06-21T15:31 | deadline=2026-06-22T15:31
+
+      LBSF-000007724 | LBSF→LATI | cant=2 | creado=2026-06-21T22:45 | deadline=2026-06-22T22:45
+
+      LDZA-000007013 | LDZA→OPKC | cant=2 | creado=2026-06-21T02:48 | deadline=2026-06-23T02:48
+
+      LDZA-000007025 | LDZA→OPKC | cant=1 | creado=2026-06-21T05:26 | deadline=2026-06-23T05:26
+
+      LDZA-000007029 | LDZA→OPKC | cant=1 | creado=2026-06-21T06:21 | deadline=2026-06-23T06:21
+
+      LDZA-000007031 | LDZA→OPKC | cant=1 | creado=2026-06-21T06:44 | deadline=2026-06-23T06:44
+
+      LDZA-000007036 | LDZA→UBBB | cant=1 | creado=2026-06-21T07:54 | deadline=2026-06-23T07:54
+
+      LDZA-000007054 | LDZA→UBBB | cant=1 | creado=2026-06-21T11:40 | deadline=2026-06-23T11:40
+
+      LDZA-000007066 | LDZA→OPKC | cant=1 | creado=2026-06-21T14:16 | deadline=2026-06-23T14:16
+
+      LDZA-000007073 | LDZA→OPKC | cant=1 | creado=2026-06-21T15:52 | deadline=2026-06-23T15:52
+
+      LDZA-000007079 | LDZA→OPKC | cant=1 | creado=2026-06-21T17:06 | deadline=2026-06-23T17:06
+
+      LDZA-000007095 | LDZA→OOMS | cant=2 | creado=2026-06-21T23:50 | deadline=2026-06-23T23:50
+
+      LDZA-000007096 | LDZA→SABE | cant=2 | creado=2026-06-21T23:05 | deadline=2026-06-23T23:05
+
+      LKPR-000007584 | LKPR→SVMI | cant=3 | creado=2026-06-21T09:22 | deadline=2026-06-23T09:22
+
+      LKPR-000007590 | LKPR→SVMI | cant=3 | creado=2026-06-21T11:03 | deadline=2026-06-23T11:03
+
+      LKPR-000007594 | LKPR→SVMI | cant=3 | creado=2026-06-21T13:47 | deadline=2026-06-23T13:47
+
+      LKPR-000007600 | LKPR→SVMI | cant=3 | creado=2026-06-21T16:27 | deadline=2026-06-23T16:27
+
+      LKPR-000007606 | LKPR→SCEL | cant=3 | creado=2026-06-21T23:21 | deadline=2026-06-23T23:21
+
+      LKPR-000007608 | LKPR→SPIM | cant=3 | creado=2026-06-21T23:50 | deadline=2026-06-23T23:50
+
+      LOWW-000007953 | LOWW→OAKB | cant=4 | creado=2026-06-21T12:03 | deadline=2026-06-23T12:03
+
+      OAKB-000007763 | OAKB→EDDI | cant=1 | creado=2026-06-21T07:39 | deadline=2026-06-23T07:39
+
+      OAKB-000007795 | OAKB→EDDI | cant=1 | creado=2026-06-21T12:54 | deadline=2026-06-23T12:54
+
+      OAKB-000007807 | OAKB→LOWW | cant=1 | creado=2026-06-21T14:50 | deadline=2026-06-23T14:50
+
+      OAKB-000007817 | OAKB→EDDI | cant=2 | creado=2026-06-21T20:23 | deadline=2026-06-23T20:23
+
+      OAKB-000007821 | OAKB→EDDI | cant=2 | creado=2026-06-21T21:17 | deadline=2026-06-23T21:17
+
+      OERK-000007218 | OERK→EKCH | cant=3 | creado=2026-06-21T23:08 | deadline=2026-06-23T23:08
+
+      OMDB-000007561 | OMDB→SUAA | cant=1 | creado=2026-06-21T20:40 | deadline=2026-06-23T20:40
+
+      OMDB-000007571 | OMDB→SUAA | cant=1 | creado=2026-06-21T22:29 | deadline=2026-06-23T22:29
+
+      OMDB-000007577 | OMDB→SPIM | cant=1 | creado=2026-06-21T23:27 | deadline=2026-06-23T23:27
+
+      OMDB-000007579 | OMDB→SUAA | cant=1 | creado=2026-06-21T23:40 | deadline=2026-06-23T23:40
+
+      OPKC-000006591 | OPKC→UBBB | cant=2 | creado=2026-06-21T00:09 | deadline=2026-06-22T00:09
+
+      OPKC-000006603 | OPKC→SABE | cant=2 | creado=2026-06-21T03:55 | deadline=2026-06-23T03:55
+
+      OPKC-000006634 | OPKC→OSDI | cant=2 | creado=2026-06-21T13:46 | deadline=2026-06-22T13:46
+
+      OPKC-000006637 | OPKC→SABE | cant=1 | creado=2026-06-21T14:47 | deadline=2026-06-23T14:47
+
+      OPKC-000006643 | OPKC→SKBO | cant=10 | creado=2026-06-21T23:03 | deadline=2026-06-23T23:03
+
+      SABE-000008336 | SABE→OAKB | cant=2 | creado=2026-06-21T11:18 | deadline=2026-06-23T11:18
+
+      SABE-000008341 | SABE→OAKB | cant=2 | creado=2026-06-21T12:46 | deadline=2026-06-23T12:46
+
+      SABE-000008346 | SABE→OAKB | cant=2 | creado=2026-06-21T14:12 | deadline=2026-06-23T14:12
+
+      SABE-000008355 | SABE→OAKB | cant=2 | creado=2026-06-21T16:43 | deadline=2026-06-23T16:43
+
+      SBBR-000008860 | SBBR→OMDB | cant=10 | creado=2026-06-21T04:35 | deadline=2026-06-23T04:35
+
+      SEQM-000007423 | SEQM→OSDI | cant=3 | creado=2026-06-21T12:46 | deadline=2026-06-23T12:46
+
+      SEQM-000007425 | SEQM→VIDP | cant=3 | creado=2026-06-21T13:33 | deadline=2026-06-23T13:33
+
+      SEQM-000007432 | SEQM→EBCI | cant=3 | creado=2026-06-21T16:10 | deadline=2026-06-23T16:10
+
+      SEQM-000007438 | SEQM→VIDP | cant=2 | creado=2026-06-21T18:27 | deadline=2026-06-23T18:27
+
+      SEQM-000007444 | SEQM→OSDI | cant=2 | creado=2026-06-21T20:44 | deadline=2026-06-23T20:44
+
+      SEQM-000007449 | SEQM→VIDP | cant=2 | creado=2026-06-21T22:38 | deadline=2026-06-23T22:38
+
+      SEQM-000007452 | SEQM→VIDP | cant=2 | creado=2026-06-21T23:53 | deadline=2026-06-23T23:53
+
+      SGAS-000008307 | SGAS→LKPR | cant=3 | creado=2026-06-21T10:20 | deadline=2026-06-23T10:20
+
+      SKBO-000008392 | SKBO→OSDI | cant=1 | creado=2026-06-21T21:01 | deadline=2026-06-23T21:01
+
+      SLLP-000009351 | SLLP→VIDP | cant=2 | creado=2026-06-21T04:49 | deadline=2026-06-23T04:49
+
+      SLLP-000009354 | SLLP→VIDP | cant=2 | creado=2026-06-21T05:17 | deadline=2026-06-23T05:17
+
+      SLLP-000009370 | SLLP→VIDP | cant=2 | creado=2026-06-21T07:56 | deadline=2026-06-23T07:56
+
+      SLLP-000009374 | SLLP→VIDP | cant=2 | creado=2026-06-21T08:37 | deadline=2026-06-23T08:37
+
+      SLLP-000009394 | SLLP→VIDP | cant=2 | creado=2026-06-21T11:54 | deadline=2026-06-23T11:54
+
+      SLLP-000009407 | SLLP→VIDP | cant=2 | creado=2026-06-21T14:05 | deadline=2026-06-23T14:05
+
+      SLLP-000009416 | SLLP→VIDP | cant=1 | creado=2026-06-21T15:35 | deadline=2026-06-23T15:35
+
+      SLLP-000009423 | SLLP→LATI | cant=1 | creado=2026-06-21T16:40 | deadline=2026-06-23T16:40
+
+      SLLP-000009428 | SLLP→LATI | cant=1 | creado=2026-06-21T17:31 | deadline=2026-06-23T17:31
+
+      SLLP-000009430 | SLLP→SBBR | cant=1 | creado=2026-06-21T17:59 | deadline=2026-06-22T17:59
+
+      SLLP-000009437 | SLLP→SBBR | cant=1 | creado=2026-06-21T19:01 | deadline=2026-06-22T19:01
+
+      SLLP-000009440 | SLLP→LATI | cant=1 | creado=2026-06-21T19:34 | deadline=2026-06-23T19:34
+
+      SLLP-000009446 | SLLP→VIDP | cant=1 | creado=2026-06-21T20:36 | deadline=2026-06-23T20:36
+
+      SLLP-000009455 | SLLP→OSDI | cant=1 | creado=2026-06-21T22:04 | deadline=2026-06-23T22:04
+
+      SLLP-000009458 | SLLP→LATI | cant=1 | creado=2026-06-21T22:32 | deadline=2026-06-23T22:32
+
+      SLLP-000009463 | SLLP→LATI | cant=1 | creado=2026-06-21T23:25 | deadline=2026-06-23T23:25
+
+      SPIM-000008228 | SPIM→LBSF | cant=3 | creado=2026-06-21T06:30 | deadline=2026-06-23T06:30
+
+      SPIM-000008240 | SPIM→OERK | cant=2 | creado=2026-06-21T09:52 | deadline=2026-06-23T09:52
+
+      SPIM-000008254 | SPIM→LKPR | cant=2 | creado=2026-06-21T13:53 | deadline=2026-06-23T13:53
+
+      SPIM-000008255 | SPIM→LKPR | cant=2 | creado=2026-06-21T14:09 | deadline=2026-06-23T14:09
+
+      SPIM-000008256 | SPIM→OOMS | cant=2 | creado=2026-06-21T14:27 | deadline=2026-06-23T14:27
+
+      SPIM-000008263 | SPIM→LKPR | cant=2 | creado=2026-06-21T16:28 | deadline=2026-06-23T16:28
+
+      SPIM-000008271 | SPIM→OOMS | cant=2 | creado=2026-06-21T18:42 | deadline=2026-06-23T18:42
+
+      SPIM-000008284 | SPIM→LBSF | cant=2 | creado=2026-06-21T22:17 | deadline=2026-06-23T22:17
+
+      SPIM-000008287 | SPIM→OOMS | cant=2 | creado=2026-06-21T23:16 | deadline=2026-06-23T23:16
+
+      SPIM-000008288 | SPIM→LBSF | cant=2 | creado=2026-06-21T23:30 | deadline=2026-06-23T23:30
+
+      SUAA-000007347 | SUAA→OPKC | cant=2 | creado=2026-06-21T04:59 | deadline=2026-06-23T04:59
+
+      SUAA-000007376 | SUAA→OPKC | cant=2 | creado=2026-06-21T11:16 | deadline=2026-06-23T11:16
+
+      SUAA-000007382 | SUAA→OPKC | cant=1 | creado=2026-06-21T12:35 | deadline=2026-06-23T12:35
+
+      SUAA-000007393 | SUAA→OPKC | cant=1 | creado=2026-06-21T14:01 | deadline=2026-06-23T14:01
+
+      SUAA-000007394 | SUAA→OPKC | cant=1 | creado=2026-06-21T15:10 | deadline=2026-06-23T15:10
+
+      SUAA-000007429 | SUAA→OJAI | cant=1 | creado=2026-06-21T22:47 | deadline=2026-06-23T22:47
+
+      SUAA-000007430 | SUAA→LKPR | cant=1 | creado=2026-06-21T22:58 | deadline=2026-06-23T22:58
+
+      SUAA-000007431 | SUAA→OJAI | cant=1 | creado=2026-06-21T23:16 | deadline=2026-06-23T23:16
+
+      SVMI-000007193 | SVMI→EDDI | cant=5 | creado=2026-06-21T08:19 | deadline=2026-06-23T08:19
+
+      SVMI-000007201 | SVMI→EDDI | cant=5 | creado=2026-06-21T13:20 | deadline=2026-06-23T13:20
+
+      SVMI-000007205 | SVMI→EBCI | cant=5 | creado=2026-06-21T15:45 | deadline=2026-06-23T15:45
+
+      SVMI-000007206 | SVMI→OMDB | cant=5 | creado=2026-06-21T16:29 | deadline=2026-06-23T16:29
+
+      SVMI-000007211 | SVMI→LATI | cant=4 | creado=2026-06-21T19:32 | deadline=2026-06-23T19:32
+
+      UBBB-000009721 | UBBB→OJAI | cant=1 | creado=2026-06-21T13:32 | deadline=2026-06-22T13:32
+
+      UBBB-000009731 | UBBB→OJAI | cant=1 | creado=2026-06-21T15:16 | deadline=2026-06-22T15:16
+
+      UMMS-000009006 | UMMS→SUAA | cant=2 | creado=2026-06-21T05:01 | deadline=2026-06-23T05:01
+
+      UMMS-000009022 | UMMS→OPKC | cant=2 | creado=2026-06-21T09:43 | deadline=2026-06-23T09:43
+
+      UMMS-000009032 | UMMS→SEQM | cant=2 | creado=2026-06-21T11:04 | deadline=2026-06-23T11:04
+
+      UMMS-000009035 | UMMS→OPKC | cant=2 | creado=2026-06-21T12:40 | deadline=2026-06-23T12:40
+
+      UMMS-000009036 | UMMS→SLLP | cant=2 | creado=2026-06-21T12:59 | deadline=2026-06-23T12:59
+
+      UMMS-000009050 | UMMS→SEQM | cant=2 | creado=2026-06-21T16:08 | deadline=2026-06-23T16:08
+
+      UMMS-000009059 | UMMS→OPKC | cant=3 | creado=2026-06-21T21:21 | deadline=2026-06-23T21:21
+
+      UMMS-000009060 | UMMS→SUAA | cant=3 | creado=2026-06-21T21:36 | deadline=2026-06-23T21:36
+
+      UMMS-000009068 | UMMS→SGAS | cant=3 | creado=2026-06-21T23:52 | deadline=2026-06-23T23:52
+
+      VIDP-000006877 | VIDP→SCEL | cant=4 | creado=2026-06-21T10:48 | deadline=2026-06-23T10:48
+
+  [DIAG-ALNS] PAQUETES INCOMPLETOS: 4
+    [SIN RUTAS CANDIDATAS] 4 paquetes (rutas fuera de deadline o ventana):
+      LBSF-000007604 | LBSF→LDZA | cant=4 | creado=2026-06-19T22:06 | deadline=2026-06-20T22:06
+
+      LBSF-000007607 | LBSF→LATI | cant=4 | creado=2026-06-19T23:37 | deadline=2026-06-20T23:37
+
+      LBSF-000007652 | LBSF→LDZA | cant=2 | creado=2026-06-21T00:35 | deadline=2026-06-22T00:35
+
+      OPKC-000006591 | OPKC→UBBB | cant=2 | creado=2026-06-21T00:09 | deadline=2026-06-22T00:09
+
+  [DIAG-ALNS] PAQUETES INCOMPLETOS: 170
+    [SIN RUTAS CANDIDATAS] 170 paquetes (rutas fuera de deadline o ventana):
+      EBCI-000008234 | EBCI→UBBB | cant=2 | creado=2026-06-19T22:10 | deadline=2026-06-21T22:10
+
+      EBCI-000008240 | EBCI→OMDB | cant=2 | creado=2026-06-19T23:15 | deadline=2026-06-21T23:15
+
+      EBCI-000008242 | EBCI→OMDB | cant=2 | creado=2026-06-19T23:32 | deadline=2026-06-21T23:32
+
+      EBCI-000008246 | EBCI→UBBB | cant=2 | creado=2026-06-20T00:10 | deadline=2026-06-22T00:10
+
+      EBCI-000008250 | EBCI→UBBB | cant=2 | creado=2026-06-20T00:59 | deadline=2026-06-22T00:59
+
+      EBCI-000008266 | EBCI→OPKC | cant=1 | creado=2026-06-20T03:38 | deadline=2026-06-22T03:38
+
+      EBCI-000008278 | EBCI→SUAA | cant=1 | creado=2026-06-20T05:37 | deadline=2026-06-22T05:37
+
+      EBCI-000008283 | EBCI→OMDB | cant=1 | creado=2026-06-20T06:28 | deadline=2026-06-22T06:28
+
+      EBCI-000008315 | EBCI→OMDB | cant=1 | creado=2026-06-20T11:42 | deadline=2026-06-22T11:42
+
+      EBCI-000008319 | EBCI→OPKC | cant=1 | creado=2026-06-20T12:21 | deadline=2026-06-22T12:21
+
+      EBCI-000008328 | EBCI→OPKC | cant=1 | creado=2026-06-20T13:55 | deadline=2026-06-22T13:55
+
+      EBCI-000008339 | EBCI→OMDB | cant=1 | creado=2026-06-20T15:41 | deadline=2026-06-22T15:41
+
+      EBCI-000008359 | EBCI→UBBB | cant=1 | creado=2026-06-20T19:03 | deadline=2026-06-22T19:03
+
+      EBCI-000008361 | EBCI→OPKC | cant=1 | creado=2026-06-20T19:24 | deadline=2026-06-22T19:24
+
+      EBCI-000008378 | EBCI→OPKC | cant=2 | creado=2026-06-21T00:48 | deadline=2026-06-23T00:48
+
+      EBCI-000008391 | EBCI→SEQM | cant=1 | creado=2026-06-21T02:59 | deadline=2026-06-23T02:59
+
+      EBCI-000008392 | EBCI→SUAA | cant=1 | creado=2026-06-21T03:08 | deadline=2026-06-23T03:08
+
+      EBCI-000008395 | EBCI→UBBB | cant=1 | creado=2026-06-21T03:33 | deadline=2026-06-23T03:33
+
+      EBCI-000008397 | EBCI→OMDB | cant=1 | creado=2026-06-21T03:51 | deadline=2026-06-23T03:51
+
+      EBCI-000008401 | EBCI→SUAA | cant=1 | creado=2026-06-21T04:35 | deadline=2026-06-23T04:35
+
+      EBCI-000008408 | EBCI→LOWW | cant=1 | creado=2026-06-21T05:48 | deadline=2026-06-22T05:48
+
+      EBCI-000008414 | EBCI→SUAA | cant=1 | creado=2026-06-21T06:49 | deadline=2026-06-23T06:49
+
+      EBCI-000008415 | EBCI→OPKC | cant=1 | creado=2026-06-21T06:52 | deadline=2026-06-23T06:52
+
+      EBCI-000008417 | EBCI→SUAA | cant=1 | creado=2026-06-21T07:13 | deadline=2026-06-23T07:13
+
+      EBCI-000008429 | EBCI→SEQM | cant=1 | creado=2026-06-21T09:16 | deadline=2026-06-23T09:16
+
+      EBCI-000008433 | EBCI→SUAA | cant=1 | creado=2026-06-21T09:56 | deadline=2026-06-23T09:56
+
+      EBCI-000008441 | EBCI→SUAA | cant=1 | creado=2026-06-21T11:12 | deadline=2026-06-23T11:12
+
+      EBCI-000008461 | EBCI→UBBB | cant=1 | creado=2026-06-21T14:32 | deadline=2026-06-23T14:32
+
+      EBCI-000008467 | EBCI→OMDB | cant=1 | creado=2026-06-21T15:36 | deadline=2026-06-23T15:36
+
+      EBCI-000008473 | EBCI→SUAA | cant=1 | creado=2026-06-21T16:35 | deadline=2026-06-23T16:35
+
+      EBCI-000008481 | EBCI→OPKC | cant=1 | creado=2026-06-21T17:55 | deadline=2026-06-23T17:55
+
+      EBCI-000008482 | EBCI→LOWW | cant=1 | creado=2026-06-21T18:06 | deadline=2026-06-22T18:06
+
+      EBCI-000008492 | EBCI→OMDB | cant=1 | creado=2026-06-21T19:40 | deadline=2026-06-23T19:40
+
+      EBCI-000008494 | EBCI→SGAS | cant=3 | creado=2026-06-21T22:23 | deadline=2026-06-23T22:23
+
+      EDDI-000008305 | EDDI→SVMI | cant=2 | creado=2026-06-21T15:07 | deadline=2026-06-23T15:07
+
+      EDDI-000008307 | EDDI→LATI | cant=2 | creado=2026-06-21T15:39 | deadline=2026-06-22T15:39
+
+      EDDI-000008320 | EDDI→SVMI | cant=2 | creado=2026-06-21T22:17 | deadline=2026-06-23T22:17
+
+      EDDI-000008324 | EDDI→SCEL | cant=2 | creado=2026-06-21T22:51 | deadline=2026-06-23T22:51
+
+      EDDI-000008329 | EDDI→LATI | cant=2 | creado=2026-06-21T23:37 | deadline=2026-06-22T23:37
+
+      EHAM-000006766 | EHAM→OERK | cant=2 | creado=2026-06-19T02:46 | deadline=2026-06-21T02:46
+
+      EHAM-000006768 | EHAM→EBCI | cant=2 | creado=2026-06-19T03:26 | deadline=2026-06-20T03:26
+
+      EHAM-000006770 | EHAM→OPKC | cant=2 | creado=2026-06-19T04:07 | deadline=2026-06-21T04:07
+
+      EHAM-000006776 | EHAM→EBCI | cant=2 | creado=2026-06-19T05:56 | deadline=2026-06-20T05:56
+
+      EHAM-000006778 | EHAM→OPKC | cant=2 | creado=2026-06-19T06:41 | deadline=2026-06-21T06:41
+
+      EHAM-000006785 | EHAM→OERK | cant=2 | creado=2026-06-19T08:52 | deadline=2026-06-21T08:52
+
+      EHAM-000006788 | EHAM→OPKC | cant=2 | creado=2026-06-19T09:46 | deadline=2026-06-21T09:46
+
+      EHAM-000006806 | EHAM→OERK | cant=1 | creado=2026-06-19T15:26 | deadline=2026-06-21T15:26
+
+      EHAM-000006823 | EHAM→EBCI | cant=2 | creado=2026-06-20T01:06 | deadline=2026-06-21T01:06
+
+      EHAM-000006825 | EHAM→OPKC | cant=2 | creado=2026-06-20T01:44 | deadline=2026-06-22T01:44
+
+      EHAM-000006835 | EHAM→UBBB | cant=2 | creado=2026-06-20T05:09 | deadline=2026-06-22T05:09
+
+      EHAM-000006860 | EHAM→UBBB | cant=2 | creado=2026-06-20T13:29 | deadline=2026-06-22T13:29
+
+      EHAM-000006870 | EHAM→UBBB | cant=1 | creado=2026-06-20T16:41 | deadline=2026-06-22T16:41
+
+      EHAM-000006887 | EHAM→UBBB | cant=8 | creado=2026-06-21T08:30 | deadline=2026-06-23T08:30
+
+      EHAM-000006892 | EHAM→OSDI | cant=3 | creado=2026-06-21T22:24 | deadline=2026-06-23T22:24
+
+      EKCH-000007402 | EKCH→SGAS | cant=5 | creado=2026-06-20T02:19 | deadline=2026-06-22T02:19
+
+      EKCH-000007437 | EKCH→LKPR | cant=2 | creado=2026-06-21T02:16 | deadline=2026-06-22T02:16
+
+      EKCH-000007446 | EKCH→SKBO | cant=2 | creado=2026-06-21T04:54 | deadline=2026-06-23T04:54
+
+      EKCH-000007452 | EKCH→LKPR | cant=2 | creado=2026-06-21T06:50 | deadline=2026-06-22T06:50
+
+      EKCH-000007465 | EKCH→SKBO | cant=2 | creado=2026-06-21T10:43 | deadline=2026-06-23T10:43
+
+      EKCH-000007478 | EKCH→LKPR | cant=2 | creado=2026-06-21T14:30 | deadline=2026-06-22T14:30
+
+      LBSF-000007604 | LBSF→LDZA | cant=4 | creado=2026-06-19T22:06 | deadline=2026-06-20T22:06
+
+      LBSF-000007607 | LBSF→LATI | cant=4 | creado=2026-06-19T23:37 | deadline=2026-06-20T23:37
+
+      LBSF-000007652 | LBSF→LDZA | cant=2 | creado=2026-06-21T00:35 | deadline=2026-06-22T00:35
+
+      LBSF-000007679 | LBSF→EBCI | cant=2 | creado=2026-06-21T07:40 | deadline=2026-06-22T07:40
+
+      LBSF-000007696 | LBSF→LATI | cant=2 | creado=2026-06-21T12:15 | deadline=2026-06-22T12:15
+
+      LBSF-000007708 | LBSF→LATI | cant=1 | creado=2026-06-21T15:31 | deadline=2026-06-22T15:31
+
+      LBSF-000007724 | LBSF→LATI | cant=2 | creado=2026-06-21T22:45 | deadline=2026-06-22T22:45
+
+      LDZA-000007013 | LDZA→OPKC | cant=2 | creado=2026-06-21T02:48 | deadline=2026-06-23T02:48
+
+      LDZA-000007025 | LDZA→OPKC | cant=1 | creado=2026-06-21T05:26 | deadline=2026-06-23T05:26
+
+      LDZA-000007029 | LDZA→OPKC | cant=1 | creado=2026-06-21T06:21 | deadline=2026-06-23T06:21
+
+      LDZA-000007031 | LDZA→OPKC | cant=1 | creado=2026-06-21T06:44 | deadline=2026-06-23T06:44
+
+      LDZA-000007036 | LDZA→UBBB | cant=1 | creado=2026-06-21T07:54 | deadline=2026-06-23T07:54
+
+      LDZA-000007054 | LDZA→UBBB | cant=1 | creado=2026-06-21T11:40 | deadline=2026-06-23T11:40
+
+      LDZA-000007066 | LDZA→OPKC | cant=1 | creado=2026-06-21T14:16 | deadline=2026-06-23T14:16
+
+      LDZA-000007073 | LDZA→OPKC | cant=1 | creado=2026-06-21T15:52 | deadline=2026-06-23T15:52
+
+      LDZA-000007079 | LDZA→OPKC | cant=1 | creado=2026-06-21T17:06 | deadline=2026-06-23T17:06
+
+      LDZA-000007095 | LDZA→OOMS | cant=2 | creado=2026-06-21T23:50 | deadline=2026-06-23T23:50
+
+      LDZA-000007096 | LDZA→SABE | cant=2 | creado=2026-06-21T23:05 | deadline=2026-06-23T23:05
+
+      LKPR-000007584 | LKPR→SVMI | cant=3 | creado=2026-06-21T09:22 | deadline=2026-06-23T09:22
+
+      LKPR-000007590 | LKPR→SVMI | cant=3 | creado=2026-06-21T11:03 | deadline=2026-06-23T11:03
+
+      LKPR-000007594 | LKPR→SVMI | cant=3 | creado=2026-06-21T13:47 | deadline=2026-06-23T13:47
+
+      LKPR-000007600 | LKPR→SVMI | cant=3 | creado=2026-06-21T16:27 | deadline=2026-06-23T16:27
+
+      LKPR-000007608 | LKPR→SPIM | cant=3 | creado=2026-06-21T23:50 | deadline=2026-06-23T23:50
+
+      LOWW-000007953 | LOWW→OAKB | cant=4 | creado=2026-06-21T12:03 | deadline=2026-06-23T12:03
+
+      OAKB-000007763 | OAKB→EDDI | cant=1 | creado=2026-06-21T07:39 | deadline=2026-06-23T07:39
+
+      OAKB-000007795 | OAKB→EDDI | cant=1 | creado=2026-06-21T12:54 | deadline=2026-06-23T12:54
+
+      OAKB-000007807 | OAKB→LOWW | cant=1 | creado=2026-06-21T14:50 | deadline=2026-06-23T14:50
+
+      OAKB-000007817 | OAKB→EDDI | cant=2 | creado=2026-06-21T20:23 | deadline=2026-06-23T20:23
+
+      OAKB-000007821 | OAKB→EDDI | cant=2 | creado=2026-06-21T21:17 | deadline=2026-06-23T21:17
+
+      OERK-000007218 | OERK→EKCH | cant=3 | creado=2026-06-21T23:08 | deadline=2026-06-23T23:08
+
+      OJAI-000008616 | OJAI→SUAA | cant=2 | creado=2026-06-21T15:10 | deadline=2026-06-23T15:10
+
+      OMDB-000007561 | OMDB→SUAA | cant=1 | creado=2026-06-21T20:40 | deadline=2026-06-23T20:40
+
+      OMDB-000007571 | OMDB→SUAA | cant=1 | creado=2026-06-21T22:29 | deadline=2026-06-23T22:29
+
+      OMDB-000007577 | OMDB→SPIM | cant=1 | creado=2026-06-21T23:27 | deadline=2026-06-23T23:27
+
+      OMDB-000007579 | OMDB→SUAA | cant=1 | creado=2026-06-21T23:40 | deadline=2026-06-23T23:40
+
+      OPKC-000006591 | OPKC→UBBB | cant=2 | creado=2026-06-21T00:09 | deadline=2026-06-22T00:09
+
+      OPKC-000006603 | OPKC→SABE | cant=2 | creado=2026-06-21T03:55 | deadline=2026-06-23T03:55
+
+      OPKC-000006634 | OPKC→OSDI | cant=2 | creado=2026-06-21T13:46 | deadline=2026-06-22T13:46
+
+      OPKC-000006637 | OPKC→SABE | cant=1 | creado=2026-06-21T14:47 | deadline=2026-06-23T14:47
+
+      OPKC-000006643 | OPKC→SKBO | cant=10 | creado=2026-06-21T23:03 | deadline=2026-06-23T23:03
+
+      SABE-000008336 | SABE→OAKB | cant=2 | creado=2026-06-21T11:18 | deadline=2026-06-23T11:18
+
+      SABE-000008341 | SABE→OAKB | cant=2 | creado=2026-06-21T12:46 | deadline=2026-06-23T12:46
+
+      SABE-000008346 | SABE→OAKB | cant=2 | creado=2026-06-21T14:12 | deadline=2026-06-23T14:12
+
+      SABE-000008355 | SABE→OAKB | cant=2 | creado=2026-06-21T16:43 | deadline=2026-06-23T16:43
+
+      SBBR-000008860 | SBBR→OMDB | cant=10 | creado=2026-06-21T04:35 | deadline=2026-06-23T04:35
+
+      SEQM-000007423 | SEQM→OSDI | cant=3 | creado=2026-06-21T12:46 | deadline=2026-06-23T12:46
+
+      SEQM-000007425 | SEQM→VIDP | cant=3 | creado=2026-06-21T13:33 | deadline=2026-06-23T13:33
+
+      SEQM-000007432 | SEQM→EBCI | cant=3 | creado=2026-06-21T16:10 | deadline=2026-06-23T16:10
+
+      SEQM-000007438 | SEQM→VIDP | cant=2 | creado=2026-06-21T18:27 | deadline=2026-06-23T18:27
+
+      SEQM-000007444 | SEQM→OSDI | cant=2 | creado=2026-06-21T20:44 | deadline=2026-06-23T20:44
+
+      SEQM-000007449 | SEQM→VIDP | cant=2 | creado=2026-06-21T22:38 | deadline=2026-06-23T22:38
+
+      SEQM-000007452 | SEQM→VIDP | cant=2 | creado=2026-06-21T23:53 | deadline=2026-06-23T23:53
+
+      SGAS-000008307 | SGAS→LKPR | cant=3 | creado=2026-06-21T10:20 | deadline=2026-06-23T10:20
+
+      SKBO-000008392 | SKBO→OSDI | cant=1 | creado=2026-06-21T21:01 | deadline=2026-06-23T21:01
+
+      SLLP-000009351 | SLLP→VIDP | cant=2 | creado=2026-06-21T04:49 | deadline=2026-06-23T04:49
+
+      SLLP-000009354 | SLLP→VIDP | cant=2 | creado=2026-06-21T05:17 | deadline=2026-06-23T05:17
+
+      SLLP-000009370 | SLLP→VIDP | cant=2 | creado=2026-06-21T07:56 | deadline=2026-06-23T07:56
+
+      SLLP-000009374 | SLLP→VIDP | cant=2 | creado=2026-06-21T08:37 | deadline=2026-06-23T08:37
+
+      SLLP-000009394 | SLLP→VIDP | cant=2 | creado=2026-06-21T11:54 | deadline=2026-06-23T11:54
+
+      SLLP-000009407 | SLLP→VIDP | cant=2 | creado=2026-06-21T14:05 | deadline=2026-06-23T14:05
+
+      SLLP-000009416 | SLLP→VIDP | cant=1 | creado=2026-06-21T15:35 | deadline=2026-06-23T15:35
+
+      SLLP-000009423 | SLLP→LATI | cant=1 | creado=2026-06-21T16:40 | deadline=2026-06-23T16:40
+
+      SLLP-000009428 | SLLP→LATI | cant=1 | creado=2026-06-21T17:31 | deadline=2026-06-23T17:31
+
+      SLLP-000009430 | SLLP→SBBR | cant=1 | creado=2026-06-21T17:59 | deadline=2026-06-22T17:59
+
+      SLLP-000009433 | SLLP→OJAI | cant=1 | creado=2026-06-21T18:28 | deadline=2026-06-23T18:28
+
+      SLLP-000009437 | SLLP→SBBR | cant=1 | creado=2026-06-21T19:01 | deadline=2026-06-22T19:01
+
+      SLLP-000009440 | SLLP→LATI | cant=1 | creado=2026-06-21T19:34 | deadline=2026-06-23T19:34
+
+      SLLP-000009442 | SLLP→OJAI | cant=1 | creado=2026-06-21T19:56 | deadline=2026-06-23T19:56
+
+      SLLP-000009446 | SLLP→VIDP | cant=1 | creado=2026-06-21T20:36 | deadline=2026-06-23T20:36
+
+      SLLP-000009455 | SLLP→OSDI | cant=1 | creado=2026-06-21T22:04 | deadline=2026-06-23T22:04
+
+      SLLP-000009458 | SLLP→LATI | cant=1 | creado=2026-06-21T22:32 | deadline=2026-06-23T22:32
+
+      SLLP-000009463 | SLLP→LATI | cant=1 | creado=2026-06-21T23:25 | deadline=2026-06-23T23:25
+
+      SPIM-000008228 | SPIM→LBSF | cant=3 | creado=2026-06-21T06:30 | deadline=2026-06-23T06:30
+
+      SPIM-000008240 | SPIM→OERK | cant=2 | creado=2026-06-21T09:52 | deadline=2026-06-23T09:52
+
+      SPIM-000008254 | SPIM→LKPR | cant=2 | creado=2026-06-21T13:53 | deadline=2026-06-23T13:53
+
+      SPIM-000008255 | SPIM→LKPR | cant=2 | creado=2026-06-21T14:09 | deadline=2026-06-23T14:09
+
+      SPIM-000008256 | SPIM→OOMS | cant=2 | creado=2026-06-21T14:27 | deadline=2026-06-23T14:27
+
+      SPIM-000008257 | SPIM→SABE | cant=2 | creado=2026-06-21T14:38 | deadline=2026-06-22T14:38
+
+      SPIM-000008263 | SPIM→LKPR | cant=2 | creado=2026-06-21T16:28 | deadline=2026-06-23T16:28
+
+      SPIM-000008265 | SPIM→SABE | cant=2 | creado=2026-06-21T16:00 | deadline=2026-06-22T16:00
+
+      SPIM-000008271 | SPIM→OOMS | cant=2 | creado=2026-06-21T18:42 | deadline=2026-06-23T18:42
+
+      SPIM-000008284 | SPIM→LBSF | cant=2 | creado=2026-06-21T22:17 | deadline=2026-06-23T22:17
+
+      SPIM-000008285 | SPIM→SABE | cant=2 | creado=2026-06-21T22:42 | deadline=2026-06-22T22:42
+
+      SPIM-000008287 | SPIM→OOMS | cant=2 | creado=2026-06-21T23:16 | deadline=2026-06-23T23:16
+
+      SPIM-000008288 | SPIM→LBSF | cant=2 | creado=2026-06-21T23:30 | deadline=2026-06-23T23:30
+
+      SUAA-000007347 | SUAA→OPKC | cant=2 | creado=2026-06-21T04:59 | deadline=2026-06-23T04:59
+
+      SUAA-000007376 | SUAA→OPKC | cant=2 | creado=2026-06-21T11:16 | deadline=2026-06-23T11:16
+
+      SUAA-000007382 | SUAA→OPKC | cant=1 | creado=2026-06-21T12:35 | deadline=2026-06-23T12:35
+
+      SUAA-000007393 | SUAA→OPKC | cant=1 | creado=2026-06-21T14:01 | deadline=2026-06-23T14:01
+
+      SUAA-000007394 | SUAA→OPKC | cant=1 | creado=2026-06-21T15:10 | deadline=2026-06-23T15:10
+
+      SUAA-000007429 | SUAA→OJAI | cant=1 | creado=2026-06-21T22:47 | deadline=2026-06-23T22:47
+
+      SUAA-000007430 | SUAA→LKPR | cant=1 | creado=2026-06-21T22:58 | deadline=2026-06-23T22:58
+
+      SUAA-000007431 | SUAA→OJAI | cant=1 | creado=2026-06-21T23:16 | deadline=2026-06-23T23:16
+
+      SVMI-000007193 | SVMI→EDDI | cant=5 | creado=2026-06-21T08:19 | deadline=2026-06-23T08:19
+
+      SVMI-000007201 | SVMI→EDDI | cant=5 | creado=2026-06-21T13:20 | deadline=2026-06-23T13:20
+
+      SVMI-000007205 | SVMI→EBCI | cant=5 | creado=2026-06-21T15:45 | deadline=2026-06-23T15:45
+
+      SVMI-000007206 | SVMI→OMDB | cant=5 | creado=2026-06-21T16:29 | deadline=2026-06-23T16:29
+
+      SVMI-000007211 | SVMI→LATI | cant=4 | creado=2026-06-21T19:32 | deadline=2026-06-23T19:32
+
+      UBBB-000009721 | UBBB→OJAI | cant=1 | creado=2026-06-21T13:32 | deadline=2026-06-22T13:32
+
+      UBBB-000009731 | UBBB→OJAI | cant=1 | creado=2026-06-21T15:16 | deadline=2026-06-22T15:16
+
+      UMMS-000009006 | UMMS→SUAA | cant=2 | creado=2026-06-21T05:01 | deadline=2026-06-23T05:01
+
+      UMMS-000009022 | UMMS→OPKC | cant=2 | creado=2026-06-21T09:43 | deadline=2026-06-23T09:43
+
+      UMMS-000009032 | UMMS→SEQM | cant=2 | creado=2026-06-21T11:04 | deadline=2026-06-23T11:04
+
+      UMMS-000009035 | UMMS→OPKC | cant=2 | creado=2026-06-21T12:40 | deadline=2026-06-23T12:40
+
+      UMMS-000009036 | UMMS→SLLP | cant=2 | creado=2026-06-21T12:59 | deadline=2026-06-23T12:59
+
+      UMMS-000009050 | UMMS→SEQM | cant=2 | creado=2026-06-21T16:08 | deadline=2026-06-23T16:08
+
+      UMMS-000009059 | UMMS→OPKC | cant=3 | creado=2026-06-21T21:21 | deadline=2026-06-23T21:21
+
+      UMMS-000009060 | UMMS→SUAA | cant=3 | creado=2026-06-21T21:36 | deadline=2026-06-23T21:36
+
+      UMMS-000009068 | UMMS→SGAS | cant=3 | creado=2026-06-21T23:52 | deadline=2026-06-23T23:52
+
+      VIDP-000006877 | VIDP→SCEL | cant=4 | creado=2026-06-21T10:48 | deadline=2026-06-23T10:48
+
+  [DIAG-ALNS] PAQUETES INCOMPLETOS: 5
+    [SIN RUTAS CANDIDATAS] 5 paquetes (rutas fuera de deadline o ventana):
+      LBSF-000007604 | LBSF→LDZA | cant=4 | creado=2026-06-19T22:06 | deadline=2026-06-20T22:06
+
+      LBSF-000007607 | LBSF→LATI | cant=4 | creado=2026-06-19T23:37 | deadline=2026-06-20T23:37
+
+      LBSF-000007652 | LBSF→LDZA | cant=2 | creado=2026-06-21T00:35 | deadline=2026-06-22T00:35
+
+      LBSF-000007724 | LBSF→LATI | cant=2 | creado=2026-06-21T22:45 | deadline=2026-06-22T22:45
+
+      OPKC-000006591 | OPKC→UBBB | cant=2 | creado=2026-06-21T00:09 | deadline=2026-06-22T00:09
+

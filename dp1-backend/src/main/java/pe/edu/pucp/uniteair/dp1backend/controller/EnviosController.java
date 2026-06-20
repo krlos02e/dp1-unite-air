@@ -90,6 +90,19 @@ public class EnviosController {
         ));
     }
 
+    @GetMapping("/lista")
+    public ResponseEntity<Map<String, Object>> listarEnvios(
+            @RequestParam(required = false) String estados,
+            @RequestParam(required = false) String origen,
+            @RequestParam(required = false) Integer horas
+    ) {
+        List<Map<String, Object>> resultados = cargaArchivosService.listarEnvios(estados, origen, horas);
+        return ResponseEntity.ok(Map.of(
+                "total", resultados.size(),
+                "envios", resultados
+        ));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<Map<String, Object>> buscarEnvio(@PathVariable String id) {
         Map<String, Object> resultado = cargaArchivosService.buscarEnvio(id);

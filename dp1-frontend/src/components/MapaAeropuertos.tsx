@@ -22,6 +22,7 @@ interface Props {
   onEnvioSelect?: (envio: EnvioEstado) => void
   mapTz: number
   onMapTzChange: (tz: number) => void
+  hideEnvioSearch?: boolean
 }
 
 const center: [number, number] = [20, 0]
@@ -151,13 +152,19 @@ function applyTransform(mk: L.Marker, angle: number) {
   if (el) el.style.transform = `rotate(${angle}deg)`
 }
 
+interface RoutePair {
+  pending: L.Polyline
+  flown: L.Polyline | null
+}
+
 interface FlightAnim {
   vuelo: VueloDTO
   from: [number, number]
   to: [number, number]
+  pts?: [number, number][]
 }
 
-function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, onAeropuertoClick, onVueloClick, onEnvioSelect, mapTz, onMapTzChange }: Props) {
+function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, onAeropuertoClick, onVueloClick, onEnvioSelect, mapTz, onMapTzChange, hideEnvioSearch }: Props) {
   const mapRef = useRef<L.Map | null>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const circleLayerRef = useRef<L.LayerGroup | null>(null)
@@ -171,7 +178,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
   const selectedOriginRef = useRef<L.CircleMarker | null>(null)
   const selectedDestRef = useRef<L.CircleMarker | null>(null)
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
-  const routeLinesRef = useRef<Map<string, L.Polyline>>(new Map())
+  const routeLinesRef = useRef<Map<string, RoutePair>>(new Map())
   const flightAnimsRef = useRef<Map<string, FlightAnim>>(new Map())
   const rafIdRef = useRef<number>(0)
   const velocidadRef = useRef(velocidad)
@@ -197,6 +204,22 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
   velocidadRef.current = velocidad
   selectedVueloIdRef.current = selectedVueloId
   showRouteLinesRef.current = showRouteLines
+
+  function removeRoute(id: string) {
+    const pair = routeLinesRef.current.get(id)
+    if (!pair) return
+    routeLayerRef.current?.removeLayer(pair.pending)
+    if (pair.flown) routeLayerRef.current?.removeLayer(pair.flown)
+    routeLinesRef.current.delete(id)
+  }
+
+  function removeAllRoutes() {
+    routeLinesRef.current.forEach((pair) => {
+      routeLayerRef.current?.removeLayer(pair.pending)
+      if (pair.flown) routeLayerRef.current?.removeLayer(pair.flown)
+    })
+    routeLinesRef.current.clear()
+  }
 
   const vuelosFiltradosBusqueda = vuelos.filter(v => {
     const term = searchVuelo.toLowerCase()
@@ -265,8 +288,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       flightMarkersRef.current.clear()
       flightAngleRef.current.clear()
       flightAnimsRef.current.clear()
-      routeLinesRef.current.forEach((ln) => routeLayerRef.current?.removeLayer(ln))
-      routeLinesRef.current.clear()
+      removeAllRoutes()
       return
     }
 
@@ -279,8 +301,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       flightMarkersRef.current.clear()
       flightAngleRef.current.clear()
       flightAnimsRef.current.clear()
-      routeLinesRef.current.forEach((ln) => routeLayerRef.current?.removeLayer(ln))
-      routeLinesRef.current.clear()
+      removeAllRoutes()
     }
 
     persistedIds.forEach((id) => {
@@ -293,11 +314,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
           flightAngleRef.current.delete(id)
         }
         flightAnimsRef.current.delete(id)
-        const ln = routeLinesRef.current.get(id)
-        if (ln) {
-          routeLayerRef.current?.removeLayer(ln)
-          routeLinesRef.current.delete(id)
-        }
+        removeRoute(id)
       }
     })
 
@@ -313,11 +330,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
           flightAngleRef.current.delete(v.id)
         }
         flightAnimsRef.current.delete(v.id)
-        const ln = routeLinesRef.current.get(v.id)
-        if (ln) {
-          routeLayerRef.current?.removeLayer(ln)
-          routeLinesRef.current.delete(v.id)
-        }
+        removeRoute(v.id)
       } else {
         persistentFlightsRef.current.set(v.id, v)
       }
@@ -362,14 +375,16 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
 
       map.on('zoomstart', () => {
         isZoomingRef.current = true
-        routeLinesRef.current.forEach((line) => {
-          line.setStyle({ opacity: 0 })
+        routeLinesRef.current.forEach((pair) => {
+          pair.pending.setStyle({ opacity: 0 })
+          if (pair.flown) pair.flown.setStyle({ opacity: 0 })
         })
       })
 
       map.on('zoomend', () => {
-        routeLinesRef.current.forEach((line) => {
-          line.setStyle({ opacity: showRouteLinesRef.current ? 0.15 : 0 })
+        routeLinesRef.current.forEach((pair) => {
+          pair.pending.setStyle({ opacity: showRouteLinesRef.current ? 0.25 : 0 })
+          if (pair.flown) pair.flown.setStyle({ opacity: showRouteLinesRef.current ? 0.08 : 0 })
         })
         isZoomingRef.current = false
 
@@ -435,12 +450,19 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       const lat = (a.latitud && a.latitud !== 0) ? a.latitud : (staticData?.latitud ?? 0)
       const lon = (a.longitud && a.longitud !== 0) ? a.longitud : (staticData?.longitud ?? 0)
 
+      const airportTooltip = () => {
+        const ratio = a.capacidadMaxima > 0 ? a.ocupacionActual / a.capacidadMaxima : 0
+        return `<b>${a.codigoOACI} - ${cityName}</b><br>Ocupación: ${a.ocupacionActual} / ${a.capacidadMaxima} (${Math.round(ratio * 100)}%)`
+      }
+
       if (existing) {
         existing.setIcon(airportIcon(color, label))
         existing.setLatLng([lat, lon])
+        existing.setTooltipContent(airportTooltip())
       } else {
         const code = a.codigoOACI
         const mk = L.marker([lat, lon], { icon: airportIcon(color, label) })
+        mk.bindTooltip(airportTooltip(), { direction: 'top', offset: L.point(0, -14) })
         mk.on('click', () => {
           const current = airportDataRef.current.get(code)
           if (current) onAeropuertoClickRef.current?.(current)
@@ -539,36 +561,36 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
     })
     const displayIds = new Set(displayFlights.map((v) => v.id))
 
-    flightMarkersRef.current.forEach((mk, id) => {
-      if (!displayIds.has(id)) {
-        markerLayerRef.current?.removeLayer(mk)
-        flightMarkersRef.current.delete(id)
-        flightAngleRef.current.delete(id)
-        flightAnimsRef.current.delete(id)
-        const ln = routeLinesRef.current.get(id)
-        if (ln) {
-          routeLayerRef.current?.removeLayer(ln)
-          routeLinesRef.current.delete(id)
+      flightMarkersRef.current.forEach((mk, id) => {
+        if (!displayIds.has(id)) {
+          markerLayerRef.current?.removeLayer(mk)
+          flightMarkersRef.current.delete(id)
+          flightAngleRef.current.delete(id)
+          flightAnimsRef.current.delete(id)
+          removeRoute(id)
         }
-      }
-    })
+      })
 
     displayFlights.forEach((v) => {
       const from: [number, number] = [v.latOrigen, v.lonOrigen]
       const to: [number, number] = [v.latDestino, v.lonDestino]
       const isSelected = v.id === selectedVueloIdRef.current
       const tooltipText = tooltipForFlight(v)
+      const pts = bezierPoints(from, to, 40)
+      const progresoActual = calcularProgresoLocal(v, realNow)
+      const tNorm = progresoActual / 100
+      const splitIndex = Math.round(tNorm * 40)
 
       flightAnimsRef.current.set(v.id, {
         vuelo: v,
         from,
         to,
+        pts,
       })
 
       let mk = flightMarkersRef.current.get(v.id)
       if (!mk) {
-        const progresoActual = calcularProgresoLocal(v, realNow)
-        const startPos = interpolatePosition(from, to, progresoActual / 100)
+        const startPos = interpolatePosition(from, to, tNorm)
         mk = L.marker(startPos, { icon: getAirplaneIcon(isSelected, v.cargaActual, v.capacidad) })
         mk.bindTooltip(tooltipText, { direction: 'top', offset: L.point(0, -14) })
         mk.on('click', () => onVueloClickRef.current?.(v))
@@ -576,8 +598,8 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
         flightMarkersRef.current.set(v.id, mk)
 
         const angle = bearing(
-          interpolatePosition(from, to, Math.max(0, progresoActual / 100 - 0.01)),
-          interpolatePosition(from, to, Math.min(1, progresoActual / 100 + 0.01))
+          interpolatePosition(from, to, Math.max(0, tNorm - 0.01)),
+          interpolatePosition(from, to, Math.min(1, tNorm + 0.01))
         )
         flightAngleRef.current.set(v.id, angle)
         applyTransform(mk, angle)
@@ -586,29 +608,62 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
         mk.setTooltipContent(tooltipText)
       }
 
-      const pts = bezierPoints(from, to, 40)
-      const existingLine = routeLinesRef.current.get(v.id)
-      if (existingLine) {
+      const existingPair = routeLinesRef.current.get(v.id)
+      if (existingPair) {
         if (!isZoomingRef.current) {
-          existingLine.setLatLngs(pts)
-          existingLine.setStyle({ opacity: showRouteLinesRef.current ? 0.15 : 0 })
+          if (splitIndex < pts.length) {
+            const pendingPts = pts.slice(splitIndex)
+            existingPair.pending.setLatLngs(pendingPts)
+            existingPair.pending.setStyle({ opacity: showRouteLinesRef.current ? 0.25 : 0 })
+          }
+          if (splitIndex > 0) {
+            const flownPts = pts.slice(0, splitIndex + 1)
+            if (existingPair.flown) {
+              existingPair.flown.setLatLngs(flownPts)
+              existingPair.flown.setStyle({ opacity: showRouteLinesRef.current ? 0.08 : 0 })
+            } else {
+              const flownLine = L.polyline(flownPts, {
+                dashArray: '1, 8',
+                color: '#6b7280',
+                weight: 1.5,
+                opacity: showRouteLinesRef.current ? 0.08 : 0,
+                lineCap: 'round',
+              })
+              routeLayerRef.current?.addLayer(flownLine)
+              existingPair.flown = flownLine
+            }
+          }
         }
       } else if (showRouteLinesRef.current && !isZoomingRef.current) {
-        const line = L.polyline(pts, {
+        const pendingLine = L.polyline(pts, {
           dashArray: '4, 6',
           color: '#6b7280',
           weight: 1.5,
-          opacity: 0.15,
+          opacity: 0.25,
         })
-        routeLayerRef.current?.addLayer(line)
-        routeLinesRef.current.set(v.id, line)
+        routeLayerRef.current?.addLayer(pendingLine)
+        const pair: RoutePair = { pending: pendingLine, flown: null }
+        if (splitIndex > 0) {
+          const flownPts = pts.slice(0, splitIndex + 1)
+          const flownLine = L.polyline(flownPts, {
+            dashArray: '1, 8',
+            color: '#6b7280',
+            weight: 1.5,
+            opacity: 0.08,
+            lineCap: 'round',
+          })
+          routeLayerRef.current?.addLayer(flownLine)
+          pair.flown = flownLine
+        }
+        routeLinesRef.current.set(v.id, pair)
       }
     })
   }, [vuelos])
 
   useEffect(() => {
-    routeLinesRef.current.forEach((line) => {
-      line.setStyle({ opacity: showRouteLines ? 0.15 : 0 })
+    routeLinesRef.current.forEach((pair) => {
+      pair.pending.setStyle({ opacity: showRouteLines ? 0.25 : 0 })
+      if (pair.flown) pair.flown.setStyle({ opacity: showRouteLines ? 0.08 : 0 })
     })
   }, [showRouteLines])
 
@@ -625,21 +680,13 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
           flightMarkersRef.current.delete(id)
           flightAngleRef.current.delete(id)
           flightAnimsRef.current.delete(id)
-          const ln = routeLinesRef.current.get(id)
-          if (ln && !isZoomingRef.current) {
-            routeLayerRef.current?.removeLayer(ln)
-            routeLinesRef.current.delete(id)
-          }
+          removeRoute(id)
           return
         }
 
         const tNorm = currentProgress / 100
         const pos = interpolatePosition(anim.from, anim.to, tNorm)
         mk.setLatLng(pos)
-
-        if (mk.isTooltipOpen()) {
-          mk.closeTooltip()
-        }
 
         const delta = 0.005
         const tBefore = Math.max(0, tNorm - delta)
@@ -649,6 +696,32 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
         const angle = bearing(posBefore, posAfter)
         flightAngleRef.current.set(id, angle)
         applyTransform(mk, angle)
+
+        if (!isZoomingRef.current && anim.pts) {
+          const splitIndex = Math.round(tNorm * (anim.pts.length - 1))
+          const pair = routeLinesRef.current.get(id)
+          if (pair) {
+            if (splitIndex < anim.pts.length) {
+              pair.pending.setLatLngs(anim.pts.slice(splitIndex))
+            }
+            if (splitIndex > 0) {
+              const flownPts = anim.pts.slice(0, splitIndex + 1)
+              if (pair.flown) {
+                pair.flown.setLatLngs(flownPts)
+              } else {
+                const flownLine = L.polyline(flownPts, {
+                  dashArray: '1, 8',
+                  color: '#6b7280',
+                  weight: 1.5,
+                  opacity: 0.08,
+                  lineCap: 'round',
+                })
+                routeLayerRef.current?.addLayer(flownLine)
+                pair.flown = flownLine
+              }
+            }
+          }
+        }
       })
 
       rafIdRef.current = requestAnimationFrame(animate)
@@ -806,56 +879,58 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
           )}
         </div>
 
-        <div>
-          <button
-            onClick={() => setSearchExpanded(searchExpanded === 'envio' ? null : 'envio')}
-            className="w-full bg-gray-800/90 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-white text-left hover:bg-gray-700/90"
-          >
-            Buscar envio...
-          </button>
-          {searchExpanded === 'envio' && (
-            <div className="mt-1 bg-gray-800/95 border border-gray-600 rounded-lg overflow-hidden">
-              <input
-                type="text"
-                autoFocus
-                placeholder="ID del envio..."
-                value={searchEnvio}
-                onChange={(e) => handleSearchEnvio(e.target.value)}
-                className="w-full bg-gray-700 border-b border-gray-600 px-3 py-1.5 text-xs text-white placeholder-gray-400 focus:outline-none focus:border-sky-500"
-              />
-              <div className="max-h-40 overflow-y-auto">
-                {enviosResultados.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-gray-500">
-                    {searchEnvio.length < 2 ? 'Escribe al menos 2 caracteres' : 'No se encontraron envios'}
-                  </p>
-                ) : (
-                  enviosResultados.map(envio => (
-                    <button
-                      key={envio.id}
-                      onClick={() => handleSelectEnvio(envio)}
-                      className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 border-b border-gray-700 last:border-0"
-                    >
-                      <div className="flex justify-between">
-                        <span className="font-medium text-amber-400">{envio.id}</span>
-                        <span className={`text-[10px] ${
-                          envio.estado === 'EN_VUELO' ? 'text-emerald-400' :
-                          envio.estado === 'EMBARCADO' ? 'text-sky-400' :
-                          envio.estado === 'ENTREGADO' ? 'text-gray-500' :
-                          'text-amber-400'
-                        }`}>
-                          {envio.estado === 'EN_ESPERA' ? 'En espera' :
-                           envio.estado === 'EMBARCADO' ? 'Embarcado' :
-                           envio.estado === 'EN_VUELO' ? 'En vuelo' : 'Entregado'}
-                        </span>
-                      </div>
-                      <span className="text-gray-500">{getAirportCity(envio.origen)} → {getAirportCity(envio.destino)}</span>
-                    </button>
-                  ))
-                )}
+        {!hideEnvioSearch && (
+          <div>
+            <button
+              onClick={() => setSearchExpanded(searchExpanded === 'envio' ? null : 'envio')}
+              className="w-full bg-gray-800/90 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-white text-left hover:bg-gray-700/90"
+            >
+              Buscar envio...
+            </button>
+            {searchExpanded === 'envio' && (
+              <div className="mt-1 bg-gray-800/95 border border-gray-600 rounded-lg overflow-hidden">
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="ID del envio..."
+                  value={searchEnvio}
+                  onChange={(e) => handleSearchEnvio(e.target.value)}
+                  className="w-full bg-gray-700 border-b border-gray-600 px-3 py-1.5 text-xs text-white placeholder-gray-400 focus:outline-none focus:border-sky-500"
+                />
+                <div className="max-h-40 overflow-y-auto">
+                  {enviosResultados.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-gray-500">
+                      {searchEnvio.length < 2 ? 'Escribe al menos 2 caracteres' : 'No se encontraron envios'}
+                    </p>
+                  ) : (
+                    enviosResultados.map(envio => (
+                      <button
+                        key={envio.id}
+                        onClick={() => handleSelectEnvio(envio)}
+                        className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 border-b border-gray-700 last:border-0"
+                      >
+                        <div className="flex justify-between">
+                          <span className="font-medium text-amber-400">{envio.id}</span>
+                          <span className={`text-[10px] ${
+                            envio.estado === 'EN_VUELO' ? 'text-emerald-400' :
+                            envio.estado === 'EMBARCADO' ? 'text-sky-400' :
+                            envio.estado === 'ENTREGADO' ? 'text-gray-500' :
+                            'text-amber-400'
+                          }`}>
+                            {envio.estado === 'EN_ESPERA' ? 'En espera' :
+                             envio.estado === 'EMBARCADO' ? 'Embarcado' :
+                             envio.estado === 'EN_VUELO' ? 'En vuelo' : 'Entregado'}
+                          </span>
+                        </div>
+                        <span className="text-gray-500">{getAirportCity(envio.origen)} → {getAirportCity(envio.destino)}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div ref={mapContainerRef} className="w-full h-full rounded-lg" />

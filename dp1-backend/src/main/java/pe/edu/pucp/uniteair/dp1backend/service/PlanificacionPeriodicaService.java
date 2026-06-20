@@ -17,6 +17,7 @@ import tasf.strategy.alns.ALNS_RutasPlanner;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -39,7 +40,7 @@ public class PlanificacionPeriodicaService {
     @Autowired
     private PlanificacionLogRepository logRepository;
 
-    @Scheduled(fixedRate = 3600000)
+    @Scheduled(fixedRate = 300000)
     public void planificacionPeriodica() {
         if (!enabled) {
             return;
@@ -54,6 +55,7 @@ public class PlanificacionPeriodicaService {
 
         try {
             Set<String> paquetesEnVuelo = cargaArchivosService.obtenerPaquetesEnVuelo(ahora);
+            Set<String> paquetesEntregados = cargaArchivosService.obtenerPaquetesEntregados(ahora);
             Dataset datasetCompleto = cargaArchivosService.obtenerUltimoDataset();
 
             if (datasetCompleto == null) {
@@ -61,7 +63,11 @@ public class PlanificacionPeriodicaService {
                 return;
             }
 
-            Dataset datasetFiltrado = cargaArchivosService.filtrarDatasetPorVentana(inicio, fin, paquetesEnVuelo);
+            Set<String> excluidos = new HashSet<>();
+            excluidos.addAll(paquetesEnVuelo);
+            excluidos.addAll(paquetesEntregados);
+
+            Dataset datasetFiltrado = cargaArchivosService.filtrarSoloGestionEnvios(inicio, fin, excluidos);
 
             if (datasetFiltrado.getPaquetes().isEmpty()) {
                 long duracionMs = (System.nanoTime() - startTime) / 1_000_000;
@@ -70,8 +76,8 @@ public class PlanificacionPeriodicaService {
                 return;
             }
 
-            log.info("[PlanificacionPeriodica] Paquetes en vuelo excluidos: {}. Paquetes a planificar: {}",
-                    paquetesEnVuelo.size(), datasetFiltrado.getPaquetes().size());
+            log.info("[PlanificacionPeriodica] Paquetes excluidos (en vuelo: {}, entregados: {}). Paquetes a planificar: {}",
+                    paquetesEnVuelo.size(), paquetesEntregados.size(), datasetFiltrado.getPaquetes().size());
 
             Config_Simulacion config = crearConfiguracion();
             PlanificacionUtils.limpiarCacheGlobal();

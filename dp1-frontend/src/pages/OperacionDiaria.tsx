@@ -4,6 +4,7 @@ import MapaAeropuertos from '../components/MapaAeropuertos'
 import VueloModal from '../components/VueloModal'
 import AeropuertoModal from '../components/AeropuertoModal'
 import EnvioModal from '../components/EnvioModal'
+import EnvioListPanel from '../components/EnvioListPanel'
 import { AIRPORTS_DATA, getAirportCity } from '../data/airportsData'
 import type { VueloDTO, AeropuertoDTO, EnvioEstado } from '../types'
 
@@ -235,26 +236,33 @@ export default function OperacionDiaria() {
         </div>
       </div>
 
-      {/* Mapa */}
-      <div className="relative h-[calc(100vh-10rem)] bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-        {loading && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60">
-            <div className="text-center">
-              <div className="w-10 h-10 border-4 border-sky-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p className="text-gray-300 text-sm">Cargando vuelos del dataset...</p>
+      {/* Mapa + Panel de envíos */}
+      <div className="flex gap-2 h-[calc(100vh-10rem)]">
+        <div className="relative flex-1 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+          {loading && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60">
+              <div className="text-center">
+                <div className="w-10 h-10 border-4 border-sky-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                <p className="text-gray-300 text-sm">Cargando vuelos del dataset...</p>
+              </div>
             </div>
-          </div>
-        )}
-        <MapaAeropuertos
-          aeropuertos={aeropuertosEstaticos}
-          vuelos={vuelos}
-          selectedVueloId={selectedVuelo?.id || null}
-          velocidad={1}
-          onAeropuertoClick={handleAeropuertoClick}
-          onVueloClick={handleVueloClick}
+          )}
+          <MapaAeropuertos
+            aeropuertos={aeropuertosEstaticos}
+            vuelos={vuelos}
+            selectedVueloId={selectedVuelo?.id || null}
+            velocidad={1}
+            onAeropuertoClick={handleAeropuertoClick}
+            onVueloClick={handleVueloClick}
+            onEnvioSelect={handleEnvioSelect}
+            mapTz={mapTz}
+            onMapTzChange={setMapTz}
+            hideEnvioSearch
+          />
+        </div>
+        <EnvioListPanel
           onEnvioSelect={handleEnvioSelect}
-          mapTz={mapTz}
-          onMapTzChange={setMapTz}
+          selectedEnvioId={selectedEnvio?.id}
         />
       </div>
 

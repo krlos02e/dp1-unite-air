@@ -8,6 +8,7 @@ import pe.edu.pucp.uniteair.dp1backend.dto.AeropuertoDTO;
 import pe.edu.pucp.uniteair.dp1backend.dto.VueloDTO;
 import pe.edu.pucp.uniteair.dp1backend.service.CargaArchivosService;
 import tasf.core.Dataset;
+import tasf.model.Paquete;
 import tasf.model.Vuelo;
 
 import java.time.LocalDateTime;
@@ -31,20 +32,38 @@ public class CargaArchivosController {
 
     @PostMapping("/upload")
     public ResponseEntity<Map<String, Object>> uploadFiles(
-            @RequestParam("planes_vuelo") MultipartFile planesVuelo,
-            @RequestParam("aeropuertos") MultipartFile aeropuertos,
+            @RequestParam(value = "planes_vuelo", required = false) MultipartFile planesVuelo,
+            @RequestParam(value = "aeropuertos", required = false) MultipartFile aeropuertos,
             @RequestParam("envios") MultipartFile envios) {
 
-        var result = cargaArchivosService.cargarArchivos(planesVuelo, aeropuertos, envios);
+        boolean tieneDatasetCompleto = planesVuelo != null && !planesVuelo.isEmpty()
+                && aeropuertos != null && !aeropuertos.isEmpty();
 
-        return ResponseEntity.ok(Map.of(
-                "success", result.success(),
-                "message", result.message(),
-                "aeropuertosCount", result.aeropuertosCount(),
-                "vuelosCount", result.vuelosCount(),
-                "paquetesCount", result.paquetesCount(),
-                "datasetId", result.datasetId()
-        ));
+        if (tieneDatasetCompleto) {
+            var result = cargaArchivosService.cargarArchivos(planesVuelo, aeropuertos, envios);
+            return ResponseEntity.ok(Map.of(
+                    "success", result.success(),
+                    "message", result.message(),
+                    "aeropuertosCount", result.aeropuertosCount(),
+                    "vuelosCount", result.vuelosCount(),
+                    "paquetesCount", result.paquetesCount(),
+                    "datasetId", result.datasetId()
+            ));
+        }
+
+        try {
+            List<Paquete> paquetes = cargaArchivosService.cargarEnviosDesdeArchivo(envios);
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Envios cargados exitosamente desde archivo",
+                    "paquetesCount", paquetes.size()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", e.getMessage()
+            ));
+        }
     }
 
     @GetMapping("/aeropuertos")

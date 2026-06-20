@@ -74,8 +74,9 @@ function CargaArchivosTab() {
         (pct) => setProgress(pct)
       )
       setResult(res)
-    } catch {
-      setError('Error al subir los archivos. Verifique el formato.')
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || e?.message || 'Error al subir los archivos. Verifique el formato.'
+      setError(msg)
     } finally {
       setUploading(false)
     }
@@ -83,13 +84,13 @@ function CargaArchivosTab() {
 
   return (
     <div className="space-y-4">
-      <FileInput label="Archivo de vuelos (planes_vuelo.txt)" onChange={setPlanesVuelo} />
-      <FileInput label="Archivo de aeropuertos (aeropuertos.txt)" onChange={setAeropuertos} />
-      <FileInput label="Archivo de envíos (envíos.txt)" onChange={setEnvios} />
+      <FileInput label="Archivo de vuelos (planes_vuelo.txt — opcional)" onChange={setPlanesVuelo} />
+      <FileInput label="Archivo de aeropuertos (aeropuertos.txt — opcional)" onChange={setAeropuertos} />
+      <FileInput label="Archivo de envíos (_envios_SKBO_.txt — obligatorio)" onChange={setEnvios} />
 
       <button
         onClick={handleUpload}
-        disabled={uploading || (!planesVuelo && !aeropuertos && !envios)}
+        disabled={uploading || !envios}
         className="w-full bg-sky-600 hover:bg-sky-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-2.5 rounded-lg font-semibold"
       >
         {uploading ? 'Subiendo...' : 'Subir Archivos'}
