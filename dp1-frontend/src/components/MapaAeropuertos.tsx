@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, memo } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import type { AeropuertoDTO, VueloDTO, EnvioEstado } from '../types'
+import type { AeropuertoDTO, VueloDTO } from '../types'
 import { getAirportCity, AIRPORTS_DATA } from '../data/airportsData'
 import { TIMEZONE_OPTIONS } from '../utils/timezoneFormat'
 
@@ -20,6 +20,7 @@ interface Props {
   onVueloClick?: (v: VueloDTO) => void
   mapTz: number
   onMapTzChange: (tz: number) => void
+  simulationMode?: boolean
 }
 
 const center: [number, number] = [20, 0]
@@ -161,7 +162,7 @@ interface FlightAnim {
   pts?: [number, number][]
 }
 
-function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, onAeropuertoClick, onVueloClick, onEnvioSelect, mapTz, onMapTzChange }: Props) {
+function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, onAeropuertoClick, onVueloClick, mapTz, onMapTzChange, simulationMode = false }: Props) {
   const mapRef = useRef<L.Map | null>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const circleLayerRef = useRef<L.LayerGroup | null>(null)
@@ -187,9 +188,6 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
   const [showRouteLines, setShowRouteLines] = useState(true)
   const showRouteLinesRef = useRef(showRouteLines)
   const isZoomingRef = useRef(false)
-  const onEnvioSelectRef = useRef(onEnvioSelect)
-  onEnvioSelectRef.current = onEnvioSelect
-
   onVueloClickRef.current = onVueloClick
   onAeropuertoClickRef.current = onAeropuertoClick
   velocidadRef.current = velocidad
@@ -252,7 +250,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
 
     vuelos.forEach((v) => {
       if (!shouldDisplayFlight(v.id, FLIGHT_DISPLAY_PERCENTAGE)) return
-      const progresoLocal = calcularProgresoLocal(v, new Date())
+      const progresoLocal = simulationMode ? v.progresoVuelo : calcularProgresoLocal(v, new Date())
       if (progresoLocal >= 100) {
         persistentFlightsRef.current.delete(v.id)
         const mk = flightMarkersRef.current.get(v.id)
@@ -488,7 +486,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
     const realNow = new Date()
 
     const displayFlights = Array.from(persistentFlightsRef.current.values()).filter((v) => {
-      const progreso = calcularProgresoLocal(v, realNow)
+      const progreso = simulationMode ? v.progresoVuelo : calcularProgresoLocal(v, realNow)
       return progreso > 0 && progreso < 100
     })
     const displayIds = new Set(displayFlights.map((v) => v.id))
@@ -509,7 +507,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       const isSelected = v.id === selectedVueloIdRef.current
       const tooltipText = tooltipForFlight(v)
       const pts = bezierPoints(from, to, 40)
-      const progresoActual = calcularProgresoLocal(v, realNow)
+      const progresoActual = simulationMode ? v.progresoVuelo : calcularProgresoLocal(v, realNow)
       const tNorm = progresoActual / 100
       const splitIndex = Math.round(tNorm * 40)
 
@@ -606,7 +604,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
         const mk = flightMarkersRef.current.get(id)
         if (!mk) return
 
-        const currentProgress = calcularProgresoLocal(anim.vuelo, realNow)
+        const currentProgress = simulationMode ? anim.vuelo.progresoVuelo : calcularProgresoLocal(anim.vuelo, realNow)
         if (currentProgress >= 100) {
           markerLayerRef.current?.removeLayer(mk)
           flightMarkersRef.current.delete(id)

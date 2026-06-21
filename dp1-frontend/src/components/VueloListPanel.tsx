@@ -15,10 +15,6 @@ function formatTime(iso: string): string {
   return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })
 }
 
-function formatFlightLabel(v: VueloDTO): string {
-  const idShort = v.id.length > 25 ? v.id.substring(0, 22) + '...' : v.id
-  return `${getAirportCity(v.origen) || v.origen}→${getAirportCity(v.destino) || v.destino} · ${idShort}`
-}
 
 const estadoLabel: Record<string, string> = {
   EN_ESPERA: 'En espera',

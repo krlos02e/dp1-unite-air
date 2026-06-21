@@ -273,7 +273,6 @@ export default function OperacionDiaria() {
             velocidad={1}
             onAeropuertoClick={handleAeropuertoClick}
             onVueloClick={handleVueloClick}
-            onEnvioSelect={handleEnvioSelect}
             mapTz={mapTz}
             onMapTzChange={setMapTz}
           />

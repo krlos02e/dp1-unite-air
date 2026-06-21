@@ -37,12 +37,6 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
     setSelectedEnvio(null)
   }, [])
 
-  const handleEnvioSelect = useCallback((envio: EnvioEstado) => {
-    setSelectedEnvio((prev) => (prev?.id === envio.id ? null : envio))
-    setSelectedVuelo(null)
-    setSelectedAeropuerto(null)
-  }, [])
-
   const handleIrAVueloDesdeEnvio = useCallback((vueloId: string) => {
     const vuelo = simulationState?.vuelos.find((v) => v.id === vueloId)
     if (vuelo) {
@@ -206,9 +200,9 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
             selectedVueloId={selectedVuelo?.id || null}
             onAeropuertoClick={handleAeropuertoClick}
             onVueloClick={handleVueloClick}
-            onEnvioSelect={handleEnvioSelect}
             mapTz={mapTz}
             onMapTzChange={setMapTz}
+            simulationMode={true}
           />
         </div>
 

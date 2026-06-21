@@ -29,12 +29,6 @@ export default function Dashboard({ sessionId }: Props) {
     setSelectedEnvio(null)
   }, [])
 
-  const handleEnvioSelect = useCallback((envio: EnvioEstado) => {
-    setSelectedEnvio((prev) => (prev?.id === envio.id ? null : envio))
-    setSelectedVuelo(null)
-    setSelectedAeropuerto(null)
-  }, [])
-
   const handleIrAVueloDesdeEnvio = useCallback((vueloId: string) => {
     const vuelo = data?.vuelosActivos.find((v) => v.id === vueloId)
     if (vuelo) {
@@ -81,7 +75,6 @@ export default function Dashboard({ sessionId }: Props) {
           vuelos={data.vuelosActivos}
           onAeropuertoClick={handleAeropuertoClick}
           onVueloClick={handleVueloClick}
-          onEnvioSelect={handleEnvioSelect}
           mapTz={mapTz}
           onMapTzChange={setMapTz}
         />

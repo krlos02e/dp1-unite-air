@@ -143,6 +143,7 @@ public class AlmacenService {
         if (almacenRepository.existsById(almacen.getCodigoOACI())) {
             throw new IllegalArgumentException("Ya existe un almacén con código " + almacen.getCodigoOACI());
         }
+        mapaCacheTime = 0;
         return almacenRepository.save(almacen);
     }
 
@@ -157,6 +158,7 @@ public class AlmacenService {
         existente.setCapacidadMaxima(datos.getCapacidadMaxima());
         existente.setLatitud(datos.getLatitud());
         existente.setLongitud(datos.getLongitud());
+        mapaCacheTime = 0;
         return almacenRepository.save(existente);
     }
 
@@ -166,13 +168,23 @@ public class AlmacenService {
             throw new IllegalArgumentException("No existe almacén " + codigoOACI);
         }
         almacenRepository.deleteById(codigoOACI);
+        mapaCacheTime = 0;
     }
 
+    private volatile Map<String, Almacen> cachedMapaAlmacenes = new HashMap<>();
+    private volatile long mapaCacheTime = 0;
+    private static final long MAPA_CACHE_TTL_MS = 5000;
+
     public Map<String, Almacen> getMapaAlmacenes() {
-        Map<String, Almacen> mapa = new HashMap<>();
-        for (Almacen a : almacenRepository.findAll()) {
-            mapa.put(a.getCodigoOACI(), a);
+        long now = System.currentTimeMillis();
+        if (now - mapaCacheTime > MAPA_CACHE_TTL_MS || cachedMapaAlmacenes.isEmpty()) {
+            Map<String, Almacen> mapa = new HashMap<>();
+            for (Almacen a : almacenRepository.findAll()) {
+                mapa.put(a.getCodigoOACI(), a);
+            }
+            cachedMapaAlmacenes = mapa;
+            mapaCacheTime = now;
         }
-        return mapa;
+        return cachedMapaAlmacenes;
     }
 }

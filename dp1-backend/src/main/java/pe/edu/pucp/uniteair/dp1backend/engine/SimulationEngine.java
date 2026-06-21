@@ -322,6 +322,70 @@ public class SimulationEngine {
                         }
                     }
 
+                    // Re-planificación cada 5 horas simuladas
+                    if (hora > 0 && hora % 5 == 0 && !cancellationFlags.getOrDefault(sessionId, false)) {
+                        try {
+                            // Separar paquetes comprometidos (ya en vuelo) de pendientes
+                            Map<String, Ruta> rutasComprometidas = new HashMap<>();
+                            List<Paquete> pendientes = new ArrayList<>();
+                            for (Map.Entry<String, Ruta> entry : rutas.entrySet()) {
+                                String pid = entry.getKey();
+                                if (rutasEntregadas.contains(pid)) continue;
+                                Ruta r = entry.getValue();
+                                if (r.getVuelos().isEmpty()) {
+                                    pendientes.add(dataset.getPaquetePorId(pid));
+                                    continue;
+                                }
+                                Vuelo primerVuelo = r.getVuelos().get(0);
+                                // Si el primer vuelo ya despegó → comprometido
+                                if (primerVuelo.getSalidaUtc().isBefore(simTime)) {
+                                    rutasComprometidas.put(pid, r);
+                                } else {
+                                    pendientes.add(dataset.getPaquetePorId(pid));
+                                }
+                            }
+
+                            if (!pendientes.isEmpty()) {
+                                PlanificacionUtils.limpiarCacheGlobal();
+                                Dataset datasetPendientes = new Dataset(
+                                    dataset.getAeropuertos(),
+                                    dataset.getVuelos(),
+                                    pendientes
+                                );
+                                Solucion solParcial = orchestrator.ejecutarFlujoCompleto(datasetPendientes, config);
+                                Map<String, Ruta> nuevasRutas = solParcial.getRutasAsignadas();
+
+                                // Merge: comprometidas + nuevas
+                                Map<String, Ruta> rutasMerge = new HashMap<>(rutasComprometidas);
+                                rutasMerge.putAll(nuevasRutas);
+                                rutas = rutasMerge;
+
+                                // Reconstruir estado
+                                estadoRef = PlanificacionUtils.construirEstadoConAsignaciones(rutas, dataset, config);
+
+                                // Re-poblar cargaVuelo
+                                cargaVuelo.clear();
+                                for (Vuelo v : dataset.getVuelos()) {
+                                    int carga = estadoRef.getCargaVuelo(v.getId());
+                                    if (carga > 0) cargaVuelo.put(v.getId(), carga);
+                                }
+
+                                logs.add(LogEntry.builder()
+                                        .timestamp(simTime)
+                                        .tipo("REPLAN")
+                                        .mensaje(String.format("Re-planificación hora %d: %d pendientes → %d rutas nuevas",
+                                                hora, pendientes.size(), nuevasRutas.size()))
+                                        .build());
+                                System.out.println("[Simulación] Re-plan h=" + hora
+                                        + " pendientes=" + pendientes.size()
+                                        + " nuevas=" + nuevasRutas.size());
+                            }
+                        } catch (Exception e) {
+                            System.err.println("[Simulación] Error en re-planificación hora " + hora
+                                    + ": " + e.getMessage());
+                        }
+                    }
+
                     for (Aeropuerto a : dataset.getAeropuertos().values()) {
                         int ocup = estadoRef.getOcupacionHora(a.getCodigoOACI(), simTime);
                         ocupacionAeropuerto.put(a.getCodigoOACI(), ocup);

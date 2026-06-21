@@ -1,6 +1,7 @@
 package pe.edu.pucp.uniteair.dp1backend.service;
 
 import jakarta.annotation.PostConstruct;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import tasf.config.Config_Simulacion;
@@ -256,6 +257,148 @@ public class CargaArchivosService {
             e.printStackTrace();
             this.estadoOperacional = new EstadoOperacional();
             this.cargaVueloCache = new HashMap<>();
+        }
+    }
+
+    private record EstadoEnvio(
+        String estado,
+        String aeropuertoActual,
+        String vueloActual,
+        String vueloEsperado,
+        LocalDateTime ultimaLlegada
+    ) {}
+
+    private EstadoEnvio computarEstado(Paquete paquete, Ruta ruta, LocalDateTime ahoraUtc) {
+        if (ruta == null || ruta.getVuelos().isEmpty()) {
+            return new EstadoEnvio("EN_ESPERA", paquete.getOrigenOACI(), null, null, null);
+        }
+
+        List<Vuelo> vuelosRuta = ruta.getVuelos();
+        Vuelo vueloEnCurso = null;
+        Vuelo proximoVuelo = null;
+
+        for (Vuelo v : vuelosRuta) {
+            if (!ahoraUtc.isBefore(v.getSalidaUtc()) && ahoraUtc.isBefore(v.getLlegadaUtc())) {
+                vueloEnCurso = v;
+                break;
+            }
+            if (ahoraUtc.isBefore(v.getSalidaUtc()) && proximoVuelo == null) {
+                proximoVuelo = v;
+            }
+        }
+
+        if (vueloEnCurso != null) {
+            return new EstadoEnvio(
+                "EN_VUELO",
+                vueloEnCurso.getOrigen().getCodigoOACI(),
+                vueloEnCurso.getId(),
+                null,
+                null
+            );
+        }
+
+        LocalDateTime ultimaLlegada = vuelosRuta.get(vuelosRuta.size() - 1).getLlegadaUtc();
+        if (ahoraUtc.isAfter(ultimaLlegada)) {
+            return new EstadoEnvio(
+                "ENTREGADO",
+                paquete.getDestinoOACI(),
+                null, null,
+                ultimaLlegada
+            );
+        }
+
+        if (proximoVuelo != null) {
+            return new EstadoEnvio(
+                "EMBARCADO",
+                proximoVuelo.getOrigen().getCodigoOACI(),
+                null,
+                proximoVuelo.getId(),
+                null
+            );
+        }
+
+        return new EstadoEnvio("EN_ESPERA", paquete.getOrigenOACI(), null, null, null);
+    }
+
+    @Scheduled(fixedRate = 300000)
+    public synchronized void rePlanificarProgramado() {
+        if (lastDataset == null || planificando) return;
+
+        LocalDateTime ahoraUtc = LocalDateTime.now(ZoneOffset.UTC);
+
+        // 1. Recolectar solo paquetes incrementales (lo que ingresa el usuario)
+        if (paquetesIncrementales.isEmpty()) return;
+
+        // 2. Filtrar pendientes: EN_ESPERA o EMBARCADO
+        List<Paquete> pendientes = new ArrayList<>();
+        for (Paquete p : paquetesIncrementales) {
+            Ruta ruta = rutasAsignadas.get(p.getId());
+            EstadoEnvio e = computarEstado(p, ruta, ahoraUtc);
+            if ("EN_ESPERA".equals(e.estado()) || "EMBARCADO".equals(e.estado())) {
+                pendientes.add(p);
+            }
+        }
+        if (pendientes.isEmpty()) return;
+
+        // 3. Preservar rutas de paquetes activos (EN_VUELO / ENTREGADO)
+        Set<String> pendientesIds = pendientes.stream().map(Paquete::getId).collect(Collectors.toSet());
+        Map<String, Ruta> rutasActivos = new HashMap<>();
+        for (Map.Entry<String, Ruta> entry : this.rutasAsignadas.entrySet()) {
+            if (!pendientesIds.contains(entry.getKey())) {
+                rutasActivos.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        // 4. Planificar solo pendientes
+        planificando = true;
+        try {
+            Config_Simulacion config = new Config_Simulacion();
+            config.setAeropuertoHub("SKBO");
+            config.setMinimaConexion(java.time.Duration.ofMinutes(10));
+            config.setIteracionesALNS(20);
+            config.setMaxRutasPorPaquete(4);
+            config.setMaxEscalas(2);
+
+            Dataset datasetPendientes = new Dataset(
+                lastDataset.getAeropuertos(),
+                lastDataset.getVuelos(),
+                pendientes
+            );
+
+            PlanificacionUtils.limpiarCacheGlobal();
+            TwoPhaseOrchestrator orchestrator = new TwoPhaseOrchestrator(new ALNS_RutasPlanner());
+            var solucion = orchestrator.ejecutarFlujoCompleto(datasetPendientes, config);
+            var nuevasRutas = solucion.getRutasAsignadas();
+
+            // 5. Merge: activos (intocables) + nuevos (re-planificados)
+            Map<String, Ruta> todasLasRutas = new HashMap<>(rutasActivos);
+            todasLasRutas.putAll(nuevasRutas);
+            this.rutasAsignadas = todasLasRutas;
+
+            // 6. Reconstruir estado completo desde las rutas mergeadas
+            Dataset datasetCompleto = new Dataset(
+                lastDataset.getAeropuertos(),
+                lastDataset.getVuelos(),
+                paquetesIncrementales
+            );
+            this.estadoOperacional = PlanificacionUtils.construirEstadoConAsignaciones(
+                todasLasRutas, datasetCompleto, config);
+
+            // 7. Reconstruir cache de carga de vuelos
+            Map<String, Integer> nuevoCache = new HashMap<>();
+            for (Vuelo v : lastDataset.getVuelos()) {
+                int carga = this.estadoOperacional.getCargaVuelo(v.getId());
+                if (carga > 0) nuevoCache.put(v.getId(), carga);
+            }
+            this.cargaVueloCache = nuevoCache;
+
+            System.out.println("[Scheduler] Re-planificación: " + pendientes.size()
+                + " pendientes → " + nuevasRutas.size() + " rutas nuevas");
+        } catch (Exception e) {
+            System.err.println("[Scheduler] Error en re-planificación: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            planificando = false;
         }
     }
 
@@ -549,9 +692,6 @@ public class CargaArchivosService {
         System.out.println("[CargaArchivosService] Envios incrementales agregados: " + nuevos.size()
                 + ". Total acumulados: " + paquetesIncrementales.size());
 
-        if (lastDataset != null) {
-            lanzarPlanificacionEnBackground(lastDataset);
-        }
         return nuevos;
     }
 
@@ -612,78 +752,31 @@ public class CargaArchivosService {
     }
 
     public synchronized Map<String, Object> buscarEnvio(String id) {
-        if (lastDataset == null) {
-            return null;
-        }
+        if (lastDataset == null) return null;
 
         Paquete paquete = null;
         for (Paquete p : lastDataset.getPaquetes()) {
-            if (p.getId().equals(id)) {
-                paquete = p;
-                break;
-            }
+            if (p.getId().equals(id)) { paquete = p; break; }
         }
         if (paquete == null) {
             for (Paquete p : paquetesIncrementales) {
-                if (p.getId().equals(id)) {
-                    paquete = p;
-                    break;
-                }
+                if (p.getId().equals(id)) { paquete = p; break; }
             }
         }
-        if (paquete == null) {
-            return null;
-        }
+        if (paquete == null) return null;
 
         LocalDateTime ahoraUtc = LocalDateTime.now(ZoneOffset.UTC);
         Ruta ruta = rutasAsignadas.get(paquete.getId());
-
-        String estado;
-        String aeropuertoActual = paquete.getOrigenOACI();
-        String vueloEsperado = null;
-        String vueloActual = null;
-
-        if (ruta == null || ruta.getVuelos().isEmpty()) {
-            estado = "EN_ESPERA";
-        } else {
-            List<Vuelo> vuelosRuta = ruta.getVuelos();
-            Vuelo vueloEnCurso = null;
-            Vuelo proximoVuelo = null;
-
-            for (Vuelo v : vuelosRuta) {
-                if (!ahoraUtc.isBefore(v.getSalidaUtc()) && ahoraUtc.isBefore(v.getLlegadaUtc())) {
-                    vueloEnCurso = v;
-                    break;
-                }
-                if (ahoraUtc.isBefore(v.getSalidaUtc()) && proximoVuelo == null) {
-                    proximoVuelo = v;
-                }
-            }
-
-            if (vueloEnCurso != null) {
-                estado = "EN_VUELO";
-                vueloActual = vueloEnCurso.getId();
-                aeropuertoActual = vueloEnCurso.getOrigen().getCodigoOACI();
-            } else if (ahoraUtc.isAfter(vuelosRuta.get(vuelosRuta.size() - 1).getLlegadaUtc())) {
-                estado = "ENTREGADO";
-                aeropuertoActual = paquete.getDestinoOACI();
-            } else if (proximoVuelo != null) {
-                estado = "EMBARCADO";
-                vueloEsperado = proximoVuelo.getId();
-                aeropuertoActual = proximoVuelo.getOrigen().getCodigoOACI();
-            } else {
-                estado = "EN_ESPERA";
-            }
-        }
+        EstadoEnvio e = computarEstado(paquete, ruta, ahoraUtc);
 
         Map<String, Object> result = new HashMap<>();
         result.put("id", paquete.getId());
         result.put("origen", paquete.getOrigenOACI());
         result.put("destino", paquete.getDestinoOACI());
-        result.put("estado", estado);
-        result.put("aeropuertoActual", aeropuertoActual);
-        result.put("vueloEsperado", vueloEsperado);
-        result.put("vueloActual", vueloActual);
+        result.put("estado", e.estado());
+        result.put("aeropuertoActual", e.aeropuertoActual());
+        result.put("vueloEsperado", e.vueloEsperado());
+        result.put("vueloActual", e.vueloActual());
         result.put("cantidad", paquete.getCantidad());
         return result;
     }
@@ -729,53 +822,12 @@ public class CargaArchivosService {
             if (origen != null && !origen.isEmpty() && !p.getOrigenOACI().equals(origen)) continue;
 
             Ruta ruta = rutasAsignadas.get(p.getId());
+            EstadoEnvio e = computarEstado(p, ruta, ahoraUtc);
 
-            String estado;
-            String aeropuertoActual = p.getOrigenOACI();
-            String vueloEsperado = null;
-            String vueloActual = null;
-            LocalDateTime ultimaLlegada = null;
+            if (!estadosSet.contains(e.estado())) continue;
 
-            if (ruta == null || ruta.getVuelos().isEmpty()) {
-                estado = "EN_ESPERA";
-            } else {
-                List<Vuelo> vuelosRuta = ruta.getVuelos();
-                Vuelo vueloEnCurso = null;
-                Vuelo proximoVuelo = null;
-
-                for (Vuelo v : vuelosRuta) {
-                    if (!ahoraUtc.isBefore(v.getSalidaUtc()) && ahoraUtc.isBefore(v.getLlegadaUtc())) {
-                        vueloEnCurso = v;
-                        break;
-                    }
-                    if (ahoraUtc.isBefore(v.getSalidaUtc()) && proximoVuelo == null) {
-                        proximoVuelo = v;
-                    }
-                }
-
-                if (vueloEnCurso != null) {
-                    estado = "EN_VUELO";
-                    vueloActual = vueloEnCurso.getId();
-                    aeropuertoActual = vueloEnCurso.getOrigen().getCodigoOACI();
-                } else {
-                    ultimaLlegada = vuelosRuta.get(vuelosRuta.size() - 1).getLlegadaUtc();
-                    if (ahoraUtc.isAfter(ultimaLlegada)) {
-                        estado = "ENTREGADO";
-                        aeropuertoActual = p.getDestinoOACI();
-                    } else if (proximoVuelo != null) {
-                        estado = "EMBARCADO";
-                        vueloEsperado = proximoVuelo.getId();
-                        aeropuertoActual = proximoVuelo.getOrigen().getCodigoOACI();
-                    } else {
-                        estado = "EN_ESPERA";
-                    }
-                }
-            }
-
-            if (!estadosSet.contains(estado)) continue;
-
-            if ("ENTREGADO".equals(estado) && horas != null && horas > 0 && ultimaLlegada != null) {
-                long diffHoras = Duration.between(ultimaLlegada, ahoraUtc).toHours();
+            if ("ENTREGADO".equals(e.estado()) && horas != null && horas > 0 && e.ultimaLlegada() != null) {
+                long diffHoras = Duration.between(e.ultimaLlegada(), ahoraUtc).toHours();
                 if (diffHoras > horas) continue;
             }
 
@@ -783,10 +835,10 @@ public class CargaArchivosService {
             envio.put("id", p.getId());
             envio.put("origen", p.getOrigenOACI());
             envio.put("destino", p.getDestinoOACI());
-            envio.put("estado", estado);
-            envio.put("aeropuertoActual", aeropuertoActual);
-            envio.put("vueloEsperado", vueloEsperado);
-            envio.put("vueloActual", vueloActual);
+            envio.put("estado", e.estado());
+            envio.put("aeropuertoActual", e.aeropuertoActual());
+            envio.put("vueloEsperado", e.vueloEsperado());
+            envio.put("vueloActual", e.vueloActual());
             envio.put("cantidad", p.getCantidad());
             resultados.add(envio);
         }

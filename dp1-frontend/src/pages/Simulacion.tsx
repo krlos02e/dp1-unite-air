@@ -369,9 +369,9 @@ export default function Simulacion() {
             velocidad={1}
             onAeropuertoClick={handleAeropuertoClick}
             onVueloClick={handleVueloClick}
-            onEnvioSelect={handleEnvioSelect}
             mapTz={mapTz}
             onMapTzChange={setMapTz}
+            simulationMode={true}
           />
 
           {/* Contadores flotantes - inferior izquierda */}
