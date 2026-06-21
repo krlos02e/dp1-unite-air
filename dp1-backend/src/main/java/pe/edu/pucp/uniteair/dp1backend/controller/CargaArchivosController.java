@@ -7,6 +7,8 @@ import pe.edu.pucp.uniteair.dp1backend.config.AeropuertoCoordenadas;
 import pe.edu.pucp.uniteair.dp1backend.dto.AeropuertoDTO;
 import pe.edu.pucp.uniteair.dp1backend.dto.VueloDTO;
 import pe.edu.pucp.uniteair.dp1backend.service.CargaArchivosService;
+import pe.edu.pucp.uniteair.dp1backend.service.AlmacenService;
+import pe.edu.pucp.uniteair.dp1backend.entity.Almacen;
 import tasf.core.Dataset;
 import tasf.model.Paquete;
 import tasf.model.Vuelo;
@@ -25,9 +27,11 @@ import java.util.stream.Collectors;
 public class CargaArchivosController {
 
     private final CargaArchivosService cargaArchivosService;
+    private final AlmacenService almacenService;
 
-    public CargaArchivosController(CargaArchivosService cargaArchivosService) {
+    public CargaArchivosController(CargaArchivosService cargaArchivosService, AlmacenService almacenService) {
         this.cargaArchivosService = cargaArchivosService;
+        this.almacenService = almacenService;
     }
 
     @PostMapping("/upload")
@@ -89,14 +93,20 @@ public class CargaArchivosController {
             }
         }
 
+        Map<String, Almacen> almacenMap = almacenService.getMapaAlmacenes();
         List<AeropuertoDTO> aeropuertos = dataset.getAeropuertos().values().stream()
                 .map(a -> {
                     double[] coord = AeropuertoCoordenadas.get(a.getCodigoOACI());
                     int ocup = cargaArchivosService.getOcupacionAeropuerto(a.getCodigoOACI(), ahora);
+                    Almacen alm = almacenMap.get(a.getCodigoOACI());
+                    String ciudad = alm != null ? alm.getCiudad() : null;
+                    String pais = alm != null ? alm.getPais() : null;
                     return AeropuertoDTO.builder()
                             .codigoOACI(a.getCodigoOACI())
                             .latitud(coord[0])
                             .longitud(coord[1])
+                            .ciudad(ciudad)
+                            .pais(pais)
                             .capacidadMaxima(a.getCapacidadMaxima())
                             .ocupacionActual(ocup)
                             .vuelosEntrantes(entrantesMap.getOrDefault(a.getCodigoOACI(), List.of()))

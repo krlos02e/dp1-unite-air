@@ -5,6 +5,8 @@ import VueloModal from '../components/VueloModal'
 import AeropuertoModal from '../components/AeropuertoModal'
 import EnvioModal from '../components/EnvioModal'
 import EnvioListPanel from '../components/EnvioListPanel'
+import AlmacenListPanel from '../components/AlmacenListPanel'
+import VueloListPanel from '../components/VueloListPanel'
 import { AIRPORTS_DATA, getAirportCity } from '../data/airportsData'
 import type { VueloDTO, AeropuertoDTO, EnvioEstado } from '../types'
 
@@ -92,6 +94,9 @@ export default function OperacionDiaria() {
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
   const [selectedEnvio, setSelectedEnvio] = useState<EnvioEstado | null>(null)
   const [mapTz, setMapTz] = useState(0)
+  const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('envios')
+  const [panelCollapsed, setPanelCollapsed] = useState(false)
+  const [todosEnvios, setTodosEnvios] = useState<EnvioEstado[]>([])
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
@@ -187,7 +192,21 @@ export default function OperacionDiaria() {
       }
     }
 
-    const interval = setInterval(pollVuelos, 15000)
+    const pollEnvios = async () => {
+      try {
+        const res = await cargaArchivosService.listarEnvios(undefined, undefined, undefined)
+        setTodosEnvios(res.envios)
+      } catch {
+        // ignore
+      }
+    }
+
+    pollVuelos()
+    pollEnvios()
+    const interval = setInterval(() => {
+      pollVuelos()
+      pollEnvios()
+    }, 15000)
     return () => clearInterval(interval)
   }, [dataLoaded])
 
@@ -236,7 +255,7 @@ export default function OperacionDiaria() {
         </div>
       </div>
 
-      {/* Mapa + Panel de envíos */}
+      {/* Mapa + Panel de envíos/almacenes */}
       <div className="flex gap-2 h-[calc(100vh-10rem)]">
         <div className="relative flex-1 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
           {loading && (
@@ -257,13 +276,79 @@ export default function OperacionDiaria() {
             onEnvioSelect={handleEnvioSelect}
             mapTz={mapTz}
             onMapTzChange={setMapTz}
-            hideEnvioSearch
           />
+          {panelCollapsed && (
+            <button
+              onClick={() => setPanelCollapsed(false)}
+              className="absolute top-4 right-4 z-[1000] bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white hover:bg-gray-700 transition-colors cursor-pointer"
+            >
+              ▶ Panel
+            </button>
+          )}
         </div>
-        <EnvioListPanel
-          onEnvioSelect={handleEnvioSelect}
-          selectedEnvioId={selectedEnvio?.id}
-        />
+        {!panelCollapsed && (
+        <div className="flex flex-col gap-2">
+          <div className="flex bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setPanelMode('envios')}
+              className={`flex-1 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                panelMode === 'envios'
+                  ? 'bg-sky-600 text-white'
+                  : 'text-gray-400 hover:text-gray-200 bg-gray-800'
+              }`}
+            >
+              📦 Envíos
+            </button>
+            <button
+              onClick={() => setPanelMode('almacenes')}
+              className={`flex-1 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                panelMode === 'almacenes'
+                  ? 'bg-sky-600 text-white'
+                  : 'text-gray-400 hover:text-gray-200 bg-gray-800'
+              }`}
+            >
+              🏢 Almacenes
+            </button>
+            <button
+              onClick={() => setPanelMode('aviones')}
+              className={`flex-1 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                panelMode === 'aviones'
+                  ? 'bg-sky-600 text-white'
+                  : 'text-gray-400 hover:text-gray-200 bg-gray-800'
+              }`}
+            >
+              ✈️ Aviones
+            </button>
+            <button
+              onClick={() => setPanelCollapsed(true)}
+              className="px-2 py-1.5 text-xs text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 transition-colors cursor-pointer"
+              title="Contraer panel"
+            >
+              ◀
+            </button>
+          </div>
+          {panelMode === 'almacenes' ? (
+            <AlmacenListPanel
+              aeropuertos={aeropuertosEstaticos}
+              envios={todosEnvios}
+              onEnvioSelect={handleEnvioSelect}
+              selectedEnvioId={selectedEnvio?.id}
+            />
+          ) : panelMode === 'aviones' ? (
+            <VueloListPanel
+              vuelos={vuelos}
+              envios={todosEnvios}
+              onEnvioSelect={handleEnvioSelect}
+              selectedEnvioId={selectedEnvio?.id}
+            />
+          ) : (
+            <EnvioListPanel
+              onEnvioSelect={handleEnvioSelect}
+              selectedEnvioId={selectedEnvio?.id}
+            />
+          )}
+        </div>
+        )}
       </div>
 
       <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} tzOffset={mapTz} />

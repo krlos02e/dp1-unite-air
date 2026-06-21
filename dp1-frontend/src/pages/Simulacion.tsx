@@ -6,6 +6,9 @@ import MapaAeropuertos from '../components/MapaAeropuertos'
 import VueloModal from '../components/VueloModal'
 import AeropuertoModal from '../components/AeropuertoModal'
 import EnvioModal from '../components/EnvioModal'
+import EnvioListPanel from '../components/EnvioListPanel'
+import AlmacenListPanel from '../components/AlmacenListPanel'
+import VueloListPanel from '../components/VueloListPanel'
 import ResultadosModal from '../components/ResultadosModal'
 import { formatDateTime } from '../utils/dateFormat'
 import { AIRPORTS_DATA } from '../data/airportsData'
@@ -52,6 +55,8 @@ export default function Simulacion() {
   const [selectedEnvio, setSelectedEnvio] = useState<EnvioEstado | null>(null)
   const [showStopConfirm, setShowStopConfirm] = useState(false)
   const [mapTz, setMapTz] = useState(0)
+  const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('envios')
+  const [panelCollapsed, setPanelCollapsed] = useState(false)
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
@@ -354,40 +359,116 @@ export default function Simulacion() {
         </div>
       </div>
 
-      {/* Mapa con contadores flotantes */}
-      <div className="relative h-[calc(100vh-10rem)] bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-        <MapaAeropuertos
-          aeropuertos={aeropuertos}
-          vuelos={vuelos}
-          selectedVueloId={selectedVuelo?.id || null}
-          velocidad={1}
-          onAeropuertoClick={handleAeropuertoClick}
-          onVueloClick={handleVueloClick}
-          onEnvioSelect={handleEnvioSelect}
-          mapTz={mapTz}
-          onMapTzChange={setMapTz}
-        />
+      {/* Mapa + Panel lateral (como OperacionDiaria) */}
+      <div className="flex gap-2 h-[calc(100vh-10rem)]">
+        <div className="relative flex-1 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+          <MapaAeropuertos
+            aeropuertos={aeropuertos}
+            vuelos={vuelos}
+            selectedVueloId={selectedVuelo?.id || null}
+            velocidad={1}
+            onAeropuertoClick={handleAeropuertoClick}
+            onVueloClick={handleVueloClick}
+            onEnvioSelect={handleEnvioSelect}
+            mapTz={mapTz}
+            onMapTzChange={setMapTz}
+          />
 
-        {/* Contadores flotantes - inferior izquierda */}
-        <div className="absolute bottom-4 left-4 z-[999] group">
-          <div className="bg-gray-900/40 border border-gray-700/40 rounded-xl p-3 backdrop-blur-[2px] transition-all duration-300 group-hover:bg-gray-900/95 group-hover:border-gray-700 group-hover:backdrop-blur-sm group-hover:shadow-2xl">
-            <h4 className="text-xs font-semibold text-gray-300 mb-2 pb-1 border-b border-gray-700/50">Estado de Vuelos</h4>
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-1.5 bg-emerald-900/30 border border-emerald-800/50 rounded-lg px-2 py-1">
-                <span className="text-[10px] text-emerald-400 font-medium">Culminados</span>
-                <span className="text-xs font-bold text-emerald-300 bg-emerald-800/50 px-1.5 py-0.5 rounded">{vuelosCulminados}</span>
-              </div>
-              <div className="flex items-center gap-1.5 bg-amber-900/30 border border-amber-800/50 rounded-lg px-2 py-1">
-                <span className="text-[10px] text-amber-400 font-medium">En Tránsito</span>
-                <span className="text-xs font-bold text-amber-300 bg-amber-800/50 px-1.5 py-0.5 rounded">{vuelosEnTransitoCount}</span>
-              </div>
-              <div className="flex items-center gap-1.5 bg-red-900/30 border border-red-800/50 rounded-lg px-2 py-1">
-                <span className="text-[10px] text-red-400 font-medium">Cancelados</span>
-                <span className="text-xs font-bold text-red-300 bg-red-800/50 px-1.5 py-0.5 rounded">{vuelosCancelados}</span>
+          {/* Contadores flotantes - inferior izquierda */}
+          <div className="absolute bottom-4 left-4 z-[999] group">
+            <div className="bg-gray-900/40 border border-gray-700/40 rounded-xl p-3 backdrop-blur-[2px] transition-all duration-300 group-hover:bg-gray-900/95 group-hover:border-gray-700 group-hover:backdrop-blur-sm group-hover:shadow-2xl">
+              <h4 className="text-xs font-semibold text-gray-300 mb-2 pb-1 border-b border-gray-700/50">Estado de Vuelos</h4>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-1.5 bg-emerald-900/30 border border-emerald-800/50 rounded-lg px-2 py-1">
+                  <span className="text-[10px] text-emerald-400 font-medium">Culminados</span>
+                  <span className="text-xs font-bold text-emerald-300 bg-emerald-800/50 px-1.5 py-0.5 rounded">{vuelosCulminados}</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-amber-900/30 border border-amber-800/50 rounded-lg px-2 py-1">
+                  <span className="text-[10px] text-amber-400 font-medium">En Tránsito</span>
+                  <span className="text-xs font-bold text-amber-300 bg-amber-800/50 px-1.5 py-0.5 rounded">{vuelosEnTransitoCount}</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-red-900/30 border border-red-800/50 rounded-lg px-2 py-1">
+                  <span className="text-[10px] text-red-400 font-medium">Cancelados</span>
+                  <span className="text-xs font-bold text-red-300 bg-red-800/50 px-1.5 py-0.5 rounded">{vuelosCancelados}</span>
+                </div>
               </div>
             </div>
           </div>
+
+          {panelCollapsed && (
+            <button
+              onClick={() => setPanelCollapsed(false)}
+              className="absolute top-4 right-4 z-[1000] bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white hover:bg-gray-700 transition-colors cursor-pointer"
+            >
+              ▶ Panel
+            </button>
+          )}
         </div>
+
+        {!panelCollapsed && (
+        <div className="flex flex-col gap-2">
+          <div className="flex bg-gray-900/95 border border-gray-700/80 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setPanelMode('envios')}
+              className={`flex-1 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                panelMode === 'envios'
+                  ? 'bg-sky-600 text-white'
+                  : 'text-gray-400 hover:text-gray-200 bg-gray-800'
+              }`}
+            >
+              📦 Envíos
+            </button>
+            <button
+              onClick={() => setPanelMode('almacenes')}
+              className={`flex-1 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                panelMode === 'almacenes'
+                  ? 'bg-sky-600 text-white'
+                  : 'text-gray-400 hover:text-gray-200 bg-gray-800'
+              }`}
+            >
+              🏢 Almacenes
+            </button>
+            <button
+              onClick={() => setPanelMode('aviones')}
+              className={`flex-1 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                panelMode === 'aviones'
+                  ? 'bg-sky-600 text-white'
+                  : 'text-gray-400 hover:text-gray-200 bg-gray-800'
+              }`}
+            >
+              ✈️ Aviones
+            </button>
+            <button
+              onClick={() => setPanelCollapsed(true)}
+              className="px-2 py-1.5 text-xs text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 transition-colors cursor-pointer"
+              title="Contraer panel"
+            >
+              ◀
+            </button>
+          </div>
+          {panelMode === 'almacenes' ? (
+            <AlmacenListPanel
+              aeropuertos={aeropuertos}
+              envios={simulationState?.envios || []}
+              onEnvioSelect={handleEnvioSelect}
+              selectedEnvioId={selectedEnvio?.id}
+            />
+          ) : panelMode === 'aviones' ? (
+            <VueloListPanel
+              vuelos={vuelos}
+              envios={simulationState?.envios || []}
+              onEnvioSelect={handleEnvioSelect}
+              selectedEnvioId={selectedEnvio?.id}
+            />
+          ) : (
+            <EnvioListPanel
+              onEnvioSelect={handleEnvioSelect}
+              selectedEnvioId={selectedEnvio?.id}
+              enviosExternos={simulationState?.envios || []}
+            />
+          )}
+        </div>
+        )}
       </div>
 
       <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} tzOffset={mapTz} />

@@ -16,6 +16,7 @@ public class AeropuertoDTO {
     private double latitud;
     private double longitud;
     private String ciudad;
+    private String pais;
     private int capacidadMaxima;
     private int ocupacionActual;
     private List<String> vuelosEntrantes;

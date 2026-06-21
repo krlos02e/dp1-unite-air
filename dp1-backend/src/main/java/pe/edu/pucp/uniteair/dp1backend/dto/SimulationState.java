@@ -27,4 +27,5 @@ public class SimulationState {
     private boolean colapsada;
     private String motivoColapso;
     private List<LogEntry> logs;
+    private List<EnvioSimulacionDTO> envios;
 }

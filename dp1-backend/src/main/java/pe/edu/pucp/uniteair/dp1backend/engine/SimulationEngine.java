@@ -16,6 +16,7 @@ import tasf.model.Aeropuerto;
 import tasf.model.Paquete;
 import tasf.model.Vuelo;
 import tasf.model.Ruta;
+import pe.edu.pucp.uniteair.dp1backend.dto.EnvioSimulacionDTO;
 import tasf.strategy.TwoPhaseOrchestrator;
 import tasf.strategy.PlanificadorRutasStrategy;
 import tasf.strategy.alns.ALNS_RutasPlanner;
@@ -97,7 +98,7 @@ public class SimulationEngine {
                         .mensaje("Planificando rutas...")
                         .build());
                 actualizarEstadoEnCache(sessionId, fechaInicio, dataset, cargaVuelo, ocupacionAeropuerto,
-                        0, 0, 0, duracionHoras, false, null, logs, "PLANIFICANDO", fechaInicio);
+                        0, 0, 0, duracionHoras, false, null, logs, "PLANIFICANDO", fechaInicio, null);
 
                 // Variables compartidas entre hilos
                 final int[] horaRef = {0};
@@ -174,8 +175,9 @@ public class SimulationEngine {
                                     .build());
                         }
 
+                        Map<String, Ruta> vizRutas = sol != null ? sol.getRutasAsignadas() : new HashMap<>();
                         actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
-                                vizEntregadas, vizEnTransito, hora, duracionHoras, false, null, vizLogs, "PLANIFICANDO", fechaInicio);
+                                vizEntregadas, vizEnTransito, hora, duracionHoras, false, null, vizLogs, "PLANIFICANDO", fechaInicio, vizRutas);
 
                         long sleepMs = (long) (15000.0 / Math.max(0.5, velocidad));
                         if (sleepMs > 0) {
@@ -335,7 +337,7 @@ public class SimulationEngine {
                     }
 
                     actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
-                            maletasEntregadas, maletasEnTransito, hora, duracionHoras, false, null, logs, "EJECUTANDO", fechaInicio);
+                            maletasEntregadas, maletasEnTransito, hora, duracionHoras, false, null, logs, "EJECUTANDO", fechaInicio, rutas);
 
                     long sleepMs = (long) (15000.0 / Math.max(0.5, velocidad));
                     if (sleepMs > 0) {
@@ -352,21 +354,22 @@ public class SimulationEngine {
                     }
                     SimulationState finalState = simulationCache.get(sessionId);
                     if (finalState != null) {
-                        SimulationState completed = SimulationState.builder()
-                                .sessionId(sessionId)
-                                .status("COMPLETADA")
-                                .simulationTime(finalState.getSimulationTime())
-                                .vuelos(finalState.getVuelos())
-                                .aeropuertos(finalState.getAeropuertos())
-                                .maletasEntregadas(finalState.getMaletasEntregadas())
-                                .maletasEnTransito(finalState.getMaletasEnTransito())
-                                .vuelosCulminados(finalState.getVuelosCulminados())
-                                .vuelosEnTransito(finalState.getVuelosEnTransito())
-                                .vuelosCancelados(finalState.getVuelosCancelados())
-                                .progreso(100)
-                                .colapsada(false)
-                                .logs(finalState.getLogs())
-                                .build();
+                    SimulationState completed = SimulationState.builder()
+                            .sessionId(sessionId)
+                            .status("COMPLETADA")
+                            .simulationTime(finalState.getSimulationTime())
+                            .vuelos(finalState.getVuelos())
+                            .aeropuertos(finalState.getAeropuertos())
+                            .maletasEntregadas(finalState.getMaletasEntregadas())
+                            .maletasEnTransito(finalState.getMaletasEnTransito())
+                            .vuelosCulminados(finalState.getVuelosCulminados())
+                            .vuelosEnTransito(finalState.getVuelosEnTransito())
+                            .vuelosCancelados(finalState.getVuelosCancelados())
+                            .progreso(100)
+                            .colapsada(false)
+                            .logs(finalState.getLogs())
+                            .envios(finalState.getEnvios())
+                            .build();
                         simulationCache.put(sessionId, completed);
                     }
                 }
@@ -464,7 +467,8 @@ public class SimulationEngine {
                                           int maletasEntregadas, int maletasEnTransito,
                                           int hora, int totalHoras, boolean colapsada,
                                           String motivo, List<LogEntry> logs, String status,
-                                          LocalDateTime fechaInicio) {
+                                          LocalDateTime fechaInicio,
+                                          Map<String, Ruta> rutasAsignadas) {
         // Monotonicity guard: never let simulation time/progress go backwards
         SimulationState prevState = simulationCache.get(sessionId);
         int prevHora = 0;
@@ -586,6 +590,59 @@ public class SimulationEngine {
             }
         }
 
+        List<EnvioSimulacionDTO> enviosDTO = new ArrayList<>();
+        if (rutasAsignadas != null && simTime != null) {
+            for (Map.Entry<String, Ruta> entry : rutasAsignadas.entrySet()) {
+                Paquete paquete = dataset.getPaquetePorId(entry.getKey());
+                if (paquete == null) continue;
+                Ruta ruta = entry.getValue();
+                String estado;
+                String aeropuertoActual = paquete.getOrigenOACI();
+                String vueloActual = null;
+                String vueloEsperado = null;
+                if (ruta == null || ruta.getVuelos().isEmpty()) {
+                    estado = "EN_ESPERA";
+                } else {
+                    List<Vuelo> vuelosRuta = ruta.getVuelos();
+                    Vuelo vueloEnCurso = null;
+                    Vuelo proximoVuelo = null;
+                    for (Vuelo v : vuelosRuta) {
+                        if (!simTime.isBefore(v.getSalidaUtc()) && simTime.isBefore(v.getLlegadaUtc())) {
+                            vueloEnCurso = v;
+                            break;
+                        }
+                        if (simTime.isBefore(v.getSalidaUtc()) && proximoVuelo == null) {
+                            proximoVuelo = v;
+                        }
+                    }
+                    if (vueloEnCurso != null) {
+                        estado = "EN_VUELO";
+                        vueloActual = vueloEnCurso.getId();
+                        aeropuertoActual = vueloEnCurso.getOrigen().getCodigoOACI();
+                    } else if (simTime.isAfter(vuelosRuta.get(vuelosRuta.size() - 1).getLlegadaUtc())) {
+                        estado = "ENTREGADO";
+                        aeropuertoActual = paquete.getDestinoOACI();
+                    } else if (proximoVuelo != null) {
+                        estado = "EMBARCADO";
+                        vueloEsperado = proximoVuelo.getId();
+                        aeropuertoActual = proximoVuelo.getOrigen().getCodigoOACI();
+                    } else {
+                        estado = "EN_ESPERA";
+                    }
+                }
+                enviosDTO.add(EnvioSimulacionDTO.builder()
+                        .id(paquete.getId())
+                        .origen(paquete.getOrigenOACI())
+                        .destino(paquete.getDestinoOACI())
+                        .estado(estado)
+                        .aeropuertoActual(aeropuertoActual)
+                        .vueloActual(vueloActual)
+                        .vueloEsperado(vueloEsperado)
+                        .cantidad(paquete.getCantidad())
+                        .build());
+            }
+        }
+
         SimulationState state = SimulationState.builder()
                 .sessionId(sessionId)
                 .status(status)
@@ -601,6 +658,7 @@ public class SimulationEngine {
                 .colapsada(colapsada)
                 .motivoColapso(motivo)
                 .logs(new ArrayList<>(logs))
+                .envios(enviosDTO)
                 .build();
 
         simulationCache.put(sessionId, state);
@@ -619,6 +677,7 @@ public class SimulationEngine {
                 .colapsada(true)
                 .motivoColapso(motivo)
                 .logs(logs)
+                .envios(new ArrayList<>())
                 .build();
         simulationCache.put(sessionId, updated);
     }

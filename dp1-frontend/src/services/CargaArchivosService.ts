@@ -1,5 +1,5 @@
 import { HttpClient } from './HttpClient'
-import type { CargaResult, AeropuertoDTO, VueloDTO, CancelarVueloResult, EnvioEntrada, AgregarEnviosResult, EnviosIncrementalesResponse, EnvioBusquedaResponse } from '../types'
+import type { CargaResult, AeropuertoDTO, VueloDTO, CancelarVueloResult, EnvioEntrada, AgregarEnviosResult, EnviosIncrementalesResponse, EnvioBusquedaResponse, AlmacenDTO } from '../types'
 
 class CargaArchivosService extends HttpClient {
   upload(
@@ -58,6 +58,23 @@ class CargaArchivosService extends HttpClient {
     if (horas !== undefined) params.set('horas', String(horas))
     const qs = params.toString()
     return this.get<EnvioBusquedaResponse>(`/envios/lista${qs ? '?' + qs : ''}`)
+  }
+
+  // ---- Almacenes CRUD ----
+  obtenerAlmacenes(): Promise<AlmacenDTO[]> {
+    return this.get<AlmacenDTO[]>('/almacenes')
+  }
+
+  crearAlmacen(data: AlmacenDTO): Promise<AlmacenDTO> {
+    return this.instance.post('/almacenes', data).then((r) => r.data)
+  }
+
+  actualizarAlmacen(codigo: string, data: Partial<AlmacenDTO>): Promise<AlmacenDTO> {
+    return this.instance.put(`/almacenes/${codigo}`, data).then((r) => r.data)
+  }
+
+  eliminarAlmacen(codigo: string): Promise<void> {
+    return this.instance.delete(`/almacenes/${codigo}`)
   }
 }
 

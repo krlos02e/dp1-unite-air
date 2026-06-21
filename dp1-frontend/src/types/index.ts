@@ -19,11 +19,23 @@ export interface AeropuertoDTO {
   latitud: number;
   longitud: number;
   ciudad?: string;
+  pais?: string;
   capacidadMaxima: number;
   ocupacionActual: number;
   vuelosEntrantes: string[];
   vuelosSalientes: string[];
   vuelosCanceladosSalientes: string[];
+}
+
+export interface AlmacenDTO {
+  codigoOACI: string;
+  ciudad?: string;
+  pais?: string;
+  continente?: string;
+  gmtOffsetMinutos: number;
+  capacidadMaxima: number;
+  latitud: number;
+  longitud: number;
 }
 
 export interface LogEntry {
@@ -49,6 +61,7 @@ export interface SimulationState {
   colapsada: boolean;
   motivoColapso: string;
   logs: LogEntry[];
+  envios?: EnvioEstado[];
 }
 
 export interface AuthResponse {

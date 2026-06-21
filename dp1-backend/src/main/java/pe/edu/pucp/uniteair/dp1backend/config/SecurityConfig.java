@@ -37,6 +37,7 @@ public class SecurityConfig {
                 .requestMatchers("/planificacion/**").permitAll()
                 .requestMatchers("/vuelos/**").permitAll()
                 .requestMatchers("/envios/**").permitAll()
+                .requestMatchers("/almacenes/**").permitAll()
                 .anyRequest().authenticated())
             .formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable());

@@ -12,12 +12,19 @@ const TAB_CONFIG: { key: Tab; label: string; estados: string; horas?: number }[]
   { key: 'entregados', label: 'Entregados', estados: 'ENTREGADO', horas: 4 },
 ]
 
+function countByEstado(envios: EnvioEstado[], estado: string): number {
+  return envios.filter(e => e.estado === estado).length
+}
+
 interface Props {
   onEnvioSelect: (envio: EnvioEstado) => void
   selectedEnvioId?: string | null
+  enviosExternos?: EnvioEstado[]
 }
 
-export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId }: Props) {
+const DEFAULT_LIMIT = 50
+
+export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosExternos }: Props) {
   const [tab, setTab] = useState<Tab>('pendientes')
   const [search, setSearch] = useState('')
   const [filtroId, setFiltroId] = useState(true)
@@ -25,6 +32,7 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId }: Props
   const [filtroDestino, setFiltroDestino] = useState(true)
   const [envios, setEnvios] = useState<EnvioEstado[]>([])
   const [loading, setLoading] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const pollingRef = useRef(false)
   const mountedRef = useRef(true)
 
@@ -36,6 +44,11 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId }: Props
   }, [])
 
   useEffect(() => {
+    if (enviosExternos) {
+      setEnvios(enviosExternos)
+      setLoading(false)
+      return
+    }
     const fetch = async () => {
       if (pollingRef.current) return
       pollingRef.current = true
@@ -53,17 +66,23 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId }: Props
     fetch()
     const interval = setInterval(fetch, 15000)
     return () => clearInterval(interval)
-  }, [tab])
+  }, [tab, enviosExternos])
 
+  useEffect(() => { setShowAll(false) }, [tab, envios])
+
+  const enviosVisibles = enviosExternos
+    ? enviosExternos.filter(e => e.estado === config.estados)
+    : envios
   const term = search.toLowerCase().trim()
-  const filtrados = term
-    ? envios.filter((e) => {
+  const filtradosSinLimite = term
+    ? enviosVisibles.filter((e) => {
         if (filtroId && e.id.toLowerCase().includes(term)) return true
         if (filtroOrigen && (e.origen.toLowerCase().includes(term) || (getAirportCity(e.origen) || '').toLowerCase().includes(term))) return true
         if (filtroDestino && (e.destino.toLowerCase().includes(term) || (getAirportCity(e.destino) || '').toLowerCase().includes(term))) return true
         return false
       })
-    : envios
+    : enviosVisibles
+  const filtrados = showAll || term ? filtradosSinLimite : filtradosSinLimite.slice(0, DEFAULT_LIMIT)
 
   const estadoLabel: Record<string, string> = {
     EN_ESPERA: 'En espera',
@@ -80,7 +99,7 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId }: Props
   }
 
   return (
-    <div className="w-80 flex-shrink-0 bg-gray-900 border border-gray-800 rounded-xl flex flex-col overflow-hidden">
+    <div className="w-80 flex-1 min-h-0 bg-gray-900 border border-gray-800 rounded-xl flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-3 border-b border-gray-800">
         <h3 className="text-sm font-semibold text-gray-200 mb-2">Envíos</h3>
@@ -117,22 +136,27 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId }: Props
 
       {/* Tabs */}
       <div className="flex border-b border-gray-800">
-        {TAB_CONFIG.map((c) => (
-          <button
-            key={c.key}
-            onClick={() => setTab(c.key)}
-            className={`flex-1 py-2 text-xs font-medium transition-colors ${
-              tab === c.key
-                ? 'text-sky-400 border-b-2 border-sky-400 bg-sky-400/5'
-                : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'
-            }`}
-          >
-            {c.label}
-            {tab === c.key && (
-              <span className="ml-1 text-[10px] text-gray-500">({envios.length})</span>
-            )}
-          </button>
-        ))}
+        {TAB_CONFIG.map((c) => {
+          const tabCount = enviosExternos
+            ? countByEstado(enviosExternos, c.estados)
+            : envios.length
+          return (
+            <button
+              key={c.key}
+              onClick={() => setTab(c.key)}
+              className={`flex-1 py-2 text-xs font-medium transition-colors ${
+                tab === c.key
+                  ? 'text-sky-400 border-b-2 border-sky-400 bg-sky-400/5'
+                  : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'
+              }`}
+            >
+              {c.label}
+              {tab === c.key && (
+                <span className="ml-1 text-[10px] text-gray-500">({tabCount})</span>
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {/* Content */}
@@ -186,9 +210,16 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId }: Props
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-1.5 border-t border-gray-800 text-[10px] text-gray-600 flex justify-between">
-        <span>Mostrando {filtrados.length} de {envios.length}</span>
-        {tab === 'entregados' && <span>Últimas 4h</span>}
+      <div className="px-3 py-1.5 border-t border-gray-800 text-[10px] text-gray-600 flex justify-between items-center">
+        <span>Mostrando {filtrados.length} de {enviosVisibles.length}</span>
+        <div className="flex items-center gap-2">
+          {!showAll && !term && enviosVisibles.length > DEFAULT_LIMIT && (
+            <button onClick={() => setShowAll(true)} className="text-sky-400 hover:text-sky-300 font-medium cursor-pointer">
+              Mostrar todos
+            </button>
+          )}
+          {tab === 'entregados' && !enviosExternos && <span>Últimas 4h</span>}
+        </div>
       </div>
     </div>
   )
