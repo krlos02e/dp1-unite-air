@@ -270,6 +270,7 @@ export default function OperacionDiaria() {
             aeropuertos={aeropuertosEstaticos}
             vuelos={vuelos}
             selectedVueloId={selectedVuelo?.id || null}
+            selectedAeropuertoId={selectedAeropuerto?.codigoOACI || null}
             velocidad={1}
             onAeropuertoClick={handleAeropuertoClick}
             onVueloClick={handleVueloClick}

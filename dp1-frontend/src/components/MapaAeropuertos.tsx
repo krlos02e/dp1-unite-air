@@ -15,6 +15,7 @@ interface Props {
   aeropuertos: AeropuertoDTO[]
   vuelos: VueloDTO[]
   selectedVueloId?: string | null
+  selectedAeropuertoId?: string | null
   velocidad?: number
   onAeropuertoClick?: (a: AeropuertoDTO) => void
   onVueloClick?: (v: VueloDTO) => void
@@ -23,7 +24,9 @@ interface Props {
   simulationMode?: boolean
 }
 
-const center: [number, number] = [20, 0]
+const INITIAL_CENTER: [number, number] = [22, 0]
+const INITIAL_ZOOM = 2.25
+const WORLD_BOUNDS = L.latLngBounds(L.latLng(-60, -160), L.latLng(82, 160))
 
 const FLIGHT_DISPLAY_PERCENTAGE = 0.15
 
@@ -81,11 +84,15 @@ function getAirplaneIcon(selected: boolean, cargaActual: number, capacidad: numb
   })
 }
 
-function airportIcon(color: string, label: string): L.DivIcon {
+function airportIcon(color: string, label: string, selected = false): L.DivIcon {
+  const markerColor = selected ? AIRPLANE_SELECTED : color
+  const glow = selected
+    ? 'box-shadow:0 0 6px #facc15,0 0 14px #facc15,0 0 24px rgba(250,204,21,0.65);'
+    : 'box-shadow:0 2px 6px rgba(0,0,0,0.5);'
   return L.divIcon({
     className: '',
     html: `<div style="display:flex;flex-direction:column;align-items:center;pointer-events:auto;">
-      <div style="width:34px;height:34px;border-radius:50%;background-color:${color};border:2px solid white;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.5);">
+      <div style="width:34px;height:34px;border-radius:50%;background-color:${markerColor};border:2px solid white;display:flex;align-items:center;justify-content:center;${glow}">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <g stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
             <path d="M3.59 7h8.82a1 1 0 0 1 .902 1.433l-1.44 3a1 1 0 0 1-.901.567H5.029a1 1 0 0 1-.901-.567l-1.44-3A1 1 0 0 1 3.589 7"/>
@@ -160,9 +167,22 @@ interface FlightAnim {
   from: [number, number]
   to: [number, number]
   pts?: [number, number][]
+  displayedProgress: number
+  startProgress: number
+  targetProgress: number
+  transitionStartedAt: number
+  transitionDurationMs: number
+  snapshotAt: number
+  lastRouteIndex: number
 }
 
-function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, onAeropuertoClick, onVueloClick, mapTz, onMapTzChange, simulationMode = false }: Props) {
+function animatedProgress(anim: FlightAnim, now: number): number {
+  const elapsed = now - anim.transitionStartedAt
+  const fraction = Math.min(1, Math.max(0, elapsed / anim.transitionDurationMs))
+  return anim.startProgress + (anim.targetProgress - anim.startProgress) * fraction
+}
+
+function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropuertoId, velocidad = 1, onAeropuertoClick, onVueloClick, mapTz, onMapTzChange, simulationMode = false }: Props) {
   const mapRef = useRef<L.Map | null>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const circleLayerRef = useRef<L.LayerGroup | null>(null)
@@ -183,16 +203,20 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
   const onVueloClickRef = useRef(onVueloClick)
   const onAeropuertoClickRef = useRef(onAeropuertoClick)
   const selectedVueloIdRef = useRef(selectedVueloId)
-  const prevSelectedVueloIdRef = useRef<string | null>(null)
+  const selectedAeropuertoIdRef = useRef(selectedAeropuertoId)
+  const prevSelectionRef = useRef<string | null>(null)
   const prevViewRef = useRef<{ center: L.LatLng; zoom: number } | null>(null)
   const [showRouteLines, setShowRouteLines] = useState(true)
   const showRouteLinesRef = useRef(showRouteLines)
   const isZoomingRef = useRef(false)
-  onVueloClickRef.current = onVueloClick
-  onAeropuertoClickRef.current = onAeropuertoClick
-  velocidadRef.current = velocidad
-  selectedVueloIdRef.current = selectedVueloId
-  showRouteLinesRef.current = showRouteLines
+  useEffect(() => {
+    onVueloClickRef.current = onVueloClick
+    onAeropuertoClickRef.current = onAeropuertoClick
+    velocidadRef.current = velocidad
+    selectedVueloIdRef.current = selectedVueloId
+    selectedAeropuertoIdRef.current = selectedAeropuertoId
+    showRouteLinesRef.current = showRouteLines
+  }, [onVueloClick, onAeropuertoClick, velocidad, selectedVueloId, selectedAeropuertoId, showRouteLines])
 
   function removeRoute(id: string) {
     const pair = routeLinesRef.current.get(id)
@@ -270,19 +294,16 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
   useEffect(() => {
     if (mapContainerRef.current && !mapRef.current) {
       const map = L.map(mapContainerRef.current, {
-        center,
-        zoom: 2.5,
+        center: INITIAL_CENTER,
+        zoom: INITIAL_ZOOM,
         zoomControl: true,
         preferCanvas: true,
         zoomSnap: 0.25,
         zoomDelta: 0.25,
         wheelPxPerZoomLevel: 120,
-        minZoom: 2.5,
+        minZoom: INITIAL_ZOOM,
         maxZoom: 13,
-        maxBounds: L.latLngBounds(
-          L.latLng(-60, -160),
-          L.latLng(60, 160)
-        ),
+        maxBounds: WORLD_BOUNDS,
         maxBoundsViscosity: 1.0
       })
 
@@ -319,13 +340,10 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
         isZoomingRef.current = false
 
         const currentZoom = map.getZoom()
-        if (currentZoom <= 2.5) {
+        if (currentZoom <= INITIAL_ZOOM) {
           map.setMaxBounds(map.getBounds())
         } else {
-          map.setMaxBounds(L.latLngBounds(
-            L.latLng(-60, -160),
-            L.latLng(60, 160)
-          ))
+          map.setMaxBounds(WORLD_BOUNDS)
         }
       })
     }
@@ -386,12 +404,12 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       }
 
       if (existing) {
-        existing.setIcon(airportIcon(color, label))
+        existing.setIcon(airportIcon(color, label, a.codigoOACI === selectedAeropuertoIdRef.current))
         existing.setLatLng([lat, lon])
         existing.setTooltipContent(airportTooltip())
       } else {
         const code = a.codigoOACI
-        const mk = L.marker([lat, lon], { icon: airportIcon(color, label) })
+        const mk = L.marker([lat, lon], { icon: airportIcon(color, label, code === selectedAeropuertoIdRef.current) })
         mk.bindTooltip(airportTooltip(), { direction: 'top', offset: L.point(0, -14) })
         mk.on('click', () => {
           const current = airportDataRef.current.get(code)
@@ -419,19 +437,27 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       selectedDestRef.current = null
     }
 
+    const selection = selectedVueloId
+      ? `vuelo:${selectedVueloId}`
+      : selectedAeropuertoId
+        ? `aeropuerto:${selectedAeropuertoId}`
+        : null
+
+    if (selection && prevSelectionRef.current === null) {
+      prevViewRef.current = { center: mapRef.current.getCenter(), zoom: mapRef.current.getZoom() }
+    }
+
     if (selectedVueloId) {
       const selectedVuelo = persistentFlightsRef.current.get(selectedVueloId) ?? vuelos.find((v) => v.id === selectedVueloId)
       if (selectedVuelo && mapRef.current) {
-        if (prevSelectedVueloIdRef.current === null) {
-          prevViewRef.current = { center: mapRef.current.getCenter(), zoom: mapRef.current.getZoom() }
-          const from: [number, number] = [selectedVuelo.latOrigen, selectedVuelo.lonOrigen]
-          const to: [number, number] = [selectedVuelo.latDestino, selectedVuelo.lonDestino]
-          const pos = interpolatePosition(from, to, selectedVuelo.progresoVuelo / 100)
-          mapRef.current.setView(pos, Math.min(mapRef.current.getZoom() + 1, 5), { animate: false })
-        }
-
         const from: [number, number] = [selectedVuelo.latOrigen, selectedVuelo.lonOrigen]
         const to: [number, number] = [selectedVuelo.latDestino, selectedVuelo.lonDestino]
+        const anim = flightAnimsRef.current.get(selectedVueloId)
+        const progress = anim?.displayedProgress ?? selectedVuelo.progresoVuelo
+        const pos = interpolatePosition(from, to, progress / 100)
+        if (selection !== prevSelectionRef.current) {
+          mapRef.current.setView(pos, Math.min(mapRef.current.getZoom() + 1, 5), { animate: true })
+        }
         const pts = bezierPoints(from, to, 40)
 
         selectedRouteRef.current = L.polyline(pts, {
@@ -457,14 +483,17 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
           weight: 2,
         }).addTo(mapRef.current)
       }
-    } else {
-      if (prevSelectedVueloIdRef.current !== null && prevViewRef.current && mapRef.current) {
-        mapRef.current.setView(prevViewRef.current.center, prevViewRef.current.zoom, { animate: false })
-        prevViewRef.current = null
+    } else if (selectedAeropuertoId) {
+      const marker = airportMarkersRef.current.get(selectedAeropuertoId)
+      if (marker && selection !== prevSelectionRef.current) {
+        mapRef.current.setView(marker.getLatLng(), Math.min(mapRef.current.getZoom() + 1, 5), { animate: true })
       }
+    } else if (prevSelectionRef.current !== null && prevViewRef.current) {
+      mapRef.current.setView(prevViewRef.current.center, prevViewRef.current.zoom, { animate: true })
+      prevViewRef.current = null
     }
 
-    prevSelectedVueloIdRef.current = selectedVueloId ?? null
+    prevSelectionRef.current = selection
 
     const vueloMap = new Map(vuelos.map((v) => [v.id, v]))
     flightMarkersRef.current.forEach((mk, id) => {
@@ -478,12 +507,22 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
         requestAnimationFrame(() => applyTransform(mk, angle))
       }
     })
-  }, [selectedVueloId, vuelos])
+
+    const airportMap = new Map(aeropuertos.map((a) => [a.codigoOACI, a]))
+    airportMarkersRef.current.forEach((mk, code) => {
+      const airport = airportMap.get(code)
+      if (!airport) return
+      const cityName = airport.ciudad || getAirportCity(code) || code
+      const color = aeropuertoColor(airport.ocupacionActual, airport.capacidadMaxima)
+      mk.setIcon(airportIcon(color, cityName, code === selectedAeropuertoId))
+    })
+  }, [selectedVueloId, selectedAeropuertoId, vuelos, aeropuertos])
 
   useEffect(() => {
     if (!markerLayerRef.current) return
 
     const realNow = new Date()
+    const frameNow = performance.now()
 
     const displayFlights = Array.from(persistentFlightsRef.current.values()).filter((v) => {
       const progreso = simulationMode ? v.progresoVuelo : calcularProgresoLocal(v, realNow)
@@ -511,19 +550,48 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
       const tNorm = progresoActual / 100
       const splitIndex = Math.round(tNorm * 40)
 
-      flightAnimsRef.current.set(v.id, {
-        vuelo: v,
-        from,
-        to,
-        pts,
-      })
+      const existingAnim = flightAnimsRef.current.get(v.id)
+      if (existingAnim) {
+        const currentProgress = simulationMode
+          ? animatedProgress(existingAnim, frameNow)
+          : progresoActual
+        const snapshotInterval = Math.min(20_000, Math.max(1_000, frameNow - existingAnim.snapshotAt))
+        existingAnim.vuelo = v
+        existingAnim.from = from
+        existingAnim.to = to
+        existingAnim.pts = pts
+        existingAnim.displayedProgress = currentProgress
+        existingAnim.startProgress = currentProgress
+        existingAnim.targetProgress = Math.max(currentProgress, progresoActual)
+        existingAnim.transitionStartedAt = frameNow
+        existingAnim.transitionDurationMs = simulationMode ? snapshotInterval : 1
+        existingAnim.snapshotAt = frameNow
+      } else {
+        flightAnimsRef.current.set(v.id, {
+          vuelo: v,
+          from,
+          to,
+          pts,
+          displayedProgress: progresoActual,
+          startProgress: progresoActual,
+          targetProgress: progresoActual,
+          transitionStartedAt: frameNow,
+          transitionDurationMs: 1,
+          snapshotAt: frameNow,
+          lastRouteIndex: splitIndex,
+        })
+      }
 
       let mk = flightMarkersRef.current.get(v.id)
       if (!mk) {
         const startPos = interpolatePosition(from, to, tNorm)
         mk = L.marker(startPos, { icon: getAirplaneIcon(isSelected, v.cargaActual, v.capacidad) })
         mk.bindTooltip(tooltipText, { direction: 'top', offset: L.point(0, -14) })
-        mk.on('click', () => onVueloClickRef.current?.(v))
+        const flightId = v.id
+        mk.on('click', () => {
+          const current = flightAnimsRef.current.get(flightId)?.vuelo
+          if (current) onVueloClickRef.current?.(current)
+        })
         markerLayerRef.current?.addLayer(mk)
         flightMarkersRef.current.set(v.id, mk)
 
@@ -598,13 +666,14 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
   }, [showRouteLines])
 
   useEffect(() => {
-    const animate = () => {
+    const animate = (frameNow: number) => {
       const realNow = new Date()
       flightAnimsRef.current.forEach((anim, id) => {
         const mk = flightMarkersRef.current.get(id)
         if (!mk) return
 
-        const currentProgress = simulationMode ? anim.vuelo.progresoVuelo : calcularProgresoLocal(anim.vuelo, realNow)
+        const currentProgress = simulationMode ? animatedProgress(anim, frameNow) : calcularProgresoLocal(anim.vuelo, realNow)
+        anim.displayedProgress = currentProgress
         if (currentProgress >= 100) {
           markerLayerRef.current?.removeLayer(mk)
           flightMarkersRef.current.delete(id)
@@ -629,6 +698,8 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, velocidad = 1, 
 
         if (!isZoomingRef.current && anim.pts) {
           const splitIndex = Math.round(tNorm * (anim.pts.length - 1))
+          if (splitIndex === anim.lastRouteIndex) return
+          anim.lastRouteIndex = splitIndex
           const pair = routeLinesRef.current.get(id)
           if (pair) {
             if (splitIndex < anim.pts.length) {
