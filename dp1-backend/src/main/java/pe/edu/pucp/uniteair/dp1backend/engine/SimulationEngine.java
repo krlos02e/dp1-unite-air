@@ -560,8 +560,12 @@ public class SimulationEngine {
         List<VueloDTO> vuelosDTO = new ArrayList<>();
         Map<String, double[]> flightCoords = flightCoordCache.get(sessionId);
         Map<String, Long> flightDurations = flightDurationCache.get(sessionId);
+        LocalDateTime fechaFin = fechaInicio.plusHours(totalHoras);
         for (Vuelo v : dataset.getVuelos()) {
             if (v.getSalidaUtc() != null && v.getSalidaUtc().isBefore(fechaInicio)) continue;
+            // Los dos días extra del dataset son margen para el planificador, no parte
+            // de la ventana que se presenta ni se contabiliza en la simulación.
+            if (v.getSalidaUtc() != null && v.getSalidaUtc().isAfter(fechaFin)) continue;
 
             boolean isCancelled = vuelosCanceladosSet.contains(v.getId());
             double progreso = 0.0;
@@ -614,6 +618,7 @@ public class SimulationEngine {
         Set<String> activeFlightIds = new HashSet<>();
         for (Vuelo v : dataset.getVuelos()) {
             if (v.getSalidaUtc() != null && v.getSalidaUtc().isBefore(fechaInicio)) continue;
+            if (v.getSalidaUtc() != null && v.getSalidaUtc().isAfter(fechaFin)) continue;
             if (simTime != null && v.getSalidaUtc() != null && v.getLlegadaUtc() != null) {
                 if (simTime.isAfter(v.getSalidaUtc()) && simTime.isBefore(v.getLlegadaUtc())) {
                     activeFlightIds.add(v.getId());

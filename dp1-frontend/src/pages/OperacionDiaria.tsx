@@ -7,7 +7,7 @@ import EnvioModal from '../components/EnvioModal'
 import EnvioListPanel from '../components/EnvioListPanel'
 import AlmacenListPanel from '../components/AlmacenListPanel'
 import VueloListPanel from '../components/VueloListPanel'
-import { AIRPORTS_DATA, getAirportCity } from '../data/airportsData'
+import { AIRPORTS_DATA } from '../data/airportsData'
 import type { VueloDTO, AeropuertoDTO, EnvioEstado } from '../types'
 
 const aeropuertosFallback: AeropuertoDTO[] = Object.values(AIRPORTS_DATA).map((a) => ({
@@ -68,17 +68,6 @@ function getPeruDateParts(): { fecha: string; hora: string } {
     fecha: `${get('year')}-${get('month')}-${get('day')}`,
     hora: `${get('hour')}:${get('minute')}`,
   }
-}
-
-const FLIGHT_DISPLAY_PERCENTAGE = 0.15
-
-function shouldDisplayFlight(flightId: string, percentage: number): boolean {
-  let hash = 0
-  for (let i = 0; i < flightId.length; i++) {
-    hash = flightId.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  const normalized = (Math.abs(hash) % 1000) / 1000
-  return normalized < percentage
 }
 
 export default function OperacionDiaria() {
@@ -210,14 +199,11 @@ export default function OperacionDiaria() {
     return () => clearInterval(interval)
   }, [dataLoaded])
 
-  const vuelosEnTransito = vuelos.filter((v) => v.progresoVuelo > 0 && v.progresoVuelo < 100)
-  const vuelosEnTransitoVisibles = vuelosEnTransito.filter((v) => shouldDisplayFlight(v.id, FLIGHT_DISPLAY_PERCENTAGE))
-
   const { fecha } = getPeruDateParts()
 
   return (
     <div className="flex flex-col gap-2">
-      {/* Barra superior: Hora actual, fecha, selector de vuelos */}
+      {/* Barra superior: hora actual y fecha */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-2 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
           <span className="text-base text-gray-400 font-medium">Hora actual (Perú, UTC-5):</span>
@@ -226,27 +212,6 @@ export default function OperacionDiaria() {
         <div className="flex items-center gap-2 ml-4">
           <span className="text-base text-gray-400 font-medium">Fecha:</span>
           <span className="text-xl font-mono text-gray-200">{fecha.split('-').reverse().join('/')}</span>
-        </div>
-
-        {/* Selector de vuelos activos */}
-        <div className="flex items-center gap-2 ml-4">
-          <span className="text-sm text-gray-400 font-medium">Vuelos activos:</span>
-          <select
-            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer min-w-[200px]"
-            value={selectedVuelo?.id || ''}
-            onChange={(e) => {
-              const vuelo = vuelos.find((v) => v.id === e.target.value)
-              if (vuelo) handleVueloClick(vuelo)
-              else setSelectedVuelo(null)
-            }}
-          >
-            <option value="">Seleccionar vuelo...</option>
-            {vuelosEnTransitoVisibles.map((v) => (
-              <option key={v.id} value={v.id}>
-                {getAirportCity(v.origen) || v.origen} → {getAirportCity(v.destino) || v.destino} ({Math.round(v.progresoVuelo)}%)
-              </option>
-            ))}
-          </select>
         </div>
 
         <div className="flex items-center gap-2">
@@ -285,6 +250,21 @@ export default function OperacionDiaria() {
               ▶ Panel
             </button>
           )}
+
+          <VueloModal
+            vuelo={selectedVuelo}
+            isOpen={!!selectedVuelo}
+            onClose={() => setSelectedVuelo(null)}
+            tzOffset={mapTz}
+          />
+          <AeropuertoModal
+            aeropuerto={selectedAeropuerto}
+            isOpen={!!selectedAeropuerto}
+            onClose={() => setSelectedAeropuerto(null)}
+            vuelos={vuelos}
+            tzOffset={mapTz}
+            onVueloSelect={handleVueloClick}
+          />
         </div>
         {!panelCollapsed && (
         <div className="flex flex-col gap-2">
@@ -333,6 +313,8 @@ export default function OperacionDiaria() {
               envios={todosEnvios}
               onEnvioSelect={handleEnvioSelect}
               selectedEnvioId={selectedEnvio?.id}
+              onAlmacenSelect={handleAeropuertoClick}
+              selectedAlmacenId={selectedAeropuerto?.codigoOACI}
             />
           ) : panelMode === 'aviones' ? (
             <VueloListPanel
@@ -340,6 +322,9 @@ export default function OperacionDiaria() {
               envios={todosEnvios}
               onEnvioSelect={handleEnvioSelect}
               selectedEnvioId={selectedEnvio?.id}
+              onVueloSelect={handleVueloClick}
+              selectedVueloId={selectedVuelo?.id}
+              showStatusFilters={false}
             />
           ) : (
             <EnvioListPanel
@@ -351,14 +336,6 @@ export default function OperacionDiaria() {
         )}
       </div>
 
-      <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} tzOffset={mapTz} />
-      <AeropuertoModal
-        aeropuerto={selectedAeropuerto}
-        isOpen={!!selectedAeropuerto}
-        onClose={() => setSelectedAeropuerto(null)}
-        vuelos={vuelos}
-        tzOffset={mapTz}
-      />
       <EnvioModal
         envio={selectedEnvio}
         isOpen={!!selectedEnvio}
