@@ -16,20 +16,20 @@ export default function VueloModal({ vuelo, isOpen, onClose, tzOffset }: Props) 
   const destinoInfo = getAirportCityCountry(vuelo.destino)
 
   return (
-    <div className="fixed bottom-6 right-6 z-[1000] w-96 sm:w-[28rem]">
-      <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-xl p-4 shadow-2xl">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-bold text-sky-400 truncate">Detalles de vuelo</h2>
+    <div className="absolute bottom-4 right-4 z-[1001] w-80 max-w-[calc(100%-2rem)] sm:w-[22rem]">
+      <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-xl p-3 shadow-2xl">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-bold text-sky-400 truncate">Detalles de vuelo</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors text-xl leading-none"
+            className="text-gray-400 hover:text-white transition-colors text-lg leading-none"
             aria-label="Cerrar"
           >
             &times;
           </button>
         </div>
 
-        <div className="space-y-2 text-sm">
+        <div className="space-y-1.5 text-xs">
           <div className="flex justify-between">
             <span className="text-gray-400">Origen</span>
             <span className="font-medium text-emerald-400">{origenInfo}</span>

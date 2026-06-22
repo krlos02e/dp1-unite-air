@@ -1,12 +1,17 @@
-import { useState, useMemo } from 'react'
-import { getAirportCity } from '../data/airportsData'
+import { useDeferredValue, useMemo, useState } from 'react'
+import { getAirportCity, getAirportCountry } from '../data/airportsData'
 import type { VueloDTO, EnvioEstado } from '../types'
+import { shouldDisplayFlight } from '../utils/flightVisibility'
 
 interface Props {
   vuelos: VueloDTO[]
   envios?: EnvioEstado[]
   onEnvioSelect?: (envio: EnvioEstado) => void
   selectedEnvioId?: string | null
+  onVueloSelect?: (vuelo: VueloDTO) => void
+  selectedVueloId?: string | null
+  includeCompleted?: boolean
+  showStatusFilters?: boolean
 }
 
 function formatTime(iso: string): string {
@@ -32,66 +37,294 @@ const estadoColor: Record<string, string> = {
 
 const DEFAULT_LIMIT = 50
 
-export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId }: Props) {
+type SearchScope = 'todos' | 'codigo' | 'tramo' | 'origen' | 'destino'
+type SortField = 'ocupacion' | 'salida' | 'llegada' | 'origen' | 'destino'
+type SortDirection = 'asc' | 'desc'
+
+function normalizeSearch(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+function locationTerms(code: string): string {
+  return normalizeSearch([code, getAirportCity(code), getAirportCountry(code)].filter(Boolean).join(' '))
+}
+
+function createCodePatternMatcher(rawPattern: string): (code: string) => boolean {
+  const pattern = normalizeSearch(rawPattern)
+  if (!pattern) return () => true
+
+  if (!pattern.includes('*') && !pattern.includes('?')) {
+    return (code) => code.includes(pattern)
+  }
+
+  const expression = Array.from(pattern).map((character) => {
+    if (character === '*') return '.*'
+    if (character === '?') return '.'
+    return /[a-z0-9_-]/.test(character) ? character : `\\${character}`
+  }).join('')
+
+  const regex = new RegExp(`^${expression}$`)
+  return (code) => regex.test(code)
+}
+
+function locationLabel(code: string): string {
+  const city = getAirportCity(code)
+  return city ? `${code} · ${city}` : code
+}
+
+function timeOfDay(iso: string): number {
+  if (!iso) return 0
+  const date = new Date(iso.endsWith('Z') ? iso : `${iso}Z`)
+  return date.getUTCHours() * 60 + date.getUTCMinutes()
+}
+
+function occupationStatus(cargaActual: number, ocupPct: number) {
+  if (cargaActual <= 0) {
+    return { label: 'Vacío', bar: 'bg-sky-500', text: 'text-sky-400', track: 'bg-sky-950/80' }
+  }
+  if (ocupPct > 90) {
+    return { label: 'Crítico', bar: 'bg-red-500', text: 'text-red-400', track: 'bg-gray-800' }
+  }
+  if (ocupPct > 70) {
+    return { label: 'Alerta', bar: 'bg-amber-500', text: 'text-amber-400', track: 'bg-gray-800' }
+  }
+  return { label: 'Normal', bar: 'bg-emerald-500', text: 'text-emerald-400', track: 'bg-gray-800' }
+}
+
+export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId, onVueloSelect, selectedVueloId, includeCompleted = false, showStatusFilters = true }: Props) {
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [filterEstado, setFilterEstado] = useState<string>('todos')
-  const [showAll, setShowAll] = useState(false)
+  const [searchScope, setSearchScope] = useState<SearchScope>('todos')
+  const [originFilter, setOriginFilter] = useState('')
+  const [destinationFilter, setDestinationFilter] = useState('')
+  const [sortField, setSortField] = useState<SortField>('ocupacion')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
 
-  const term = search.toLowerCase().trim()
+  const deferredSearch = useDeferredValue(search)
+  const term = normalizeSearch(deferredSearch)
+  const hasListFilters = Boolean(originFilter || destinationFilter)
 
-  const enviosEnVuelo = (vueloId: string): EnvioEstado[] => {
-    if (!envios) return []
-    return envios.filter(e => e.vueloActual === vueloId || e.vueloEsperado === vueloId)
-  }
+  const enviosByFlight = useMemo(() => {
+    const index = new Map<string, EnvioEstado[]>()
+    if (!envios) return index
+    envios.forEach((envio) => {
+      const flightIds = new Set([envio.vueloActual, envio.vueloEsperado].filter((id): id is string => Boolean(id)))
+      flightIds.forEach((flightId) => {
+        const current = index.get(flightId)
+        if (current) current.push(envio)
+        else index.set(flightId, [envio])
+      })
+    })
+    return index
+  }, [envios])
+
+  const visibleFlights = useMemo(
+    () => vuelos.filter((flight) => (
+      (flight.estado === 'ACTIVO' || (includeCompleted && flight.estado === 'CULMINADO'))
+      && (shouldDisplayFlight(flight.id) || flight.id === selectedVueloId)
+    )),
+    [vuelos, selectedVueloId, includeCompleted],
+  )
+
+  const indexedFlights = useMemo(() => visibleFlights.map((flight) => {
+    const codigo = normalizeSearch(flight.id)
+    const origen = locationTerms(flight.origen)
+    const destino = locationTerms(flight.destino)
+    return {
+      flight,
+      codigo,
+      origen,
+      destino,
+      tramo: `${origen} ${destino} ${normalizeSearch(`${flight.origen}-${flight.destino}`)}`,
+      ocupacion: flight.capacidad > 0 ? flight.cargaActual / flight.capacidad : 0,
+      salida: timeOfDay(flight.salidaUtc),
+      llegada: timeOfDay(flight.llegadaUtc),
+      origenOrden: normalizeSearch(getAirportCountry(flight.origen) || getAirportCity(flight.origen) || flight.origen),
+      destinoOrden: normalizeSearch(getAirportCountry(flight.destino) || getAirportCity(flight.destino) || flight.destino),
+    }
+  }), [visibleFlights])
+
+  const searchCodeMatcher = useMemo(
+    () => createCodePatternMatcher(deferredSearch),
+    [deferredSearch],
+  )
 
   const filtradosSinLimite = useMemo(() => {
-    return vuelos.filter(v => {
+    return indexedFlights.filter(({ flight: v, codigo, origen, destino, tramo }) => {
       if (filterEstado !== 'todos' && v.estado !== filterEstado) return false
+      if (originFilter && v.origen !== originFilter) return false
+      if (destinationFilter && v.destino !== destinationFilter) return false
       if (!term) return true
-      return v.id.toLowerCase().includes(term) ||
-        v.origen.toLowerCase().includes(term) ||
-        v.destino.toLowerCase().includes(term)
-    })
-  }, [vuelos, term, filterEstado])
 
-  const filtrados = showAll || term ? filtradosSinLimite : filtradosSinLimite.slice(0, DEFAULT_LIMIT)
+      if (searchScope === 'codigo') return searchCodeMatcher(codigo)
+      if (searchScope === 'tramo') return tramo.includes(term)
+      if (searchScope === 'origen') return origen.includes(term)
+      if (searchScope === 'destino') return destino.includes(term)
+      return searchCodeMatcher(codigo) || tramo.includes(term)
+    }).sort((a, b) => {
+      let comparison: number
+      if (sortField === 'ocupacion') comparison = a.ocupacion - b.ocupacion
+      else if (sortField === 'salida') comparison = a.salida - b.salida
+      else if (sortField === 'llegada') comparison = a.llegada - b.llegada
+      else if (sortField === 'origen') comparison = a.origenOrden.localeCompare(b.origenOrden)
+      else comparison = a.destinoOrden.localeCompare(b.destinoOrden)
+
+      if (comparison === 0) comparison = a.codigo.localeCompare(b.codigo)
+      return sortDirection === 'asc' ? comparison : -comparison
+    }).map(({ flight }) => flight)
+  }, [indexedFlights, term, filterEstado, searchScope, searchCodeMatcher, originFilter, destinationFilter, sortField, sortDirection])
+
+  const resultKey = `${term}|${originFilter}|${destinationFilter}|${filterEstado}|${searchScope}|${sortField}|${sortDirection}`
+  const [page, setPage] = useState({ key: '', limit: DEFAULT_LIMIT })
+  const visibleLimit = page.key === resultKey ? page.limit : DEFAULT_LIMIT
+  const filtrados = filtradosSinLimite.slice(0, visibleLimit)
+
+  const origins = useMemo(() => (
+    Array.from(new Set(visibleFlights.map((v) => v.origen))).sort()
+  ), [visibleFlights])
+
+  const destinations = useMemo(() => (
+    Array.from(new Set(visibleFlights.map((v) => v.destino))).sort()
+  ), [visibleFlights])
 
   const estadosDisponibles = useMemo(() => {
-    const set = new Set<string>()
-    vuelos.forEach(v => { if (v.estado) set.add(v.estado) })
-    return ['todos', ...Array.from(set)]
-  }, [vuelos])
+    const states = ['todos', 'ACTIVO']
+    if (includeCompleted) states.push('CULMINADO')
+    return states
+  }, [includeCompleted])
+
+  const estadoVueloLabel: Record<string, string> = {
+    todos: 'Todos',
+    ACTIVO: 'Activos',
+    CULMINADO: 'Culminados',
+  }
 
   return (
     <div className="w-80 flex-1 min-h-0 bg-gray-900 border border-gray-800 rounded-xl flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-3 border-b border-gray-800">
-        <h3 className="text-sm font-semibold text-gray-200 mb-2">Aviones</h3>
-        <input
-          type="text"
-          placeholder="Buscar vuelo..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-sky-500"
-        />
+        <h3 className="text-sm font-semibold text-gray-200 mb-2">Unidades de transporte</h3>
+        <div className="flex gap-1.5">
+          <select
+            value={searchScope}
+            onChange={(e) => setSearchScope(e.target.value as SearchScope)}
+            aria-label="Buscar unidad de transporte por"
+            className="w-[92px] bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
+          >
+            <option value="todos">Todo</option>
+            <option value="codigo">Código UT</option>
+            <option value="tramo">Tramo</option>
+            <option value="origen">Origen</option>
+            <option value="destino">Destino</option>
+          </select>
+          <input
+            type="text"
+            placeholder="Texto o patrón, ej. SPIM-*"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Término de búsqueda de unidades de transporte"
+            className="min-w-0 flex-1 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-sky-500"
+          />
+        </div>
+        <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-2" aria-label="Semáforo de ocupación">
+          {[
+            ['bg-sky-500', 'Vacío'],
+            ['bg-emerald-500', 'Normal'],
+            ['bg-amber-500', 'Alerta'],
+            ['bg-red-500', 'Crítico'],
+          ].map(([color, label]) => (
+            <span key={label} className="inline-flex items-center gap-1 text-[9px] text-gray-500">
+              <span className={`w-1.5 h-1.5 rounded-full ${color}`} />{label}
+            </span>
+          ))}
+        </div>
+        <div className="mt-2 pt-2 border-t border-gray-800/80">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-medium text-gray-400">Filtros de ubicación</span>
+            {hasListFilters && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOriginFilter('')
+                  setDestinationFilter('')
+                }}
+                className="text-[9px] text-sky-400 hover:text-sky-300 cursor-pointer"
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <select
+              value={originFilter}
+              onChange={(e) => setOriginFilter(e.target.value)}
+              aria-label="Filtrar unidades de transporte por origen"
+              className="min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
+            >
+              <option value="">Todos los orígenes</option>
+              {origins.map((code) => <option key={code} value={code}>{locationLabel(code)}</option>)}
+            </select>
+            <select
+              value={destinationFilter}
+              onChange={(e) => setDestinationFilter(e.target.value)}
+              aria-label="Filtrar unidades de transporte por destino"
+              className="min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
+            >
+              <option value="">Todos los destinos</option>
+              {destinations.map((code) => <option key={code} value={code}>{locationLabel(code)}</option>)}
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* State filter */}
-      <div className="px-3 py-1.5 border-b border-gray-800 flex gap-1 overflow-x-auto flex-nowrap">
-        {estadosDisponibles.map(est => (
-          <button
-            key={est}
-            onClick={() => setFilterEstado(est)}
-            className={`text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors whitespace-nowrap cursor-pointer ${
-              filterEstado === est
-                ? 'bg-sky-600 text-white'
-                : 'bg-gray-800 text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            {est === 'todos' ? 'Todos' : est.charAt(0) + est.slice(1).toLowerCase()}
-          </button>
-        ))}
+      {showStatusFilters && (
+        <div className="px-3 py-1.5 border-b border-gray-800 flex gap-1 overflow-x-auto flex-nowrap">
+          {estadosDisponibles.map(est => (
+            <button
+              key={est}
+              onClick={() => setFilterEstado(est)}
+              className={`text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors whitespace-nowrap cursor-pointer ${
+                filterEstado === est
+                  ? 'bg-sky-600 text-white'
+                  : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              {estadoVueloLabel[est] || est}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Sorting */}
+      <div className="px-3 py-1.5 border-b border-gray-800 flex items-center gap-1.5">
+        <span className="text-[10px] text-gray-500 whitespace-nowrap">Ordenar:</span>
+        <select
+          value={sortField}
+          onChange={(e) => setSortField(e.target.value as SortField)}
+          aria-label="Ordenar unidades de transporte por"
+          className="min-w-0 flex-1 bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
+        >
+          <option value="ocupacion">Nivel de ocupación</option>
+          <option value="salida">Hora de salida</option>
+          <option value="llegada">Hora de llegada</option>
+          <option value="origen">Origen</option>
+          <option value="destino">Destino</option>
+        </select>
+        <button
+          type="button"
+          onClick={() => setSortDirection((current) => current === 'asc' ? 'desc' : 'asc')}
+          className="w-7 h-6 rounded bg-gray-800 border border-gray-700 text-[11px] text-sky-400 hover:bg-gray-700 cursor-pointer"
+          title={sortDirection === 'asc' ? 'Orden ascendente' : 'Orden descendente'}
+          aria-label={sortDirection === 'asc' ? 'Cambiar a orden descendente' : 'Cambiar a orden ascendente'}
+        >
+          {sortDirection === 'asc' ? '↑' : '↓'}
+        </button>
       </div>
 
       {/* Content */}
@@ -104,24 +337,38 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
 
         {filtrados.map((v) => {
           const isExpanded = expandedId === v.id
-          const enviosEnEsteVuelo = enviosEnVuelo(v.id)
+          const isFlightSelected = selectedVueloId === v.id
+          const enviosEnEsteVuelo = enviosByFlight.get(v.id) ?? []
           const totalMaletas = enviosEnEsteVuelo.reduce((sum, e) => sum + e.cantidad, 0)
           const ocupPct = v.capacidad > 0 ? Math.round((v.cargaActual / v.capacidad) * 100) : 0
+          const ocupacion = occupationStatus(v.cargaActual, ocupPct)
+          const origenPais = getAirportCountry(v.origen) || getAirportCity(v.origen) || v.origen
+          const destinoPais = getAirportCountry(v.destino) || getAirportCity(v.destino) || v.destino
 
           return (
             <div key={v.id} className="border-b border-gray-800/50">
               {/* Main row */}
               <div
-                onClick={() => setExpandedId(isExpanded ? null : v.id)}
-                className="px-3 py-2 cursor-pointer hover:bg-gray-800/50 transition-colors"
+                onClick={() => {
+                  setExpandedId(isExpanded ? null : v.id)
+                  onVueloSelect?.(v)
+                }}
+                className={`px-3 py-2 cursor-pointer transition-colors ${
+                  isFlightSelected
+                    ? 'bg-amber-900/20 border-l-2 border-l-amber-400'
+                    : 'hover:bg-gray-800/50'
+                }`}
               >
                 <div className="flex items-start justify-between gap-1 mb-1">
                   <div className="min-w-0 flex-1">
+                    <div className="text-[10px] font-mono font-semibold text-sky-400 mb-0.5" title={v.id}>
+                      UT {v.origen}-{v.destino}
+                    </div>
                     <div className="text-xs text-gray-200 truncate">
-                      <span className="font-semibold text-emerald-400">{v.origen}</span>
+                      <span className="font-semibold text-emerald-400">{origenPais}</span>
                       <span className="text-gray-500 mx-0.5">→</span>
-                      <span className="font-semibold text-emerald-400">{v.destino}</span>
-                      <span className="text-[10px] text-gray-500 ml-1">· {formatTime(v.salidaUtc)}</span>
+                      <span className="font-semibold text-emerald-400">{destinoPais}</span>
+                      <span className="text-[10px] text-gray-500 ml-1">· {formatTime(v.salidaUtc)} - {formatTime(v.llegadaUtc)}</span>
                     </div>
                     {v.estado && (
                       <span className={`text-[9px] font-medium px-1 py-0.5 rounded-full ${estadoColor[v.estado] || 'text-gray-500'}`}>
@@ -133,21 +380,18 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
 
                 {/* Occupation bar */}
                 <div className="flex items-center gap-2 mt-1">
-                  <div className="flex-1 bg-gray-800 rounded-full h-2 overflow-hidden">
+                  <div className={`flex-1 ${ocupacion.track} rounded-full h-2 overflow-hidden`}>
                     <div
-                      className={`h-full rounded-full transition-all ${
-                        ocupPct > 90 ? 'bg-red-500' : ocupPct > 70 ? 'bg-amber-500' : 'bg-emerald-500'
-                      }`}
+                      className={`h-full rounded-full transition-all ${ocupacion.bar}`}
                       style={{ width: `${Math.min(ocupPct, 100)}%` }}
                     />
                   </div>
                   <span className="text-[10px] text-gray-400 whitespace-nowrap font-mono">
                     {v.cargaActual}/{v.capacidad}
                   </span>
-                  <span className={`text-[10px] font-mono font-medium ${
-                    ocupPct > 90 ? 'text-red-400' : ocupPct > 70 ? 'text-amber-400' : 'text-emerald-400'
-                  }`}>
-                    ({ocupPct}%)
+                  <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${ocupacion.text}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${ocupacion.bar}`} />
+                    {ocupacion.label} ({ocupPct}%)
                   </span>
                 </div>
 
@@ -158,7 +402,7 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
                 )}
               </div>
 
-              {/* Expanded: envios on this flight */}
+              {/* Expanded: shipments and products on this transport unit */}
               {isExpanded && envios && (
                 <div className="bg-gray-800/30 border-t border-gray-800/50">
                   {enviosEnEsteVuelo.length === 0 ? (
@@ -166,7 +410,7 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
                   ) : (
                     <>
                       <div className="px-4 py-1.5 text-[10px] text-gray-400 font-medium border-b border-gray-800/30">
-                        🎒 {totalMaletas} producto{totalMaletas !== 1 ? 's' : ''} en {enviosEnEsteVuelo.length} envío{enviosEnEsteVuelo.length !== 1 ? 's' : ''}
+                        Envíos y productos transportados: {enviosEnEsteVuelo.length} envío{enviosEnEsteVuelo.length !== 1 ? 's' : ''} · {totalMaletas} maleta{totalMaletas !== 1 ? 's' : ''}
                       </div>
                       {enviosEnEsteVuelo.map((envio) => {
                         const isSelected = envio.id === selectedEnvioId
@@ -180,6 +424,7 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
                           >
                             <div className="flex items-start justify-between gap-1">
                               <div className="min-w-0 flex-1">
+                                <div className="text-[9px] font-mono text-sky-400 truncate">Envío {envio.id}</div>
                                 <div className="text-[10px] text-gray-300 truncate">
                                   <span className="font-medium">{getAirportCity(envio.origen) || envio.origen}</span>
                                   <span className="text-gray-600 mx-0.5">→</span>
@@ -205,10 +450,13 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
 
       {/* Footer */}
       <div className="px-3 py-1.5 border-t border-gray-800 text-[10px] text-gray-600 flex justify-between items-center">
-        <span>{filtrados.length} de {vuelos.length} vuelos</span>
-        {!showAll && !term && vuelos.length > DEFAULT_LIMIT && (
-          <button onClick={() => setShowAll(true)} className="text-sky-400 hover:text-sky-300 font-medium cursor-pointer">
-            Mostrar todos
+        <span>{filtrados.length} mostrados · {filtradosSinLimite.length} de {visibleFlights.length}</span>
+        {filtrados.length < filtradosSinLimite.length && (
+          <button
+            onClick={() => setPage({ key: resultKey, limit: visibleLimit + DEFAULT_LIMIT })}
+            className="text-sky-400 hover:text-sky-300 font-medium cursor-pointer"
+          >
+            Mostrar {Math.min(DEFAULT_LIMIT, filtradosSinLimite.length - filtrados.length)} más
           </button>
         )}
       </div>

@@ -9,9 +9,10 @@ interface Props {
   onClose: () => void
   vuelos?: VueloDTO[]
   tzOffset: number
+  onVueloSelect?: (vuelo: VueloDTO) => void
 }
 
-export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = [], tzOffset }: Props) {
+export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = [], tzOffset, onVueloSelect }: Props) {
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedSection, setExpandedSection] = useState<'entrantes' | 'salientes' | 'cancelados' | null>(null)
   const [filtroEntrantes, setFiltroEntrantes] = useState<'id' | 'ciudad'>('ciudad')
@@ -95,25 +96,25 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-[1000] w-[28rem] sm:w-[32rem]">
-      <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-xl p-4 shadow-2xl">
-        <div className="flex items-center justify-between mb-3">
+    <div className="absolute bottom-4 right-4 z-[1001] w-[22rem] max-w-[calc(100%-2rem)] sm:w-[24rem]">
+      <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-xl p-3 shadow-2xl">
+        <div className="flex items-center justify-between mb-2">
           <div>
-            <h2 className="text-base font-bold text-emerald-400">{aeropuerto.codigoOACI}</h2>
-            <p className="text-xs text-gray-400">
+            <h2 className="text-sm font-bold text-emerald-400">{aeropuerto.codigoOACI}</h2>
+            <p className="text-[10px] text-gray-400">
               {staticData?.ciudad || aeropuerto.ciudad || ''}{pais ? `, ${pais}` : ''}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors text-xl leading-none"
+            className="text-gray-400 hover:text-white transition-colors text-lg leading-none"
             aria-label="Cerrar"
           >
             &times;
           </button>
         </div>
 
-        <div className="space-y-2 text-sm mb-3">
+        <div className="space-y-1 text-xs mb-2">
           <div className="flex justify-between">
             <span className="text-gray-400">Maletas en almacén</span>
             <span className="font-medium text-amber-400">{aeropuerto.ocupacionActual} / {aeropuerto.capacidadMaxima}</span>
@@ -132,7 +133,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
           </div>
         </div>
 
-        <div className="mb-3">
+        <div className="mb-2">
           <input
             type="text"
             placeholder={
@@ -146,15 +147,15 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
             }
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+            className="w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
           />
         </div>
 
-        <div className="space-y-1 max-h-64 overflow-y-auto">
+        <div className="space-y-1 max-h-48 overflow-y-auto">
           <div className="border border-gray-700 rounded-lg">
             <button
               onClick={() => toggleSection('entrantes')}
-              className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800 rounded-t-lg"
+              className="w-full flex items-center justify-between px-2 py-1.5 text-xs font-medium text-gray-300 hover:bg-gray-800 rounded-t-lg"
             >
               <span>Vuelos entrantes ({filteredEntrantes.length})</span>
               <span className="text-xs">{expandedSection === 'entrantes' ? '▼' : '▶'}</span>
@@ -191,7 +192,14 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
                   filteredEntrantes.map(id => {
                     const vuelo = vuelosMap.get(id)
                     return (
-                      <div key={id} className="text-xs text-gray-400 border-t border-gray-800 pt-1">
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => vuelo && onVueloSelect?.(vuelo)}
+                        disabled={!vuelo}
+                        className="w-full text-left text-xs text-gray-400 border-t border-gray-800 px-1 py-1 rounded hover:bg-amber-900/20 hover:border-amber-700/50 transition-colors disabled:cursor-default"
+                        title="Seleccionar vuelo en el mapa"
+                      >
                         <div className="flex justify-between">
                           <span className="font-medium text-gray-300">{id}</span>
                           <span className="text-sky-400">Desde: {vuelo ? getAirportCityCountry(vuelo.origen) : '?'}</span>
@@ -201,7 +209,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
                             Llegada: {formatDateInTimezone(vuelo.llegadaUtc, tzOffset)} {formatTimeInTimezone(vuelo.llegadaUtc, tzOffset)}
                           </div>
                         )}
-                      </div>
+                      </button>
                     )
                   })
                 )}
@@ -212,7 +220,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
           <div className="border border-gray-700 rounded-lg">
             <button
               onClick={() => toggleSection('salientes')}
-              className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800 rounded-t-lg"
+              className="w-full flex items-center justify-between px-2 py-1.5 text-xs font-medium text-gray-300 hover:bg-gray-800 rounded-t-lg"
             >
               <span>Vuelos salientes ({filteredSalientes.length})</span>
               <span className="text-xs">{expandedSection === 'salientes' ? '▼' : '▶'}</span>
@@ -249,7 +257,14 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
                   filteredSalientes.map(id => {
                     const vuelo = vuelosMap.get(id)
                     return (
-                      <div key={id} className="text-xs text-gray-400 border-t border-gray-800 pt-1">
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => vuelo && onVueloSelect?.(vuelo)}
+                        disabled={!vuelo}
+                        className="w-full text-left text-xs text-gray-400 border-t border-gray-800 px-1 py-1 rounded hover:bg-amber-900/20 hover:border-amber-700/50 transition-colors disabled:cursor-default"
+                        title="Seleccionar vuelo en el mapa"
+                      >
                         <div className="flex justify-between">
                           <span className="font-medium text-gray-300">{id}</span>
                           <span className="text-emerald-400">Hacia: {vuelo ? getAirportCityCountry(vuelo.destino) : '?'}</span>
@@ -259,7 +274,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
                             Salida: {formatDateInTimezone(vuelo.salidaUtc, tzOffset)} {formatTimeInTimezone(vuelo.salidaUtc, tzOffset)}
                           </div>
                         )}
-                      </div>
+                      </button>
                     )
                   })
                 )}
@@ -270,7 +285,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
           <div className="border border-gray-700 rounded-lg">
             <button
               onClick={() => toggleSection('cancelados')}
-              className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800 rounded-t-lg"
+              className="w-full flex items-center justify-between px-2 py-1.5 text-xs font-medium text-gray-300 hover:bg-gray-800 rounded-t-lg"
             >
               <span>Vuelos cancelados ({filteredCancelados.length})</span>
               <span className="text-xs">{expandedSection === 'cancelados' ? '▼' : '▶'}</span>

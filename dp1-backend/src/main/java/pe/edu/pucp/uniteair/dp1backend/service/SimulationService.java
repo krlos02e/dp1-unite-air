@@ -170,6 +170,7 @@ public class SimulationService {
                 .colapsada(state.isColapsada())
                 .motivoColapso(state.getMotivoColapso())
                 .logs(logs != null ? new ArrayList<>(logs) : null)
+                .envios(state.getEnvios())
                 .build();
     }
 

@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css'
 import type { AeropuertoDTO, VueloDTO } from '../types'
 import { getAirportCity, AIRPORTS_DATA } from '../data/airportsData'
 import { TIMEZONE_OPTIONS } from '../utils/timezoneFormat'
+import { shouldDisplayFlight } from '../utils/flightVisibility'
 
 function tooltipForFlight(v: VueloDTO): string {
   const origen = getAirportCity(v.origen) || v.origen
@@ -27,17 +28,6 @@ interface Props {
 const INITIAL_CENTER: [number, number] = [22, 0]
 const INITIAL_ZOOM = 2.25
 const WORLD_BOUNDS = L.latLngBounds(L.latLng(-60, -160), L.latLng(82, 160))
-
-const FLIGHT_DISPLAY_PERCENTAGE = 0.15
-
-function shouldDisplayFlight(flightId: string, percentage: number): boolean {
-  let hash = 0
-  for (let i = 0; i < flightId.length; i++) {
-    hash = flightId.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  const normalized = (Math.abs(hash) % 1000) / 1000
-  return normalized < percentage
-}
 
 function aeropuertoColor(ocu: number, max: number): string {
   const ratio = max > 0 ? ocu / max : 0
@@ -199,6 +189,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
   const routeLinesRef = useRef<Map<string, RoutePair>>(new Map())
   const flightAnimsRef = useRef<Map<string, FlightAnim>>(new Map())
   const rafIdRef = useRef<number>(0)
+  const lastAnimationFrameRef = useRef(0)
   const velocidadRef = useRef(velocidad)
   const onVueloClickRef = useRef(onVueloClick)
   const onAeropuertoClickRef = useRef(onAeropuertoClick)
@@ -272,10 +263,14 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       }
     })
 
+    const realNow = simulationMode ? null : new Date()
     vuelos.forEach((v) => {
-      if (!shouldDisplayFlight(v.id, FLIGHT_DISPLAY_PERCENTAGE)) return
-      const progresoLocal = simulationMode ? v.progresoVuelo : calcularProgresoLocal(v, new Date())
-      if (progresoLocal >= 100) {
+      const progresoLocal = simulationMode ? v.progresoVuelo : calcularProgresoLocal(v, realNow!)
+      const isActive = simulationMode
+        ? v.estado === 'ACTIVO'
+        : progresoLocal > 0 && progresoLocal < 100
+      const isVisible = shouldDisplayFlight(v.id) || v.id === selectedVueloId
+      if (!isActive || !isVisible) {
         persistentFlightsRef.current.delete(v.id)
         const mk = flightMarkersRef.current.get(v.id)
         if (mk) {
@@ -289,7 +284,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
         persistentFlightsRef.current.set(v.id, v)
       }
     })
-  }, [vuelos])
+  }, [vuelos, selectedVueloId, simulationMode])
 
   useEffect(() => {
     if (mapContainerRef.current && !mapRef.current) {
@@ -656,7 +651,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
         routeLinesRef.current.set(v.id, pair)
       }
     })
-  }, [vuelos])
+  }, [vuelos, selectedVueloId, simulationMode])
 
   useEffect(() => {
     routeLinesRef.current.forEach((pair) => {
@@ -667,12 +662,17 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
 
   useEffect(() => {
     const animate = (frameNow: number) => {
-      const realNow = new Date()
+      if (frameNow - lastAnimationFrameRef.current < 33) {
+        rafIdRef.current = requestAnimationFrame(animate)
+        return
+      }
+      lastAnimationFrameRef.current = frameNow
+      const realNow = simulationMode ? null : new Date()
       flightAnimsRef.current.forEach((anim, id) => {
         const mk = flightMarkersRef.current.get(id)
         if (!mk) return
 
-        const currentProgress = simulationMode ? animatedProgress(anim, frameNow) : calcularProgresoLocal(anim.vuelo, realNow)
+        const currentProgress = simulationMode ? animatedProgress(anim, frameNow) : calcularProgresoLocal(anim.vuelo, realNow!)
         anim.displayedProgress = currentProgress
         if (currentProgress >= 100) {
           markerLayerRef.current?.removeLayer(mk)

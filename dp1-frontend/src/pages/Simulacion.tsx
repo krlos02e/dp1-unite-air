@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSimulation } from '../context/SimulationContext'
 import { simulationService } from '../services/SimulationService'
 import { cargaArchivosService } from '../services/CargaArchivosService'
@@ -13,10 +13,12 @@ import ResultadosModal from '../components/ResultadosModal'
 import { formatDateTime } from '../utils/dateFormat'
 import { AIRPORTS_DATA } from '../data/airportsData'
 import type { VueloDTO, AeropuertoDTO, SimulationState, EnvioEstado } from '../types'
+import { shouldDisplayFlight } from '../utils/flightVisibility'
 
 const SIM_CONFIG_KEY = 'uniteair_simConfig'
 const SIM_STOPPED_KEY = 'uniteair_simStopped'
 const DURACION_FIJA = 5
+const EMPTY_FLIGHTS: VueloDTO[] = []
 
 const aeropuertosFallback: AeropuertoDTO[] = Object.values(AIRPORTS_DATA).map((a) => ({
   codigoOACI: a.codigoOACI,
@@ -55,8 +57,8 @@ export default function Simulacion() {
   const [selectedEnvio, setSelectedEnvio] = useState<EnvioEstado | null>(null)
   const [showStopConfirm, setShowStopConfirm] = useState(false)
   const [mapTz, setMapTz] = useState(0)
-  const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('envios')
-  const [panelCollapsed, setPanelCollapsed] = useState(false)
+  const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('aviones')
+  const [panelCollapsed, setPanelCollapsed] = useState(true)
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
@@ -260,11 +262,19 @@ export default function Simulacion() {
   const showActionButton = sessionId && !isColapsada && !isError
 
   const aeropuertos = simulationState?.aeropuertos?.length ? simulationState.aeropuertos : aeropuertosEstaticos
-  const vuelos = simulationState?.vuelos || []
+  const vuelos = simulationState?.vuelos || EMPTY_FLIGHTS
 
-  const vuelosCulminados = simulationState?.vuelosCulminados ?? 0
-  const vuelosEnTransitoCount = simulationState?.vuelosEnTransito ?? 0
-  const vuelosCancelados = simulationState?.vuelosCancelados ?? 0
+  const flightStats = useMemo(() => vuelos.reduce((stats, vuelo) => {
+    const visibleInSample = shouldDisplayFlight(vuelo.id) || vuelo.id === selectedVuelo?.id
+    if (vuelo.estado === 'CULMINADO' && visibleInSample) stats.culminados++
+    else if (vuelo.estado === 'ACTIVO' && visibleInSample) stats.enTransito++
+    else if (vuelo.estado === 'CANCELADO') stats.cancelados++
+    return stats
+  }, { culminados: 0, enTransito: 0, cancelados: 0 }), [vuelos, selectedVuelo?.id])
+
+  const vuelosCulminados = flightStats.culminados
+  const vuelosEnTransitoCount = flightStats.enTransito
+  const vuelosCancelados = flightStats.cancelados
 
   return (
     <div className="flex flex-col gap-2">
@@ -404,6 +414,21 @@ export default function Simulacion() {
               ▶ Panel
             </button>
           )}
+
+          <VueloModal
+            vuelo={selectedVuelo}
+            isOpen={!!selectedVuelo}
+            onClose={() => setSelectedVuelo(null)}
+            tzOffset={mapTz}
+          />
+          <AeropuertoModal
+            aeropuerto={selectedAeropuerto}
+            isOpen={!!selectedAeropuerto}
+            onClose={() => setSelectedAeropuerto(null)}
+            vuelos={simulationState?.vuelos}
+            tzOffset={mapTz}
+            onVueloSelect={handleVueloClick}
+          />
         </div>
 
         {!panelCollapsed && (
@@ -453,6 +478,8 @@ export default function Simulacion() {
               envios={simulationState?.envios || []}
               onEnvioSelect={handleEnvioSelect}
               selectedEnvioId={selectedEnvio?.id}
+              onAlmacenSelect={handleAeropuertoClick}
+              selectedAlmacenId={selectedAeropuerto?.codigoOACI}
             />
           ) : panelMode === 'aviones' ? (
             <VueloListPanel
@@ -460,6 +487,9 @@ export default function Simulacion() {
               envios={simulationState?.envios || []}
               onEnvioSelect={handleEnvioSelect}
               selectedEnvioId={selectedEnvio?.id}
+              onVueloSelect={handleVueloClick}
+              selectedVueloId={selectedVuelo?.id}
+              includeCompleted
             />
           ) : (
             <EnvioListPanel
@@ -472,8 +502,6 @@ export default function Simulacion() {
         )}
       </div>
 
-      <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} tzOffset={mapTz} />
-      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={simulationState?.vuelos} tzOffset={mapTz} />
       <EnvioModal envio={selectedEnvio} isOpen={!!selectedEnvio} onClose={() => setSelectedEnvio(null)} onIrAVuelo={handleIrAVueloDesdeEnvio} vuelos={simulationState?.vuelos} />
       <ResultadosModal
         state={resultSnapshot}
