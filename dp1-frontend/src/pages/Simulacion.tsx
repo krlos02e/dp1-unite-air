@@ -366,6 +366,7 @@ export default function Simulacion() {
             aeropuertos={aeropuertos}
             vuelos={vuelos}
             selectedVueloId={selectedVuelo?.id || null}
+            selectedAeropuertoId={selectedAeropuerto?.codigoOACI || null}
             velocidad={1}
             onAeropuertoClick={handleAeropuertoClick}
             onVueloClick={handleVueloClick}
@@ -379,17 +380,17 @@ export default function Simulacion() {
             <div className="bg-gray-900/40 border border-gray-700/40 rounded-xl p-3 backdrop-blur-[2px] transition-all duration-300 group-hover:bg-gray-900/95 group-hover:border-gray-700 group-hover:backdrop-blur-sm group-hover:shadow-2xl">
               <h4 className="text-xs font-semibold text-gray-300 mb-2 pb-1 border-b border-gray-700/50">Estado de Vuelos</h4>
               <div className="flex flex-col gap-1.5">
-                <div className="flex items-center gap-1.5 bg-emerald-900/30 border border-emerald-800/50 rounded-lg px-2 py-1">
-                  <span className="text-[10px] text-emerald-400 font-medium">Culminados</span>
-                  <span className="text-xs font-bold text-emerald-300 bg-emerald-800/50 px-1.5 py-0.5 rounded">{vuelosCulminados}</span>
+                <div className="flex items-center gap-1.5 bg-violet-900/20 border border-violet-700/40 rounded-lg px-2 py-1">
+                  <span className="text-[10px] text-violet-300 font-medium">Culminados</span>
+                  <span className="text-xs font-bold text-violet-200 bg-violet-700/40 px-1.5 py-0.5 rounded">{vuelosCulminados}</span>
                 </div>
-                <div className="flex items-center gap-1.5 bg-amber-900/30 border border-amber-800/50 rounded-lg px-2 py-1">
-                  <span className="text-[10px] text-amber-400 font-medium">En Tránsito</span>
-                  <span className="text-xs font-bold text-amber-300 bg-amber-800/50 px-1.5 py-0.5 rounded">{vuelosEnTransitoCount}</span>
+                <div className="flex items-center gap-1.5 bg-violet-900/35 border border-violet-700/55 rounded-lg px-2 py-1">
+                  <span className="text-[10px] text-violet-400 font-medium">En Tránsito</span>
+                  <span className="text-xs font-bold text-violet-300 bg-violet-800/55 px-1.5 py-0.5 rounded">{vuelosEnTransitoCount}</span>
                 </div>
-                <div className="flex items-center gap-1.5 bg-red-900/30 border border-red-800/50 rounded-lg px-2 py-1">
-                  <span className="text-[10px] text-red-400 font-medium">Cancelados</span>
-                  <span className="text-xs font-bold text-red-300 bg-red-800/50 px-1.5 py-0.5 rounded">{vuelosCancelados}</span>
+                <div className="flex items-center gap-1.5 bg-violet-950/55 border border-violet-800/70 rounded-lg px-2 py-1">
+                  <span className="text-[10px] text-violet-500 font-medium">Cancelados</span>
+                  <span className="text-xs font-bold text-violet-400 bg-violet-950/80 px-1.5 py-0.5 rounded">{vuelosCancelados}</span>
                 </div>
               </div>
             </div>
