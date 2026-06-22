@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { getAirportCity } from '../data/airportsData'
+import { getAirportCity, getAirportCountry } from '../data/airportsData'
 import type { VueloDTO, EnvioEstado } from '../types'
 
 interface Props {
@@ -32,13 +32,41 @@ const estadoColor: Record<string, string> = {
 
 const DEFAULT_LIMIT = 50
 
+type SearchScope = 'todos' | 'codigo' | 'tramo' | 'origen' | 'destino'
+
+function normalizeSearch(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+function locationTerms(code: string): string {
+  return normalizeSearch([code, getAirportCity(code), getAirportCountry(code)].filter(Boolean).join(' '))
+}
+
+function occupationStatus(cargaActual: number, ocupPct: number) {
+  if (cargaActual <= 0) {
+    return { label: 'Vacío', bar: 'bg-sky-500', text: 'text-sky-400', track: 'bg-sky-950/80' }
+  }
+  if (ocupPct > 90) {
+    return { label: 'Crítico', bar: 'bg-red-500', text: 'text-red-400', track: 'bg-gray-800' }
+  }
+  if (ocupPct > 70) {
+    return { label: 'Alerta', bar: 'bg-amber-500', text: 'text-amber-400', track: 'bg-gray-800' }
+  }
+  return { label: 'Normal', bar: 'bg-emerald-500', text: 'text-emerald-400', track: 'bg-gray-800' }
+}
+
 export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId }: Props) {
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [filterEstado, setFilterEstado] = useState<string>('todos')
   const [showAll, setShowAll] = useState(false)
+  const [searchScope, setSearchScope] = useState<SearchScope>('todos')
 
-  const term = search.toLowerCase().trim()
+  const term = normalizeSearch(search)
 
   const enviosEnVuelo = (vueloId: string): EnvioEstado[] => {
     if (!envios) return []
@@ -49,11 +77,19 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
     return vuelos.filter(v => {
       if (filterEstado !== 'todos' && v.estado !== filterEstado) return false
       if (!term) return true
-      return v.id.toLowerCase().includes(term) ||
-        v.origen.toLowerCase().includes(term) ||
-        v.destino.toLowerCase().includes(term)
+
+      const codigo = normalizeSearch(v.id)
+      const origen = locationTerms(v.origen)
+      const destino = locationTerms(v.destino)
+      const tramo = `${origen} ${destino} ${normalizeSearch(`${v.origen}-${v.destino}`)}`
+
+      if (searchScope === 'codigo') return codigo.includes(term)
+      if (searchScope === 'tramo') return tramo.includes(term)
+      if (searchScope === 'origen') return origen.includes(term)
+      if (searchScope === 'destino') return destino.includes(term)
+      return `${codigo} ${tramo}`.includes(term)
     })
-  }, [vuelos, term, filterEstado])
+  }, [vuelos, term, filterEstado, searchScope])
 
   const filtrados = showAll || term ? filtradosSinLimite : filtradosSinLimite.slice(0, DEFAULT_LIMIT)
 
@@ -67,14 +103,42 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
     <div className="w-80 flex-1 min-h-0 bg-gray-900 border border-gray-800 rounded-xl flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-3 border-b border-gray-800">
-        <h3 className="text-sm font-semibold text-gray-200 mb-2">Aviones</h3>
-        <input
-          type="text"
-          placeholder="Buscar vuelo..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-sky-500"
-        />
+        <h3 className="text-sm font-semibold text-gray-200 mb-0.5">Unidades de transporte</h3>
+        <p className="text-[10px] text-gray-500 mb-2">Aviones · ocupación y carga transportada</p>
+        <div className="flex gap-1.5">
+          <select
+            value={searchScope}
+            onChange={(e) => setSearchScope(e.target.value as SearchScope)}
+            aria-label="Buscar unidad de transporte por"
+            className="w-[92px] bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
+          >
+            <option value="todos">Todo</option>
+            <option value="codigo">Código UT</option>
+            <option value="tramo">Tramo</option>
+            <option value="origen">Origen</option>
+            <option value="destino">Destino</option>
+          </select>
+          <input
+            type="text"
+            placeholder="Código, tramo o ciudad..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Término de búsqueda de unidades de transporte"
+            className="min-w-0 flex-1 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-sky-500"
+          />
+        </div>
+        <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-2" aria-label="Semáforo de ocupación">
+          {[
+            ['bg-sky-500', 'Vacío'],
+            ['bg-emerald-500', 'Normal'],
+            ['bg-amber-500', 'Alerta'],
+            ['bg-red-500', 'Crítico'],
+          ].map(([color, label]) => (
+            <span key={label} className="inline-flex items-center gap-1 text-[9px] text-gray-500">
+              <span className={`w-1.5 h-1.5 rounded-full ${color}`} />{label}
+            </span>
+          ))}
+        </div>
       </div>
 
       {/* State filter */}
@@ -107,6 +171,7 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
           const enviosEnEsteVuelo = enviosEnVuelo(v.id)
           const totalMaletas = enviosEnEsteVuelo.reduce((sum, e) => sum + e.cantidad, 0)
           const ocupPct = v.capacidad > 0 ? Math.round((v.cargaActual / v.capacidad) * 100) : 0
+          const ocupacion = occupationStatus(v.cargaActual, ocupPct)
 
           return (
             <div key={v.id} className="border-b border-gray-800/50">
@@ -117,6 +182,7 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
               >
                 <div className="flex items-start justify-between gap-1 mb-1">
                   <div className="min-w-0 flex-1">
+                    <div className="text-[9px] font-mono text-sky-400 mb-0.5">UT {v.id}</div>
                     <div className="text-xs text-gray-200 truncate">
                       <span className="font-semibold text-emerald-400">{v.origen}</span>
                       <span className="text-gray-500 mx-0.5">→</span>
@@ -133,21 +199,18 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
 
                 {/* Occupation bar */}
                 <div className="flex items-center gap-2 mt-1">
-                  <div className="flex-1 bg-gray-800 rounded-full h-2 overflow-hidden">
+                  <div className={`flex-1 ${ocupacion.track} rounded-full h-2 overflow-hidden`}>
                     <div
-                      className={`h-full rounded-full transition-all ${
-                        ocupPct > 90 ? 'bg-red-500' : ocupPct > 70 ? 'bg-amber-500' : 'bg-emerald-500'
-                      }`}
+                      className={`h-full rounded-full transition-all ${ocupacion.bar}`}
                       style={{ width: `${Math.min(ocupPct, 100)}%` }}
                     />
                   </div>
                   <span className="text-[10px] text-gray-400 whitespace-nowrap font-mono">
                     {v.cargaActual}/{v.capacidad}
                   </span>
-                  <span className={`text-[10px] font-mono font-medium ${
-                    ocupPct > 90 ? 'text-red-400' : ocupPct > 70 ? 'text-amber-400' : 'text-emerald-400'
-                  }`}>
-                    ({ocupPct}%)
+                  <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${ocupacion.text}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${ocupacion.bar}`} />
+                    {ocupacion.label} ({ocupPct}%)
                   </span>
                 </div>
 
@@ -158,7 +221,7 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
                 )}
               </div>
 
-              {/* Expanded: envios on this flight */}
+              {/* Expanded: shipments and products on this transport unit */}
               {isExpanded && envios && (
                 <div className="bg-gray-800/30 border-t border-gray-800/50">
                   {enviosEnEsteVuelo.length === 0 ? (
@@ -166,7 +229,7 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
                   ) : (
                     <>
                       <div className="px-4 py-1.5 text-[10px] text-gray-400 font-medium border-b border-gray-800/30">
-                        🎒 {totalMaletas} producto{totalMaletas !== 1 ? 's' : ''} en {enviosEnEsteVuelo.length} envío{enviosEnEsteVuelo.length !== 1 ? 's' : ''}
+                        Envíos y productos transportados: {enviosEnEsteVuelo.length} envío{enviosEnEsteVuelo.length !== 1 ? 's' : ''} · {totalMaletas} maleta{totalMaletas !== 1 ? 's' : ''}
                       </div>
                       {enviosEnEsteVuelo.map((envio) => {
                         const isSelected = envio.id === selectedEnvioId
@@ -180,6 +243,7 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
                           >
                             <div className="flex items-start justify-between gap-1">
                               <div className="min-w-0 flex-1">
+                                <div className="text-[9px] font-mono text-sky-400 truncate">Envío {envio.id}</div>
                                 <div className="text-[10px] text-gray-300 truncate">
                                   <span className="font-medium">{getAirportCity(envio.origen) || envio.origen}</span>
                                   <span className="text-gray-600 mx-0.5">→</span>

@@ -94,8 +94,8 @@ export default function OperacionDiaria() {
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
   const [selectedEnvio, setSelectedEnvio] = useState<EnvioEstado | null>(null)
   const [mapTz, setMapTz] = useState(0)
-  const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('envios')
-  const [panelCollapsed, setPanelCollapsed] = useState(false)
+  const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('aviones')
+  const [panelCollapsed, setPanelCollapsed] = useState(true)
   const [todosEnvios, setTodosEnvios] = useState<EnvioEstado[]>([])
 
   const handleVueloClick = useCallback((v: VueloDTO) => {

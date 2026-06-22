@@ -55,8 +55,8 @@ export default function Simulacion() {
   const [selectedEnvio, setSelectedEnvio] = useState<EnvioEstado | null>(null)
   const [showStopConfirm, setShowStopConfirm] = useState(false)
   const [mapTz, setMapTz] = useState(0)
-  const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('envios')
-  const [panelCollapsed, setPanelCollapsed] = useState(false)
+  const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('aviones')
+  const [panelCollapsed, setPanelCollapsed] = useState(true)
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
