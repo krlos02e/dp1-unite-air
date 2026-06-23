@@ -189,6 +189,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLinesRef = useRef<Map<string, RoutePair>>(new Map())
   const flightAnimsRef = useRef<Map<string, FlightAnim>>(new Map())
+  const visibleFlightIdsRef = useRef<Set<string>>(new Set())
   const rafIdRef = useRef<number>(0)
   const lastAnimationFrameRef = useRef(0)
   const velocidadRef = useRef(velocidad)
@@ -270,8 +271,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       const isActive = simulationMode
         ? v.estado === 'ACTIVO'
         : progresoLocal > 0 && progresoLocal < 100
-      const passesPanelFilter = !filteredFlightIds || filteredFlightIds.has(v.id) || v.id === selectedVueloId
-      const isVisible = passesPanelFilter && (shouldDisplayFlight(v.id) || v.id === selectedVueloId)
+      const isVisible = shouldDisplayFlight(v.id) || v.id === selectedVueloId
       if (!isActive || !isVisible) {
         persistentFlightsRef.current.delete(v.id)
         const mk = flightMarkersRef.current.get(v.id)
@@ -286,7 +286,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
         persistentFlightsRef.current.set(v.id, v)
       }
     })
-  }, [vuelos, selectedVueloId, simulationMode, filteredFlightIds])
+  }, [vuelos, selectedVueloId, simulationMode])
 
   useEffect(() => {
     if (mapContainerRef.current && !mapRef.current) {
@@ -523,17 +523,20 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
 
     const displayFlights = Array.from(persistentFlightsRef.current.values()).filter((v) => {
       const progreso = simulationMode ? v.progresoVuelo : calcularProgresoLocal(v, realNow)
-      return progreso > 0 && progreso < 100
+      const passesPanelFilter = !filteredFlightIds || filteredFlightIds.has(v.id) || v.id === selectedVueloIdRef.current
+      return progreso > 0 && progreso < 100 && passesPanelFilter
     })
     const displayIds = new Set(displayFlights.map((v) => v.id))
+    visibleFlightIdsRef.current = displayIds
 
       flightMarkersRef.current.forEach((mk, id) => {
         if (!displayIds.has(id)) {
-          markerLayerRef.current?.removeLayer(mk)
-          flightMarkersRef.current.delete(id)
-          flightAngleRef.current.delete(id)
-          flightAnimsRef.current.delete(id)
-          removeRoute(id)
+          mk.setOpacity(0)
+          const element = mk.getElement()
+          if (element) element.style.pointerEvents = 'none'
+          const route = routeLinesRef.current.get(id)
+          route?.pending.setStyle({ opacity: 0 })
+          route?.flown?.setStyle({ opacity: 0 })
         }
       })
 
@@ -599,6 +602,9 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
         flightAngleRef.current.set(v.id, angle)
         applyTransform(mk, angle)
       } else {
+        mk.setOpacity(1)
+        const element = mk.getElement()
+        if (element) element.style.pointerEvents = 'auto'
         mk.setIcon(getAirplaneIcon(isSelected, v.cargaActual, v.capacidad))
         mk.setTooltipContent(tooltipText)
       }
@@ -671,6 +677,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       lastAnimationFrameRef.current = frameNow
       const realNow = simulationMode ? null : new Date()
       flightAnimsRef.current.forEach((anim, id) => {
+        if (!visibleFlightIdsRef.current.has(id)) return
         const mk = flightMarkersRef.current.get(id)
         if (!mk) return
 

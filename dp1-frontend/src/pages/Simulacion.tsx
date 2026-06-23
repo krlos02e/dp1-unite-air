@@ -59,7 +59,10 @@ export default function Simulacion() {
   const [mapTz, setMapTz] = useState(0)
   const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('aviones')
   const [panelCollapsed, setPanelCollapsed] = useState(true)
+  const [panelRendered, setPanelRendered] = useState(false)
+  const [panelShown, setPanelShown] = useState(false)
   const [filteredFlightIds, setFilteredFlightIds] = useState<Set<string> | null>(null)
+  const filteredFlightSignatureRef = useRef('')
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
@@ -106,7 +109,16 @@ export default function Simulacion() {
     }
   }, [simulationState])
 
-  const handleVisibleFlightsChange = useCallback((ids: string[]) => {
+  const handleVisibleFlightsChange = useCallback((ids: string[] | null) => {
+    if (!ids) {
+      if (filteredFlightSignatureRef.current === '') return
+      filteredFlightSignatureRef.current = ''
+      setFilteredFlightIds(null)
+      return
+    }
+    const signature = ids.join('|')
+    if (signature === filteredFlightSignatureRef.current) return
+    filteredFlightSignatureRef.current = signature
     setFilteredFlightIds(new Set(ids))
   }, [])
 
@@ -284,6 +296,17 @@ export default function Simulacion() {
   }
 
   const showActionButton = sessionId && !isColapsada && !isError
+
+  useEffect(() => {
+    if (!panelCollapsed) {
+      setPanelRendered(true)
+      const frameId = window.requestAnimationFrame(() => setPanelShown(true))
+      return () => window.cancelAnimationFrame(frameId)
+    }
+    setPanelShown(false)
+    const timeoutId = window.setTimeout(() => setPanelRendered(false), 180)
+    return () => window.clearTimeout(timeoutId)
+  }, [panelCollapsed])
 
   const aeropuertos = simulationState?.aeropuertos?.length ? simulationState.aeropuertos : aeropuertosEstaticos
   const vuelos = simulationState?.vuelos || EMPTY_FLIGHTS
@@ -468,8 +491,12 @@ export default function Simulacion() {
           />
         </div>
 
-        {!panelCollapsed && (
-        <div className="flex flex-col gap-2">
+        {panelRendered && (
+        <div
+          className={`flex flex-col gap-2 transition-[transform,opacity] duration-200 ease-out will-change-transform ${
+            panelShown ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0 pointer-events-none'
+          }`}
+        >
           <div className="flex bg-gray-900/95 border border-gray-700/80 rounded-lg overflow-hidden">
             <button
               onClick={() => setPanelMode('envios')}

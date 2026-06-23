@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { cargaArchivosService } from '../services/CargaArchivosService'
 import MapaAeropuertos from '../components/MapaAeropuertos'
 import VueloModal from '../components/VueloModal'
@@ -85,8 +85,11 @@ export default function OperacionDiaria() {
   const [mapTz, setMapTz] = useState(0)
   const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('aviones')
   const [panelCollapsed, setPanelCollapsed] = useState(true)
+  const [panelRendered, setPanelRendered] = useState(false)
+  const [panelShown, setPanelShown] = useState(false)
   const [todosEnvios, setTodosEnvios] = useState<EnvioEstado[]>([])
   const [filteredFlightIds, setFilteredFlightIds] = useState<Set<string> | null>(null)
+  const filteredFlightSignatureRef = useRef('')
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
@@ -132,7 +135,16 @@ export default function OperacionDiaria() {
     }
   }, [vuelos])
 
-  const handleVisibleFlightsChange = useCallback((ids: string[]) => {
+  const handleVisibleFlightsChange = useCallback((ids: string[] | null) => {
+    if (!ids) {
+      if (filteredFlightSignatureRef.current === '') return
+      filteredFlightSignatureRef.current = ''
+      setFilteredFlightIds(null)
+      return
+    }
+    const signature = ids.join('|')
+    if (signature === filteredFlightSignatureRef.current) return
+    filteredFlightSignatureRef.current = signature
     setFilteredFlightIds(new Set(ids))
   }, [])
 
@@ -222,6 +234,17 @@ export default function OperacionDiaria() {
     return () => clearInterval(interval)
   }, [dataLoaded])
 
+  useEffect(() => {
+    if (!panelCollapsed) {
+      setPanelRendered(true)
+      const frameId = window.requestAnimationFrame(() => setPanelShown(true))
+      return () => window.cancelAnimationFrame(frameId)
+    }
+    setPanelShown(false)
+    const timeoutId = window.setTimeout(() => setPanelRendered(false), 180)
+    return () => window.clearTimeout(timeoutId)
+  }, [panelCollapsed])
+
   const { fecha } = getPeruDateParts()
 
   return (
@@ -302,8 +325,12 @@ export default function OperacionDiaria() {
             dentroDelMapa
           />
         </div>
-        {!panelCollapsed && (
-        <div className="flex flex-col gap-2">
+        {panelRendered && (
+        <div
+          className={`flex flex-col gap-2 transition-[transform,opacity] duration-200 ease-out will-change-transform ${
+            panelShown ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0 pointer-events-none'
+          }`}
+        >
           <div className="flex bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
             <button
               onClick={() => setPanelMode('envios')}

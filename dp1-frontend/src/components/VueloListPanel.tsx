@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { getAirportCity, getAirportCountry } from '../data/airportsData'
 import type { VueloDTO, EnvioEstado } from '../types'
 import { shouldDisplayFlight } from '../utils/flightVisibility'
@@ -12,7 +12,7 @@ interface Props {
   selectedVueloId?: string | null
   includeCompleted?: boolean
   showStatusFilters?: boolean
-  onVisibleFlightsChange?: (flightIds: string[]) => void
+  onVisibleFlightsChange?: (flightIds: string[] | null) => void
 }
 
 function formatTime(iso: string): string {
@@ -104,7 +104,7 @@ function occupationCategory(cargaActual: number, ocupPct: number): OccupationFil
   return 'normal'
 }
 
-export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId, onVueloSelect, selectedVueloId, includeCompleted = false, showStatusFilters = true, onVisibleFlightsChange }: Props) {
+function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId, onVueloSelect, selectedVueloId, includeCompleted = false, showStatusFilters = true, onVisibleFlightsChange }: Props) {
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [filterEstado, setFilterEstado] = useState<string>('ACTIVO')
@@ -119,6 +119,7 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
   const deferredSearch = useDeferredValue(search)
   const term = normalizeSearch(deferredSearch)
   const hasListFilters = Boolean(originFilter || destinationFilter || occupationFilter !== 'todos')
+  const hasMapFilters = Boolean(term || originFilter || destinationFilter || occupationFilter !== 'todos' || filterEstado !== 'ACTIVO')
 
   const enviosByFlight = useMemo(() => {
     const index = new Map<string, EnvioEstado[]>()
@@ -210,8 +211,18 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
   }, [includeCompleted])
 
   useEffect(() => {
-    onVisibleFlightsChange?.(filtradosSinLimite.map((flight) => flight.id))
-  }, [filtradosSinLimite, onVisibleFlightsChange])
+    if (!onVisibleFlightsChange) return
+    if (!hasMapFilters) {
+      onVisibleFlightsChange(null)
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      onVisibleFlightsChange(filtradosSinLimite.map((flight) => flight.id))
+    }, 120)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [filtradosSinLimite, hasMapFilters, onVisibleFlightsChange])
 
   useEffect(() => {
     if (!selectedVueloId) return
@@ -534,3 +545,5 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
     </div>
   )
 }
+
+export default memo(VueloListPanel)
