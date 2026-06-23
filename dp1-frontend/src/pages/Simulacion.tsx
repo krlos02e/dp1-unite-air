@@ -73,10 +73,27 @@ export default function Simulacion() {
   }, [])
 
   const handleEnvioSelect = useCallback((envio: EnvioEstado) => {
-    setSelectedEnvio((prev) => (prev?.id === envio.id ? null : envio))
-    setSelectedVuelo(null)
-    setSelectedAeropuerto(null)
-  }, [])
+    setSelectedEnvio((prev) => {
+      if (prev?.id === envio.id) {
+        setSelectedVuelo(null)
+        setSelectedAeropuerto(null)
+        return null
+      }
+
+      const vueloId = envio.vueloActual || envio.vueloEsperado || envio.ultimoVuelo
+      const vuelo = vueloId ? simulationState?.vuelos.find((v) => v.id === vueloId) : null
+      if (vuelo) {
+        setSelectedVuelo(vuelo)
+        setSelectedAeropuerto(null)
+      } else {
+        const aeropuertosDisponibles = simulationState?.aeropuertos?.length ? simulationState.aeropuertos : aeropuertosEstaticos
+        const aeropuerto = aeropuertosDisponibles.find((a) => a.codigoOACI === envio.aeropuertoActual)
+        setSelectedVuelo(null)
+        setSelectedAeropuerto(aeropuerto || null)
+      }
+      return envio
+    })
+  }, [aeropuertosEstaticos, simulationState?.aeropuertos, simulationState?.vuelos])
 
   const handleIrAVueloDesdeEnvio = useCallback((vueloId: string) => {
     const vuelo = simulationState?.vuelos.find((v) => v.id === vueloId)
@@ -417,17 +434,29 @@ export default function Simulacion() {
 
           <VueloModal
             vuelo={selectedVuelo}
-            isOpen={!!selectedVuelo}
+            isOpen={!!selectedVuelo && !selectedEnvio}
             onClose={() => setSelectedVuelo(null)}
             tzOffset={mapTz}
           />
           <AeropuertoModal
             aeropuerto={selectedAeropuerto}
-            isOpen={!!selectedAeropuerto}
+            isOpen={!!selectedAeropuerto && !selectedEnvio}
             onClose={() => setSelectedAeropuerto(null)}
             vuelos={simulationState?.vuelos}
             tzOffset={mapTz}
             onVueloSelect={handleVueloClick}
+          />
+          <EnvioModal
+            envio={selectedEnvio}
+            isOpen={!!selectedEnvio}
+            onClose={() => {
+              setSelectedEnvio(null)
+              setSelectedVuelo(null)
+              setSelectedAeropuerto(null)
+            }}
+            onIrAVuelo={handleIrAVueloDesdeEnvio}
+            vuelos={simulationState?.vuelos}
+            dentroDelMapa
           />
         </div>
 
@@ -502,7 +531,6 @@ export default function Simulacion() {
         )}
       </div>
 
-      <EnvioModal envio={selectedEnvio} isOpen={!!selectedEnvio} onClose={() => setSelectedEnvio(null)} onIrAVuelo={handleIrAVueloDesdeEnvio} vuelos={simulationState?.vuelos} />
       <ResultadosModal
         state={resultSnapshot}
         isOpen={showResultados}

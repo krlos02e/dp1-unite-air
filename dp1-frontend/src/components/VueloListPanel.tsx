@@ -98,7 +98,7 @@ function occupationStatus(cargaActual: number, ocupPct: number) {
 export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId, onVueloSelect, selectedVueloId, includeCompleted = false, showStatusFilters = true }: Props) {
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [filterEstado, setFilterEstado] = useState<string>('todos')
+  const [filterEstado, setFilterEstado] = useState<string>('ACTIVO')
   const [searchScope, setSearchScope] = useState<SearchScope>('todos')
   const [originFilter, setOriginFilter] = useState('')
   const [destinationFilter, setDestinationFilter] = useState('')
@@ -113,7 +113,7 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
     const index = new Map<string, EnvioEstado[]>()
     if (!envios) return index
     envios.forEach((envio) => {
-      const flightIds = new Set([envio.vueloActual, envio.vueloEsperado].filter((id): id is string => Boolean(id)))
+      const flightIds = new Set([envio.vueloActual, envio.vueloEsperado, envio.ultimoVuelo].filter((id): id is string => Boolean(id)))
       flightIds.forEach((flightId) => {
         const current = index.get(flightId)
         if (current) current.push(envio)
@@ -125,8 +125,16 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
 
   const visibleFlights = useMemo(
     () => vuelos.filter((flight) => (
-      (flight.estado === 'ACTIVO' || (includeCompleted && flight.estado === 'CULMINADO'))
-      && (shouldDisplayFlight(flight.id) || flight.id === selectedVueloId)
+      (
+        flight.estado === 'ACTIVO'
+        || (includeCompleted && flight.estado === 'CULMINADO')
+        || (includeCompleted && flight.estado === 'CANCELADO')
+      )
+      && (
+        flight.estado === 'CANCELADO'
+        || shouldDisplayFlight(flight.id)
+        || flight.id === selectedVueloId
+      )
     )),
     [vuelos, selectedVueloId, includeCompleted],
   )
@@ -156,7 +164,7 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
 
   const filtradosSinLimite = useMemo(() => {
     return indexedFlights.filter(({ flight: v, codigo, origen, destino, tramo }) => {
-      if (filterEstado !== 'todos' && v.estado !== filterEstado) return false
+      if (v.estado !== filterEstado) return false
       if (originFilter && v.origen !== originFilter) return false
       if (destinationFilter && v.destino !== destinationFilter) return false
       if (!term) return true
@@ -193,15 +201,15 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
   ), [visibleFlights])
 
   const estadosDisponibles = useMemo(() => {
-    const states = ['todos', 'ACTIVO']
-    if (includeCompleted) states.push('CULMINADO')
+    const states = ['ACTIVO']
+    if (includeCompleted) states.push('CULMINADO', 'CANCELADO')
     return states
   }, [includeCompleted])
 
   const estadoVueloLabel: Record<string, string> = {
-    todos: 'Todos',
     ACTIVO: 'Activos',
     CULMINADO: 'Culminados',
+    CANCELADO: 'Cancelados',
   }
 
   return (

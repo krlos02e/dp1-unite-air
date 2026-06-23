@@ -6,9 +6,9 @@ import type { EnvioEstado } from '../types'
 type Tab = 'pendientes' | 'planificados' | 'envuelo' | 'entregados'
 
 const TAB_CONFIG: { key: Tab; label: string; estados: string; horas?: number }[] = [
-  { key: 'pendientes', label: 'Pendientes', estados: 'EN_ESPERA' },
-  { key: 'planificados', label: 'Planificados', estados: 'EMBARCADO' },
   { key: 'envuelo', label: 'En vuelo', estados: 'EN_VUELO' },
+  { key: 'planificados', label: 'Planificados', estados: 'EMBARCADO' },
+  { key: 'pendientes', label: 'Pendientes', estados: 'EN_ESPERA' },
   { key: 'entregados', label: 'Entregados', estados: 'ENTREGADO', horas: 4 },
 ]
 
@@ -25,7 +25,7 @@ interface Props {
 const DEFAULT_LIMIT = 50
 
 export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosExternos }: Props) {
-  const [tab, setTab] = useState<Tab>('pendientes')
+  const [tab, setTab] = useState<Tab>('envuelo')
   const [search, setSearch] = useState('')
   const [filtroId, setFiltroId] = useState(true)
   const [filtroOrigen, setFiltroOrigen] = useState(true)
@@ -175,7 +175,7 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosE
 
         {filtrados.map((envio) => {
           const isSelected = envio.id === selectedEnvioId
-          const ut = envio.vueloActual || envio.vueloEsperado
+          const ut = envio.vueloActual || envio.vueloEsperado || envio.ultimoVuelo
           return (
             <button
               key={envio.id}

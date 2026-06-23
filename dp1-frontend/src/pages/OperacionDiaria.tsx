@@ -100,10 +100,26 @@ export default function OperacionDiaria() {
   }, [])
 
   const handleEnvioSelect = useCallback((envio: EnvioEstado) => {
-    setSelectedEnvio((prev) => (prev?.id === envio.id ? null : envio))
-    setSelectedVuelo(null)
-    setSelectedAeropuerto(null)
-  }, [])
+    setSelectedEnvio((prev) => {
+      if (prev?.id === envio.id) {
+        setSelectedVuelo(null)
+        setSelectedAeropuerto(null)
+        return null
+      }
+
+      const vueloId = envio.vueloActual || envio.vueloEsperado || envio.ultimoVuelo
+      const vuelo = vueloId ? vuelos.find((v) => v.id === vueloId) : null
+      if (vuelo) {
+        setSelectedVuelo(vuelo)
+        setSelectedAeropuerto(null)
+      } else {
+        const aeropuerto = aeropuertosEstaticos.find((a) => a.codigoOACI === envio.aeropuertoActual)
+        setSelectedVuelo(null)
+        setSelectedAeropuerto(aeropuerto || null)
+      }
+      return envio
+    })
+  }, [aeropuertosEstaticos, vuelos])
 
   const handleIrAVueloDesdeEnvio = useCallback((vueloId: string) => {
     const vuelo = vuelos.find((v) => v.id === vueloId)
@@ -253,17 +269,29 @@ export default function OperacionDiaria() {
 
           <VueloModal
             vuelo={selectedVuelo}
-            isOpen={!!selectedVuelo}
+            isOpen={!!selectedVuelo && !selectedEnvio}
             onClose={() => setSelectedVuelo(null)}
             tzOffset={mapTz}
           />
           <AeropuertoModal
             aeropuerto={selectedAeropuerto}
-            isOpen={!!selectedAeropuerto}
+            isOpen={!!selectedAeropuerto && !selectedEnvio}
             onClose={() => setSelectedAeropuerto(null)}
             vuelos={vuelos}
             tzOffset={mapTz}
             onVueloSelect={handleVueloClick}
+          />
+          <EnvioModal
+            envio={selectedEnvio}
+            isOpen={!!selectedEnvio}
+            onClose={() => {
+              setSelectedEnvio(null)
+              setSelectedVuelo(null)
+              setSelectedAeropuerto(null)
+            }}
+            onIrAVuelo={handleIrAVueloDesdeEnvio}
+            vuelos={vuelos}
+            dentroDelMapa
           />
         </div>
         {!panelCollapsed && (
@@ -330,19 +358,13 @@ export default function OperacionDiaria() {
             <EnvioListPanel
               onEnvioSelect={handleEnvioSelect}
               selectedEnvioId={selectedEnvio?.id}
+              enviosExternos={todosEnvios}
             />
           )}
         </div>
         )}
       </div>
 
-      <EnvioModal
-        envio={selectedEnvio}
-        isOpen={!!selectedEnvio}
-        onClose={() => setSelectedEnvio(null)}
-        onIrAVuelo={handleIrAVueloDesdeEnvio}
-        vuelos={vuelos}
-      />
     </div>
   )
 }
