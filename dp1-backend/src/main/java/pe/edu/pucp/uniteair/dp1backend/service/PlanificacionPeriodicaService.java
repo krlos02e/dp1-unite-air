@@ -28,7 +28,7 @@ public class PlanificacionPeriodicaService {
     @Value("${planificacion.periodica.enabled:true}")
     private boolean enabled;
 
-    @Value("${planificacion.periodica.horizonte-futuro-horas:2}")
+    @Value("${planificacion.periodica.horizonte-futuro-horas:1}")
     private int horizonteFuturoHoras;
 
     @Value("${planificacion.periodica.horizonte-pasado-horas:48}")

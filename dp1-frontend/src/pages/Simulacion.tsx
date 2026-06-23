@@ -59,11 +59,17 @@ export default function Simulacion() {
   const [mapTz, setMapTz] = useState(0)
   const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('aviones')
   const [panelCollapsed, setPanelCollapsed] = useState(true)
+  const [panelRendered, setPanelRendered] = useState(false)
+  const [panelShown, setPanelShown] = useState(false)
+  const [filteredFlightIds, setFilteredFlightIds] = useState<Set<string> | null>(null)
+  const filteredFlightSignatureRef = useRef('')
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
     setSelectedAeropuerto(null)
     setSelectedEnvio(null)
+    setPanelMode('aviones')
+    setPanelCollapsed(false)
   }, [])
 
   const handleAeropuertoClick = useCallback((a: AeropuertoDTO) => {
@@ -73,10 +79,27 @@ export default function Simulacion() {
   }, [])
 
   const handleEnvioSelect = useCallback((envio: EnvioEstado) => {
-    setSelectedEnvio((prev) => (prev?.id === envio.id ? null : envio))
-    setSelectedVuelo(null)
-    setSelectedAeropuerto(null)
-  }, [])
+    setSelectedEnvio((prev) => {
+      if (prev?.id === envio.id) {
+        setSelectedVuelo(null)
+        setSelectedAeropuerto(null)
+        return null
+      }
+
+      const vueloId = envio.vueloActual || envio.vueloEsperado || envio.ultimoVuelo
+      const vuelo = vueloId ? simulationState?.vuelos.find((v) => v.id === vueloId) : null
+      if (vuelo) {
+        setSelectedVuelo(vuelo)
+        setSelectedAeropuerto(null)
+      } else {
+        const aeropuertosDisponibles = simulationState?.aeropuertos?.length ? simulationState.aeropuertos : aeropuertosEstaticos
+        const aeropuerto = aeropuertosDisponibles.find((a) => a.codigoOACI === envio.aeropuertoActual)
+        setSelectedVuelo(null)
+        setSelectedAeropuerto(aeropuerto || null)
+      }
+      return envio
+    })
+  }, [aeropuertosEstaticos, simulationState?.aeropuertos, simulationState?.vuelos])
 
   const handleIrAVueloDesdeEnvio = useCallback((vueloId: string) => {
     const vuelo = simulationState?.vuelos.find((v) => v.id === vueloId)
@@ -85,6 +108,19 @@ export default function Simulacion() {
       setSelectedEnvio(null)
     }
   }, [simulationState])
+
+  const handleVisibleFlightsChange = useCallback((ids: string[] | null) => {
+    if (!ids) {
+      if (filteredFlightSignatureRef.current === '') return
+      filteredFlightSignatureRef.current = ''
+      setFilteredFlightIds(null)
+      return
+    }
+    const signature = ids.join('|')
+    if (signature === filteredFlightSignatureRef.current) return
+    filteredFlightSignatureRef.current = signature
+    setFilteredFlightIds(new Set(ids))
+  }, [])
 
   const [showResultados, setShowResultados] = useState(false)
   const hasShownResults = useRef(false)
@@ -261,6 +297,17 @@ export default function Simulacion() {
 
   const showActionButton = sessionId && !isColapsada && !isError
 
+  useEffect(() => {
+    if (!panelCollapsed) {
+      setPanelRendered(true)
+      const frameId = window.requestAnimationFrame(() => setPanelShown(true))
+      return () => window.cancelAnimationFrame(frameId)
+    }
+    setPanelShown(false)
+    const timeoutId = window.setTimeout(() => setPanelRendered(false), 180)
+    return () => window.clearTimeout(timeoutId)
+  }, [panelCollapsed])
+
   const aeropuertos = simulationState?.aeropuertos?.length ? simulationState.aeropuertos : aeropuertosEstaticos
   const vuelos = simulationState?.vuelos || EMPTY_FLIGHTS
 
@@ -383,6 +430,7 @@ export default function Simulacion() {
             mapTz={mapTz}
             onMapTzChange={setMapTz}
             simulationMode={true}
+            filteredFlightIds={panelMode === 'aviones' && !panelCollapsed ? filteredFlightIds : null}
           />
 
           {/* Contadores flotantes - inferior izquierda */}
@@ -417,22 +465,38 @@ export default function Simulacion() {
 
           <VueloModal
             vuelo={selectedVuelo}
-            isOpen={!!selectedVuelo}
+            isOpen={!!selectedVuelo && !selectedEnvio}
             onClose={() => setSelectedVuelo(null)}
             tzOffset={mapTz}
           />
           <AeropuertoModal
             aeropuerto={selectedAeropuerto}
-            isOpen={!!selectedAeropuerto}
+            isOpen={!!selectedAeropuerto && !selectedEnvio}
             onClose={() => setSelectedAeropuerto(null)}
             vuelos={simulationState?.vuelos}
             tzOffset={mapTz}
             onVueloSelect={handleVueloClick}
           />
+          <EnvioModal
+            envio={selectedEnvio}
+            isOpen={!!selectedEnvio}
+            onClose={() => {
+              setSelectedEnvio(null)
+              setSelectedVuelo(null)
+              setSelectedAeropuerto(null)
+            }}
+            onIrAVuelo={handleIrAVueloDesdeEnvio}
+            vuelos={simulationState?.vuelos}
+            dentroDelMapa
+          />
         </div>
 
-        {!panelCollapsed && (
-        <div className="flex flex-col gap-2">
+        {panelRendered && (
+        <div
+          className={`flex flex-col gap-2 transition-[transform,opacity] duration-200 ease-out will-change-transform ${
+            panelShown ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0 pointer-events-none'
+          }`}
+        >
           <div className="flex bg-gray-900/95 border border-gray-700/80 rounded-lg overflow-hidden">
             <button
               onClick={() => setPanelMode('envios')}
@@ -490,6 +554,7 @@ export default function Simulacion() {
               onVueloSelect={handleVueloClick}
               selectedVueloId={selectedVuelo?.id}
               includeCompleted
+              onVisibleFlightsChange={handleVisibleFlightsChange}
             />
           ) : (
             <EnvioListPanel
@@ -502,7 +567,6 @@ export default function Simulacion() {
         )}
       </div>
 
-      <EnvioModal envio={selectedEnvio} isOpen={!!selectedEnvio} onClose={() => setSelectedEnvio(null)} onIrAVuelo={handleIrAVueloDesdeEnvio} vuelos={simulationState?.vuelos} />
       <ResultadosModal
         state={resultSnapshot}
         isOpen={showResultados}

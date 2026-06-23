@@ -32,6 +32,8 @@ import java.util.stream.Collectors;
 public class SimulationEngine {
 
 
+    private static final long REALTIME_REPLAN_INTERVAL_MS = 300_000L;
+    private static final int ROLLING_LOOKAHEAD_HOURS = 1;
 
     private final SimulationCache simulationCache;
     private final SimulationSessionRepository sessionRepository;
@@ -112,10 +114,25 @@ public class SimulationEngine {
                     System.out.println("[2/4] Algoritmo: " + algoritmo);
                     System.out.println("[3/4] Algoritmo ejecutando...");
                     long tPlanStart = System.nanoTime();
-                    Solucion sol = orchestrator.ejecutarFlujoCompleto(dataset, config);
+                    List<Paquete> paquetesIniciales = filtrarPaquetesPendientesEnVentana(
+                            dataset,
+                            config,
+                            Collections.emptyMap(),
+                            Collections.emptySet(),
+                            fechaInicio
+                    );
+                    Dataset datasetInicial = new Dataset(
+                            dataset.getAeropuertos(),
+                            dataset.getVuelos(),
+                            paquetesIniciales
+                    );
+                    Solucion sol = paquetesIniciales.isEmpty()
+                            ? new Solucion("VentanaRodante-" + algoritmo)
+                            : orchestrator.ejecutarFlujoCompleto(datasetInicial, config);
                     long tPlanEnd = System.nanoTime();
                     long duracionMs = (tPlanEnd - tPlanStart) / 1_000_000;
                     System.out.printf("[4/4] Planificación completada [%dms]%n", duracionMs);
+                    System.out.printf("[VENTANA] Paquetes iniciales planificados: %d%n", paquetesIniciales.size());
                     solucionRef[0] = sol;
                     planificacionTerminada[0] = true;
                 });
@@ -213,8 +230,8 @@ public class SimulationEngine {
                     throw new IllegalStateException("La planificación no produjo una solución");
                 }
 
-                Map<String, Ruta> rutas = solucion.getRutasAsignadas();
-                Set<String> noAsignados = solucion.getPaquetesNoAsignados();
+                Map<String, Ruta> rutas = new HashMap<>(solucion.getRutasAsignadas());
+                Set<String> noAsignados = calcularNoAsignadosEnVentana(dataset, config, rutas, fechaInicio, Collections.emptySet());
                 boolean hayColapso = !noAsignados.isEmpty();
                 maletasEnTransito = 0;
                 for (Map.Entry<String, Ruta> entry : rutas.entrySet()) {
@@ -278,6 +295,7 @@ public class SimulationEngine {
                 Set<String> rutasEntregadas = new HashSet<>();
                 LocalDateTime simTimeActual = simTimeRef[0];
                 int horaActual = horaRef[0];
+                long ultimaReplanificacionRealMs = System.currentTimeMillis();
 
                 maletasEntregadas = 0;
                 maletasEnTransito = 0;
@@ -322,69 +340,36 @@ public class SimulationEngine {
                         }
                     }
 
-                    // Re-planificación cada 5 horas simuladas
-                    if (hora > 0 && hora % 5 == 0 && !cancellationFlags.getOrDefault(sessionId, false)) {
+                    // Re-planificacion cada 5 minutos reales con ventana rodante de 1 hora.
+                    long ahoraRealMs = System.currentTimeMillis();
+                    if (hora > horaActual
+                            && ahoraRealMs - ultimaReplanificacionRealMs >= REALTIME_REPLAN_INTERVAL_MS
+                            && !cancellationFlags.getOrDefault(sessionId, false)) {
                         try {
-                            // Separar paquetes comprometidos (ya en vuelo) de pendientes
-                            Map<String, Ruta> rutasComprometidas = new HashMap<>();
-                            List<Paquete> pendientes = new ArrayList<>();
-                            for (Map.Entry<String, Ruta> entry : rutas.entrySet()) {
-                                String pid = entry.getKey();
-                                if (rutasEntregadas.contains(pid)) continue;
-                                Ruta r = entry.getValue();
-                                if (r.getVuelos().isEmpty()) {
-                                    pendientes.add(dataset.getPaquetePorId(pid));
-                                    continue;
-                                }
-                                Vuelo primerVuelo = r.getVuelos().get(0);
-                                // Si el primer vuelo ya despegó → comprometido
-                                if (primerVuelo.getSalidaUtc().isBefore(simTime)) {
-                                    rutasComprometidas.put(pid, r);
-                                } else {
-                                    pendientes.add(dataset.getPaquetePorId(pid));
-                                }
+                            rutas = replanificarVentanaRodante(
+                                    orchestrator,
+                                    dataset,
+                                    config,
+                                    rutas,
+                                    rutasEntregadas,
+                                    simTime,
+                                    logs,
+                                    true
+                            );
+
+                            estadoRef = PlanificacionUtils.construirEstadoConAsignaciones(rutas, dataset, config);
+                            cargaVuelo.clear();
+                            for (Vuelo v : dataset.getVuelos()) {
+                                int carga = estadoRef.getCargaVuelo(v.getId());
+                                if (carga > 0) cargaVuelo.put(v.getId(), carga);
                             }
-
-                            if (!pendientes.isEmpty()) {
-                                PlanificacionUtils.limpiarCacheGlobal();
-                                Dataset datasetPendientes = new Dataset(
-                                    dataset.getAeropuertos(),
-                                    dataset.getVuelos(),
-                                    pendientes
-                                );
-                                Solucion solParcial = orchestrator.ejecutarFlujoCompleto(datasetPendientes, config);
-                                Map<String, Ruta> nuevasRutas = solParcial.getRutasAsignadas();
-
-                                // Merge: comprometidas + nuevas
-                                Map<String, Ruta> rutasMerge = new HashMap<>(rutasComprometidas);
-                                rutasMerge.putAll(nuevasRutas);
-                                rutas = rutasMerge;
-
-                                // Reconstruir estado
-                                estadoRef = PlanificacionUtils.construirEstadoConAsignaciones(rutas, dataset, config);
-
-                                // Re-poblar cargaVuelo
-                                cargaVuelo.clear();
-                                for (Vuelo v : dataset.getVuelos()) {
-                                    int carga = estadoRef.getCargaVuelo(v.getId());
-                                    if (carga > 0) cargaVuelo.put(v.getId(), carga);
-                                }
-
-                                logs.add(LogEntry.builder()
-                                        .timestamp(simTime)
-                                        .tipo("REPLAN")
-                                        .mensaje(String.format("Re-planificación hora %d: %d pendientes → %d rutas nuevas",
-                                                hora, pendientes.size(), nuevasRutas.size()))
-                                        .build());
-                                System.out.println("[Simulación] Re-plan h=" + hora
-                                        + " pendientes=" + pendientes.size()
-                                        + " nuevas=" + nuevasRutas.size());
-                            }
+                            ultimaReplanificacionRealMs = ahoraRealMs;
                         } catch (Exception e) {
-                            System.err.println("[Simulación] Error en re-planificación hora " + hora
+                            System.err.println("[Simulacion] Error en re-planificacion real-time hora " + hora
                                     + ": " + e.getMessage());
                         }
                     }
+
 
                     for (Aeropuerto a : dataset.getAeropuertos().values()) {
                         int ocup = estadoRef.getOcupacionHora(a.getCodigoOACI(), simTime);
@@ -462,6 +447,141 @@ public class SimulationEngine {
 
         activeSimulations.put(sessionId, future);
         return future;
+    }
+
+    private Map<String, Ruta> replanificarVentanaRodante(
+            TwoPhaseOrchestrator orchestrator,
+            Dataset dataset,
+            Config_Simulacion config,
+            Map<String, Ruta> rutasActuales,
+            Set<String> rutasEntregadas,
+            LocalDateTime simTime,
+            List<LogEntry> logs,
+            boolean registrarLog
+    ) {
+        LocalDateTime limitePlanificacion = simTime.plusHours(ROLLING_LOOKAHEAD_HOURS);
+        Map<String, Ruta> rutasComprometidas = new HashMap<>();
+        List<Paquete> pendientes = new ArrayList<>();
+
+        for (Paquete paquete : dataset.getPaquetes()) {
+            String paqueteId = paquete.getId();
+            if (rutasEntregadas.contains(paqueteId)) {
+                continue;
+            }
+
+            Ruta rutaActual = rutasActuales.get(paqueteId);
+            if (rutaActual != null && !rutaActual.getVuelos().isEmpty()) {
+                Vuelo primerVuelo = rutaActual.getVuelos().get(0);
+                if (!primerVuelo.getSalidaUtc().isAfter(simTime)) {
+                    rutasComprometidas.put(paqueteId, rutaActual);
+                    continue;
+                }
+            }
+
+            LocalDateTime creacionUtc = PlanificacionUtils.getCreacionUtc(paquete, dataset, config);
+            if (!creacionUtc.isAfter(limitePlanificacion)) {
+                pendientes.add(paquete);
+            }
+        }
+
+        if (pendientes.isEmpty()) {
+            if (registrarLog) {
+                logs.add(LogEntry.builder()
+                        .timestamp(simTime)
+                        .tipo("REPLAN")
+                        .mensaje(String.format(
+                                "Planificacion ventana +%dh: sin paquetes pendientes; %d rutas comprometidas",
+                                ROLLING_LOOKAHEAD_HOURS,
+                                rutasComprometidas.size()
+                        ))
+                        .build());
+            }
+            return rutasComprometidas;
+        }
+
+        PlanificacionUtils.limpiarCacheGlobal();
+        Dataset datasetPendientes = new Dataset(
+                dataset.getAeropuertos(),
+                dataset.getVuelos(),
+                pendientes
+        );
+        Solucion solParcial = orchestrator.ejecutarFlujoCompleto(datasetPendientes, config);
+        Map<String, Ruta> rutasMerge = new HashMap<>(rutasComprometidas);
+        rutasMerge.putAll(solParcial.getRutasAsignadas());
+
+        if (registrarLog) {
+            logs.add(LogEntry.builder()
+                    .timestamp(simTime)
+                    .tipo("REPLAN")
+                    .mensaje(String.format(
+                            "Planificacion ventana +%dh: %d pendientes -> %d rutas nuevas; %d rutas comprometidas",
+                            ROLLING_LOOKAHEAD_HOURS,
+                            pendientes.size(),
+                            solParcial.getRutasAsignadas().size(),
+                            rutasComprometidas.size()
+                    ))
+                    .build());
+        }
+        System.out.println("[Simulacion] Re-plan real-time t=" + simTime
+                + " pendientes=" + pendientes.size()
+                + " nuevas=" + solParcial.getRutasAsignadas().size()
+                + " comprometidas=" + rutasComprometidas.size());
+
+        return rutasMerge;
+    }
+
+    private List<Paquete> filtrarPaquetesPendientesEnVentana(
+            Dataset dataset,
+            Config_Simulacion config,
+            Map<String, Ruta> rutasActuales,
+            Set<String> rutasEntregadas,
+            LocalDateTime simTime
+    ) {
+        LocalDateTime limitePlanificacion = simTime.plusHours(ROLLING_LOOKAHEAD_HOURS);
+        List<Paquete> pendientes = new ArrayList<>();
+
+        for (Paquete paquete : dataset.getPaquetes()) {
+            String paqueteId = paquete.getId();
+            if (rutasEntregadas.contains(paqueteId)) {
+                continue;
+            }
+
+            Ruta rutaActual = rutasActuales.get(paqueteId);
+            if (rutaActual != null && !rutaActual.getVuelos().isEmpty()) {
+                Vuelo primerVuelo = rutaActual.getVuelos().get(0);
+                if (!primerVuelo.getSalidaUtc().isAfter(simTime)) {
+                    continue;
+                }
+            }
+
+            LocalDateTime creacionUtc = PlanificacionUtils.getCreacionUtc(paquete, dataset, config);
+            if (!creacionUtc.isAfter(limitePlanificacion)) {
+                pendientes.add(paquete);
+            }
+        }
+
+        return pendientes;
+    }
+
+    private Set<String> calcularNoAsignadosEnVentana(
+            Dataset dataset,
+            Config_Simulacion config,
+            Map<String, Ruta> rutas,
+            LocalDateTime simTime,
+            Set<String> rutasEntregadas
+    ) {
+        LocalDateTime limitePlanificacion = simTime.plusHours(ROLLING_LOOKAHEAD_HOURS);
+        Set<String> noAsignados = new HashSet<>();
+        for (Paquete paquete : dataset.getPaquetes()) {
+            if (rutasEntregadas.contains(paquete.getId())) {
+                continue;
+            }
+            LocalDateTime creacionUtc = PlanificacionUtils.getCreacionUtc(paquete, dataset, config);
+            if (!creacionUtc.isAfter(limitePlanificacion) && !rutas.containsKey(paquete.getId())) {
+                noAsignados.add(paquete.getId());
+            }
+        }
+        return noAsignados;
     }
 
     public void detenerSimulacion(String sessionId) {
@@ -669,10 +789,12 @@ public class SimulationEngine {
                 String aeropuertoActual = paquete.getOrigenOACI();
                 String vueloActual = null;
                 String vueloEsperado = null;
+                String ultimoVuelo = null;
                 if (ruta == null || ruta.getVuelos().isEmpty()) {
                     estado = "EN_ESPERA";
                 } else {
                     List<Vuelo> vuelosRuta = ruta.getVuelos();
+                    ultimoVuelo = vuelosRuta.get(vuelosRuta.size() - 1).getId();
                     Vuelo vueloEnCurso = null;
                     Vuelo proximoVuelo = null;
                     for (Vuelo v : vuelosRuta) {
@@ -707,6 +829,7 @@ public class SimulationEngine {
                         .aeropuertoActual(aeropuertoActual)
                         .vueloActual(vueloActual)
                         .vueloEsperado(vueloEsperado)
+                        .ultimoVuelo(ultimoVuelo)
                         .cantidad(paquete.getCantidad())
                         .build());
             }

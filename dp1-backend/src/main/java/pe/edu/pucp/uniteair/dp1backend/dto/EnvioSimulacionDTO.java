@@ -17,5 +17,6 @@ public class EnvioSimulacionDTO {
     private String aeropuertoActual;
     private String vueloActual;
     private String vueloEsperado;
+    private String ultimoVuelo;
     private int cantidad;
 }

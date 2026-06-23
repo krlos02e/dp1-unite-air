@@ -7,6 +7,7 @@ interface Props {
   onClose: () => void
   onIrAVuelo?: (vueloId: string) => void
   vuelos?: VueloDTO[]
+  dentroDelMapa?: boolean
 }
 
 const estadoLabels: Record<string, { label: string; color: string }> = {
@@ -16,32 +17,33 @@ const estadoLabels: Record<string, { label: string; color: string }> = {
   ENTREGADO: { label: 'Entregado', color: 'text-gray-400' },
 }
 
-export default function EnvioModal({ envio, isOpen, onClose, onIrAVuelo }: Props) {
+export default function EnvioModal({ envio, isOpen, onClose, onIrAVuelo, dentroDelMapa = false }: Props) {
   if (!isOpen || !envio) return null
 
   const estadoInfo = estadoLabels[envio.estado] || { label: envio.estado, color: 'text-gray-400' }
   const origenInfo = getAirportCityCountry(envio.origen)
   const destinoInfo = getAirportCityCountry(envio.destino)
   const aeropuertoInfo = getAirportCityCountry(envio.aeropuertoActual)
+  const ultimoVuelo = envio.ultimoVuelo || envio.vueloActual || envio.vueloEsperado
 
   return (
-    <div className="fixed bottom-6 right-6 z-[1000] w-80 sm:w-96">
-      <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-xl p-4 shadow-2xl">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-bold text-amber-400 truncate">Detalles de envio</h2>
+    <div className={`${dentroDelMapa ? 'absolute bottom-4 right-4' : 'fixed bottom-6 right-6'} z-[1001] w-80 max-w-[calc(100%-2rem)] sm:w-[22rem]`}>
+      <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-xl p-3 shadow-2xl">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-bold text-amber-400 truncate">Detalles de envío</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors text-xl leading-none"
+            className="text-gray-400 hover:text-white transition-colors text-lg leading-none"
             aria-label="Cerrar"
           >
             &times;
           </button>
         </div>
 
-        <div className="space-y-2 text-sm">
+        <div className="space-y-1.5 text-xs">
           <div className="flex justify-between">
             <span className="text-gray-400">ID</span>
-            <span className="font-medium text-gray-200 text-xs">{envio.id}</span>
+            <span className="font-medium text-gray-200 text-[10px] truncate max-w-[13rem]" title={envio.id}>{envio.id}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-400">Estado</span>
@@ -87,6 +89,21 @@ export default function EnvioModal({ envio, isOpen, onClose, onIrAVuelo }: Props
                   className="text-sky-400 hover:text-sky-300 text-xs font-medium"
                 >
                   {envio.vueloEsperado} →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {envio.estado === 'ENTREGADO' && ultimoVuelo && (
+            <div className="pt-1 border-t border-gray-700">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Último vuelo</span>
+                <button
+                  onClick={() => onIrAVuelo?.(ultimoVuelo)}
+                  className="text-sky-400 hover:text-sky-300 text-xs font-medium truncate max-w-[13rem]"
+                  title={ultimoVuelo}
+                >
+                  {ultimoVuelo} →
                 </button>
               </div>
             </div>
