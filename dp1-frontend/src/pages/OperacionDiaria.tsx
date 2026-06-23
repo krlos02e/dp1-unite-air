@@ -7,6 +7,9 @@ import EnvioModal from '../components/EnvioModal'
 import EnvioListPanel from '../components/EnvioListPanel'
 import AlmacenListPanel from '../components/AlmacenListPanel'
 import VueloListPanel from '../components/VueloListPanel'
+import WarehouseListModal from '../components/WarehouseListModal'
+import WarehouseShipmentsModal from '../components/WarehouseShipmentsModal'
+import WarehouseProductsModal from '../components/WarehouseProductsModal'
 import { AIRPORTS_DATA } from '../data/airportsData'
 import type { VueloDTO, AeropuertoDTO, EnvioEstado } from '../types'
 
@@ -86,6 +89,10 @@ export default function OperacionDiaria() {
   const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('aviones')
   const [panelCollapsed, setPanelCollapsed] = useState(true)
   const [todosEnvios, setTodosEnvios] = useState<EnvioEstado[]>([])
+  const [showWarehouseListModal, setShowWarehouseListModal] = useState(false)
+  const [showWarehouseShipmentsModal, setShowWarehouseShipmentsModal] = useState(false)
+  const [showWarehouseProductsModal, setShowWarehouseProductsModal] = useState(false)
+  const [selectedWarehouseCode, setSelectedWarehouseCode] = useState<string | null>(null)
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
@@ -112,6 +119,18 @@ export default function OperacionDiaria() {
       setSelectedEnvio(null)
     }
   }, [vuelos])
+
+  const handleVerEnviosAlmacen = useCallback((codigoOACI: string) => {
+    setSelectedWarehouseCode(codigoOACI)
+    setShowWarehouseListModal(false)
+    setShowWarehouseShipmentsModal(true)
+  }, [])
+
+  const handleVerProductosAlmacen = useCallback((codigoOACI: string) => {
+    setSelectedWarehouseCode(codigoOACI)
+    setShowWarehouseListModal(false)
+    setShowWarehouseProductsModal(true)
+  }, [])
 
   // Cargar aeropuertos y vuelos del dataset
   useEffect(() => {
@@ -243,12 +262,21 @@ export default function OperacionDiaria() {
             onMapTzChange={setMapTz}
           />
           {panelCollapsed && (
-            <button
-              onClick={() => setPanelCollapsed(false)}
-              className="absolute top-4 right-4 z-[1000] bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white hover:bg-gray-700 transition-colors cursor-pointer"
-            >
-              ▶ Panel
-            </button>
+            <div className="absolute top-4 right-4 z-[1000] flex gap-2">
+              <button
+                onClick={() => setShowWarehouseListModal(true)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white hover:bg-gray-700 transition-colors cursor-pointer"
+                title="Lista de Almacenes"
+              >
+                📦 Almacenes
+              </button>
+              <button
+                onClick={() => setPanelCollapsed(false)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white hover:bg-gray-700 transition-colors cursor-pointer"
+              >
+                ▶ Panel
+              </button>
+            </div>
           )}
 
           <VueloModal
@@ -342,6 +370,30 @@ export default function OperacionDiaria() {
         onClose={() => setSelectedEnvio(null)}
         onIrAVuelo={handleIrAVueloDesdeEnvio}
         vuelos={vuelos}
+      />
+
+      <WarehouseListModal
+        isOpen={showWarehouseListModal}
+        onClose={() => setShowWarehouseListModal(false)}
+        almacenes={aeropuertosEstaticos}
+        envios={todosEnvios}
+        onVerEnvios={handleVerEnviosAlmacen}
+        onVerProductos={handleVerProductosAlmacen}
+      />
+
+      <WarehouseShipmentsModal
+        isOpen={showWarehouseShipmentsModal}
+        onClose={() => setShowWarehouseShipmentsModal(false)}
+        codigoAlmacen={selectedWarehouseCode}
+        envios={todosEnvios}
+        onEnvioSelect={handleEnvioSelect}
+      />
+
+      <WarehouseProductsModal
+        isOpen={showWarehouseProductsModal}
+        onClose={() => setShowWarehouseProductsModal(false)}
+        codigoAlmacen={selectedWarehouseCode}
+        onEnvioSelect={handleEnvioSelect}
       />
     </div>
   )

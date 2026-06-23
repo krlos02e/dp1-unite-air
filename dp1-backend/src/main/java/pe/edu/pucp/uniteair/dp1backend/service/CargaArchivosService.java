@@ -803,6 +803,36 @@ public class CargaArchivosService {
         return resultados;
     }
 
+    public synchronized List<Map<String, Object>> listarEnviosPorAlmacen(String codigoAlmacen) {
+        List<Map<String, Object>> resultados = new ArrayList<>();
+        if (lastDataset == null || codigoAlmacen == null || codigoAlmacen.isEmpty()) return resultados;
+
+        LocalDateTime ahoraUtc = LocalDateTime.now(ZoneOffset.UTC);
+        Set<String> estadosSet = Set.of("EN_ESPERA", "EMBARCADO", "EN_VUELO", "ENTREGADO");
+        List<Paquete> todos = new ArrayList<>(paquetesIncrementales);
+
+        for (Paquete p : todos) {
+            Ruta ruta = rutasAsignadas.get(p.getId());
+            EstadoEnvio e = computarEstado(p, ruta, ahoraUtc);
+
+            if (!estadosSet.contains(e.estado())) continue;
+            if (!codigoAlmacen.equals(e.aeropuertoActual())) continue;
+
+            Map<String, Object> envio = new HashMap<>();
+            envio.put("id", p.getId());
+            envio.put("origen", p.getOrigenOACI());
+            envio.put("destino", p.getDestinoOACI());
+            envio.put("estado", e.estado());
+            envio.put("aeropuertoActual", e.aeropuertoActual());
+            envio.put("vueloEsperado", e.vueloEsperado());
+            envio.put("vueloActual", e.vueloActual());
+            envio.put("cantidad", p.getCantidad());
+            resultados.add(envio);
+        }
+
+        return resultados;
+    }
+
     public synchronized List<Map<String, Object>> listarEnvios(
             String estados,
             String origen,

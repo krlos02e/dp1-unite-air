@@ -116,6 +116,15 @@ public class EnviosController {
         return ResponseEntity.ok(resultado);
     }
 
+    @GetMapping("/almacen/{codigoOACI}")
+    public ResponseEntity<Map<String, Object>> obtenerEnviosPorAlmacen(@PathVariable String codigoOACI) {
+        List<Map<String, Object>> resultados = cargaArchivosService.listarEnviosPorAlmacen(codigoOACI);
+        return ResponseEntity.ok(Map.of(
+                "total", resultados.size(),
+                "envios", resultados
+        ));
+    }
+
     public record EnviosRequest(List<EnvioItem> envios) {}
     public record EnvioItem(String origen, String destino, String fecha, String hora, int cantidad, String remitente) {}
 }

@@ -60,6 +60,10 @@ class CargaArchivosService extends HttpClient {
     return this.get<EnvioBusquedaResponse>(`/envios/lista${qs ? '?' + qs : ''}`)
   }
 
+  obtenerPaquetesAlmacen(codigoOACI: string): Promise<EnvioBusquedaResponse> {
+    return this.get<EnvioBusquedaResponse>(`/envios/almacen/${codigoOACI}`)
+  }
+
   // ---- Almacenes CRUD ----
   obtenerAlmacenes(): Promise<AlmacenDTO[]> {
     return this.get<AlmacenDTO[]>('/almacenes')
