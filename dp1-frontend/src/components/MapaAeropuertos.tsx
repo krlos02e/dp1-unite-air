@@ -23,6 +23,7 @@ interface Props {
   mapTz: number
   onMapTzChange: (tz: number) => void
   simulationMode?: boolean
+  filteredFlightIds?: Set<string> | null
 }
 
 const INITIAL_CENTER: [number, number] = [22, 0]
@@ -172,7 +173,7 @@ function animatedProgress(anim: FlightAnim, now: number): number {
   return anim.startProgress + (anim.targetProgress - anim.startProgress) * fraction
 }
 
-function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropuertoId, velocidad = 1, onAeropuertoClick, onVueloClick, mapTz, onMapTzChange, simulationMode = false }: Props) {
+function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropuertoId, velocidad = 1, onAeropuertoClick, onVueloClick, mapTz, onMapTzChange, simulationMode = false, filteredFlightIds = null }: Props) {
   const mapRef = useRef<L.Map | null>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const circleLayerRef = useRef<L.LayerGroup | null>(null)
@@ -269,7 +270,8 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       const isActive = simulationMode
         ? v.estado === 'ACTIVO'
         : progresoLocal > 0 && progresoLocal < 100
-      const isVisible = shouldDisplayFlight(v.id) || v.id === selectedVueloId
+      const passesPanelFilter = !filteredFlightIds || filteredFlightIds.has(v.id) || v.id === selectedVueloId
+      const isVisible = passesPanelFilter && (shouldDisplayFlight(v.id) || v.id === selectedVueloId)
       if (!isActive || !isVisible) {
         persistentFlightsRef.current.delete(v.id)
         const mk = flightMarkersRef.current.get(v.id)
@@ -284,7 +286,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
         persistentFlightsRef.current.set(v.id, v)
       }
     })
-  }, [vuelos, selectedVueloId, simulationMode])
+  }, [vuelos, selectedVueloId, simulationMode, filteredFlightIds])
 
   useEffect(() => {
     if (mapContainerRef.current && !mapRef.current) {
@@ -651,7 +653,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
         routeLinesRef.current.set(v.id, pair)
       }
     })
-  }, [vuelos, selectedVueloId, simulationMode])
+  }, [vuelos, selectedVueloId, simulationMode, filteredFlightIds])
 
   useEffect(() => {
     routeLinesRef.current.forEach((pair) => {

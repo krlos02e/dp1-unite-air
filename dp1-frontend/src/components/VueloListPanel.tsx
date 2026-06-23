@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { getAirportCity, getAirportCountry } from '../data/airportsData'
 import type { VueloDTO, EnvioEstado } from '../types'
 import { shouldDisplayFlight } from '../utils/flightVisibility'
@@ -12,6 +12,7 @@ interface Props {
   selectedVueloId?: string | null
   includeCompleted?: boolean
   showStatusFilters?: boolean
+  onVisibleFlightsChange?: (flightIds: string[]) => void
 }
 
 function formatTime(iso: string): string {
@@ -40,6 +41,7 @@ const DEFAULT_LIMIT = 50
 type SearchScope = 'todos' | 'codigo' | 'tramo' | 'origen' | 'destino'
 type SortField = 'ocupacion' | 'salida' | 'llegada' | 'origen' | 'destino'
 type SortDirection = 'asc' | 'desc'
+type OccupationFilter = 'todos' | 'vacio' | 'normal' | 'alerta' | 'critico'
 
 function normalizeSearch(value: string): string {
   return value
@@ -95,19 +97,28 @@ function occupationStatus(cargaActual: number, ocupPct: number) {
   return { label: 'Normal', bar: 'bg-emerald-500', text: 'text-emerald-400', track: 'bg-gray-800' }
 }
 
-export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId, onVueloSelect, selectedVueloId, includeCompleted = false, showStatusFilters = true }: Props) {
+function occupationCategory(cargaActual: number, ocupPct: number): OccupationFilter {
+  if (cargaActual <= 0) return 'vacio'
+  if (ocupPct > 90) return 'critico'
+  if (ocupPct > 70) return 'alerta'
+  return 'normal'
+}
+
+export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId, onVueloSelect, selectedVueloId, includeCompleted = false, showStatusFilters = true, onVisibleFlightsChange }: Props) {
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [filterEstado, setFilterEstado] = useState<string>('ACTIVO')
   const [searchScope, setSearchScope] = useState<SearchScope>('todos')
   const [originFilter, setOriginFilter] = useState('')
   const [destinationFilter, setDestinationFilter] = useState('')
+  const [occupationFilter, setOccupationFilter] = useState<OccupationFilter>('todos')
   const [sortField, setSortField] = useState<SortField>('ocupacion')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  const rowRefs = useRef(new Map<string, HTMLDivElement>())
 
   const deferredSearch = useDeferredValue(search)
   const term = normalizeSearch(deferredSearch)
-  const hasListFilters = Boolean(originFilter || destinationFilter)
+  const hasListFilters = Boolean(originFilter || destinationFilter || occupationFilter !== 'todos')
 
   const enviosByFlight = useMemo(() => {
     const index = new Map<string, EnvioEstado[]>()
@@ -150,6 +161,10 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
       destino,
       tramo: `${origen} ${destino} ${normalizeSearch(`${flight.origen}-${flight.destino}`)}`,
       ocupacion: flight.capacidad > 0 ? flight.cargaActual / flight.capacidad : 0,
+      ocupacionCategoria: occupationCategory(
+        flight.cargaActual,
+        flight.capacidad > 0 ? Math.round((flight.cargaActual / flight.capacidad) * 100) : 0,
+      ),
       salida: timeOfDay(flight.salidaUtc),
       llegada: timeOfDay(flight.llegadaUtc),
       origenOrden: normalizeSearch(getAirportCountry(flight.origen) || getAirportCity(flight.origen) || flight.origen),
@@ -167,6 +182,7 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
       if (v.estado !== filterEstado) return false
       if (originFilter && v.origen !== originFilter) return false
       if (destinationFilter && v.destino !== destinationFilter) return false
+      if (occupationFilter !== 'todos' && occupationCategory(v.cargaActual, v.capacidad > 0 ? Math.round((v.cargaActual / v.capacidad) * 100) : 0) !== occupationFilter) return false
       if (!term) return true
 
       if (searchScope === 'codigo') return searchCodeMatcher(codigo)
@@ -185,9 +201,42 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
       if (comparison === 0) comparison = a.codigo.localeCompare(b.codigo)
       return sortDirection === 'asc' ? comparison : -comparison
     }).map(({ flight }) => flight)
-  }, [indexedFlights, term, filterEstado, searchScope, searchCodeMatcher, originFilter, destinationFilter, sortField, sortDirection])
+  }, [indexedFlights, term, filterEstado, searchScope, searchCodeMatcher, originFilter, destinationFilter, occupationFilter, sortField, sortDirection])
 
-  const resultKey = `${term}|${originFilter}|${destinationFilter}|${filterEstado}|${searchScope}|${sortField}|${sortDirection}`
+  const estadosDisponibles = useMemo(() => {
+    const states = ['ACTIVO']
+    if (includeCompleted) states.push('CULMINADO', 'CANCELADO')
+    return states
+  }, [includeCompleted])
+
+  useEffect(() => {
+    onVisibleFlightsChange?.(filtradosSinLimite.map((flight) => flight.id))
+  }, [filtradosSinLimite, onVisibleFlightsChange])
+
+  useEffect(() => {
+    if (!selectedVueloId) return
+    const selected = vuelos.find((flight) => flight.id === selectedVueloId)
+    if (!selected) return
+
+    const estadosValidos = new Set(estadosDisponibles)
+    if (selected.estado && estadosValidos.has(selected.estado) && selected.estado !== filterEstado) {
+      setFilterEstado(selected.estado)
+    }
+
+    const visible = filtradosSinLimite.some((flight) => flight.id === selectedVueloId)
+    if (!visible) {
+      setSearch('')
+      setOriginFilter('')
+      setDestinationFilter('')
+      setOccupationFilter('todos')
+    }
+
+    window.setTimeout(() => {
+      rowRefs.current.get(selectedVueloId)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }, 0)
+  }, [selectedVueloId, vuelos, estadosDisponibles, filterEstado, filtradosSinLimite])
+
+  const resultKey = `${term}|${originFilter}|${destinationFilter}|${occupationFilter}|${filterEstado}|${searchScope}|${sortField}|${sortDirection}`
   const [page, setPage] = useState({ key: '', limit: DEFAULT_LIMIT })
   const visibleLimit = page.key === resultKey ? page.limit : DEFAULT_LIMIT
   const filtrados = filtradosSinLimite.slice(0, visibleLimit)
@@ -199,12 +248,6 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
   const destinations = useMemo(() => (
     Array.from(new Set(visibleFlights.map((v) => v.destino))).sort()
   ), [visibleFlights])
-
-  const estadosDisponibles = useMemo(() => {
-    const states = ['ACTIVO']
-    if (includeCompleted) states.push('CULMINADO', 'CANCELADO')
-    return states
-  }, [includeCompleted])
 
   const estadoVueloLabel: Record<string, string> = {
     ACTIVO: 'Activos',
@@ -260,6 +303,7 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
                 onClick={() => {
                   setOriginFilter('')
                   setDestinationFilter('')
+                  setOccupationFilter('todos')
                 }}
                 className="text-[9px] text-sky-400 hover:text-sky-300 cursor-pointer"
               >
@@ -287,6 +331,18 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
               {destinations.map((code) => <option key={code} value={code}>{locationLabel(code)}</option>)}
             </select>
           </div>
+          <select
+            value={occupationFilter}
+            onChange={(e) => setOccupationFilter(e.target.value as OccupationFilter)}
+            aria-label="Filtrar unidades de transporte por semáforo de ocupación"
+            className="mt-1.5 w-full bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
+          >
+            <option value="todos">Todos los semáforos</option>
+            <option value="vacio">Vacío</option>
+            <option value="normal">Normal</option>
+            <option value="alerta">Alerta</option>
+            <option value="critico">Crítico</option>
+          </select>
         </div>
       </div>
 
@@ -354,7 +410,14 @@ export default function VueloListPanel({ vuelos, envios, onEnvioSelect, selected
           const destinoPais = getAirportCountry(v.destino) || getAirportCity(v.destino) || v.destino
 
           return (
-            <div key={v.id} className="border-b border-gray-800/50">
+            <div
+              key={v.id}
+              ref={(node) => {
+                if (node) rowRefs.current.set(v.id, node)
+                else rowRefs.current.delete(v.id)
+              }}
+              className="border-b border-gray-800/50"
+            >
               {/* Main row */}
               <div
                 onClick={() => {

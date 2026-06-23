@@ -86,11 +86,14 @@ export default function OperacionDiaria() {
   const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('aviones')
   const [panelCollapsed, setPanelCollapsed] = useState(true)
   const [todosEnvios, setTodosEnvios] = useState<EnvioEstado[]>([])
+  const [filteredFlightIds, setFilteredFlightIds] = useState<Set<string> | null>(null)
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
     setSelectedAeropuerto(null)
     setSelectedEnvio(null)
+    setPanelMode('aviones')
+    setPanelCollapsed(false)
   }, [])
 
   const handleAeropuertoClick = useCallback((a: AeropuertoDTO) => {
@@ -128,6 +131,10 @@ export default function OperacionDiaria() {
       setSelectedEnvio(null)
     }
   }, [vuelos])
+
+  const handleVisibleFlightsChange = useCallback((ids: string[]) => {
+    setFilteredFlightIds(new Set(ids))
+  }, [])
 
   // Cargar aeropuertos y vuelos del dataset
   useEffect(() => {
@@ -257,6 +264,7 @@ export default function OperacionDiaria() {
             onVueloClick={handleVueloClick}
             mapTz={mapTz}
             onMapTzChange={setMapTz}
+            filteredFlightIds={panelMode === 'aviones' && !panelCollapsed ? filteredFlightIds : null}
           />
           {panelCollapsed && (
             <button
@@ -353,6 +361,7 @@ export default function OperacionDiaria() {
               onVueloSelect={handleVueloClick}
               selectedVueloId={selectedVuelo?.id}
               showStatusFilters={false}
+              onVisibleFlightsChange={handleVisibleFlightsChange}
             />
           ) : (
             <EnvioListPanel

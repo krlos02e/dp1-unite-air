@@ -59,11 +59,14 @@ export default function Simulacion() {
   const [mapTz, setMapTz] = useState(0)
   const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('aviones')
   const [panelCollapsed, setPanelCollapsed] = useState(true)
+  const [filteredFlightIds, setFilteredFlightIds] = useState<Set<string> | null>(null)
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
     setSelectedAeropuerto(null)
     setSelectedEnvio(null)
+    setPanelMode('aviones')
+    setPanelCollapsed(false)
   }, [])
 
   const handleAeropuertoClick = useCallback((a: AeropuertoDTO) => {
@@ -102,6 +105,10 @@ export default function Simulacion() {
       setSelectedEnvio(null)
     }
   }, [simulationState])
+
+  const handleVisibleFlightsChange = useCallback((ids: string[]) => {
+    setFilteredFlightIds(new Set(ids))
+  }, [])
 
   const [showResultados, setShowResultados] = useState(false)
   const hasShownResults = useRef(false)
@@ -400,6 +407,7 @@ export default function Simulacion() {
             mapTz={mapTz}
             onMapTzChange={setMapTz}
             simulationMode={true}
+            filteredFlightIds={panelMode === 'aviones' && !panelCollapsed ? filteredFlightIds : null}
           />
 
           {/* Contadores flotantes - inferior izquierda */}
@@ -519,6 +527,7 @@ export default function Simulacion() {
               onVueloSelect={handleVueloClick}
               selectedVueloId={selectedVuelo?.id}
               includeCompleted
+              onVisibleFlightsChange={handleVisibleFlightsChange}
             />
           ) : (
             <EnvioListPanel
