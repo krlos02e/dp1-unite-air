@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, memo } from 'react'
+import {useEffect, useRef, useState, memo, useMemo} from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { AeropuertoDTO, VueloDTO } from '../types'
@@ -27,7 +27,6 @@ interface Props {
 }
 
 const INITIAL_CENTER: [number, number] = [17, 0]
-const INITIAL_ZOOM = 3.00
 const WORLD_BOUNDS = L.latLngBounds(L.latLng(-60, -160), L.latLng(82, 160))
 
 function aeropuertoColor(ocu: number, max: number): string {
