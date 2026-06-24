@@ -235,7 +235,7 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
       </div>
 
       <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} tzOffset={mapTz} />
-      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={simulationState?.vuelos} tzOffset={mapTz} />
+      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={simulationState?.vuelos} envios={simulationState?.envios || []} tzOffset={mapTz} />
       <EnvioModal envio={selectedEnvio} isOpen={!!selectedEnvio} onClose={() => setSelectedEnvio(null)} onIrAVuelo={handleIrAVueloDesdeEnvio} vuelos={simulationState?.vuelos} />
       <ResultadosModal
         state={simulationState}

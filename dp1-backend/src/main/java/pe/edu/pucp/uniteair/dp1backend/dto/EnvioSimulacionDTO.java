@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -18,5 +20,6 @@ public class EnvioSimulacionDTO {
     private String vueloActual;
     private String vueloEsperado;
     private String ultimoVuelo;
+    private List<String> rutaAeropuertos;
     private int cantidad;
 }

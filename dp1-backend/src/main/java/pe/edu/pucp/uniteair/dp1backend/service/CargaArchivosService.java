@@ -320,6 +320,21 @@ public class CargaArchivosService {
         return new EstadoEnvio("EN_ESPERA", paquete.getOrigenOACI(), null, null, null);
     }
 
+    private List<String> construirRutaAeropuertos(Paquete paquete, Ruta ruta) {
+        LinkedHashSet<String> aeropuertos = new LinkedHashSet<>();
+        aeropuertos.add(paquete.getOrigenOACI());
+
+        if (ruta != null) {
+            for (Vuelo vuelo : ruta.getVuelos()) {
+                aeropuertos.add(vuelo.getOrigen().getCodigoOACI());
+                aeropuertos.add(vuelo.getDestino().getCodigoOACI());
+            }
+        }
+
+        aeropuertos.add(paquete.getDestinoOACI());
+        return new ArrayList<>(aeropuertos);
+    }
+
     @Scheduled(fixedRate = 300000)
     public synchronized void rePlanificarProgramado() {
         if (lastDataset == null || planificando) return;
@@ -777,6 +792,7 @@ public class CargaArchivosService {
         result.put("aeropuertoActual", e.aeropuertoActual());
         result.put("vueloEsperado", e.vueloEsperado());
         result.put("vueloActual", e.vueloActual());
+        result.put("rutaAeropuertos", construirRutaAeropuertos(paquete, ruta));
         result.put("cantidad", paquete.getCantidad());
         return result;
     }
@@ -839,6 +855,7 @@ public class CargaArchivosService {
             envio.put("aeropuertoActual", e.aeropuertoActual());
             envio.put("vueloEsperado", e.vueloEsperado());
             envio.put("vueloActual", e.vueloActual());
+            envio.put("rutaAeropuertos", construirRutaAeropuertos(p, ruta));
             envio.put("cantidad", p.getCantidad());
             resultados.add(envio);
         }

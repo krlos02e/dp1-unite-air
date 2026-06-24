@@ -474,6 +474,7 @@ export default function Simulacion() {
             isOpen={!!selectedAeropuerto && !selectedEnvio}
             onClose={() => setSelectedAeropuerto(null)}
             vuelos={simulationState?.vuelos}
+            envios={simulationState?.envios || []}
             tzOffset={mapTz}
             onVueloSelect={handleVueloClick}
           />

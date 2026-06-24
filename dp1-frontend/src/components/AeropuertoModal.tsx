@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import type { AeropuertoDTO, VueloDTO } from '../types'
+import type { AeropuertoDTO, EnvioEstado, VueloDTO } from '../types'
 import { AIRPORTS_DATA, getAirportCityCountry } from '../data/airportsData'
 import { formatTimeInTimezone, formatDateInTimezone } from '../utils/timezoneFormat'
 
@@ -8,13 +8,17 @@ interface Props {
   isOpen: boolean
   onClose: () => void
   vuelos?: VueloDTO[]
+  envios?: EnvioEstado[]
   tzOffset: number
   onVueloSelect?: (vuelo: VueloDTO) => void
+  onEnvioSelect?: (envio: EnvioEstado) => void
 }
 
-export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = [], tzOffset, onVueloSelect }: Props) {
+export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = [], envios = [], tzOffset, onVueloSelect }: Props) {
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedSection, setExpandedSection] = useState<'entrantes' | 'salientes' | 'cancelados' | null>(null)
+  const [expandedIncomingFlightId, setExpandedIncomingFlightId] = useState<string | null>(null)
+  const [expandedEnvioId, setExpandedEnvioId] = useState<string | null>(null)
   const [filtroEntrantes, setFiltroEntrantes] = useState<'id' | 'ciudad'>('ciudad')
   const [filtroSalientes, setFiltroSalientes] = useState<'id' | 'ciudad'>('ciudad')
   const [filtroCancelados, setFiltroCancelados] = useState<'id' | 'ciudad'>('ciudad')
@@ -27,6 +31,19 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
     vuelos.forEach(v => map.set(v.id, v))
     return map
   }, [vuelos])
+
+  const enviosByFlight = useMemo(() => {
+    const map = new Map<string, EnvioEstado[]>()
+    envios.forEach((envio) => {
+      const flightIds = [envio.vueloActual, envio.vueloEsperado, envio.ultimoVuelo].filter(Boolean) as string[]
+      flightIds.forEach((flightId) => {
+        const list = map.get(flightId) || []
+        list.push(envio)
+        map.set(flightId, list)
+      })
+    })
+    return map
+  }, [envios])
 
   const filteredEntrantes = useMemo(() => {
     if (!aeropuerto) return []
@@ -151,7 +168,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
           />
         </div>
 
-        <div className="space-y-1 max-h-48 overflow-y-auto">
+        <div className="space-y-1 max-h-[28rem] overflow-y-auto">
           <div className="border border-gray-700 rounded-lg">
             <button
               onClick={() => toggleSection('entrantes')}
@@ -191,25 +208,75 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
                 ) : (
                   filteredEntrantes.map(id => {
                     const vuelo = vuelosMap.get(id)
+                    const enviosEntrantes = enviosByFlight.get(id) || []
+                    const isFlightExpanded = expandedIncomingFlightId === id
                     return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => vuelo && onVueloSelect?.(vuelo)}
-                        disabled={!vuelo}
-                        className="w-full text-left text-xs text-gray-400 border-t border-gray-800 px-1 py-1 rounded hover:bg-amber-900/20 hover:border-amber-700/50 transition-colors disabled:cursor-default"
-                        title="Seleccionar vuelo en el mapa"
-                      >
-                        <div className="flex justify-between">
-                          <span className="font-medium text-gray-300">{id}</span>
-                          <span className="text-sky-400">Desde: {vuelo ? getAirportCityCountry(vuelo.origen) : '?'}</span>
-                        </div>
-                        {vuelo && (
-                          <div className="text-gray-500">
-                            Llegada: {formatDateInTimezone(vuelo.llegadaUtc, tzOffset)} {formatTimeInTimezone(vuelo.llegadaUtc, tzOffset)}
+                      <div key={id} className="border-t border-gray-800">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExpandedIncomingFlightId(isFlightExpanded ? null : id)
+                            setExpandedEnvioId(null)
+                          }}
+                          disabled={!vuelo}
+                          className="w-full text-left text-xs text-gray-400 px-1 py-1 rounded hover:bg-amber-900/20 hover:border-amber-700/50 transition-colors disabled:cursor-default"
+                          title="Ver envios entrantes"
+                        >
+                          <div className="flex justify-between gap-2">
+                            <span className="font-medium text-gray-300">{id}</span>
+                            <span className="text-sky-400 truncate">Desde: {vuelo ? getAirportCityCountry(vuelo.origen) : '?'}</span>
+                          </div>
+                          {vuelo && (
+                            <div className="text-gray-500">
+                              Llegada: {formatDateInTimezone(vuelo.llegadaUtc, tzOffset)} {formatTimeInTimezone(vuelo.llegadaUtc, tzOffset)}
+                            </div>
+                          )}
+                          <div className="text-[10px] text-gray-500">
+                            {enviosEntrantes.length} envio{enviosEntrantes.length !== 1 ? 's' : ''} entrante{enviosEntrantes.length !== 1 ? 's' : ''}
+                          </div>
+                        </button>
+
+                        {isFlightExpanded && (
+                          <div className="ml-2 mb-1 border-l border-gray-700 pl-2 space-y-1">
+                            {enviosEntrantes.length === 0 ? (
+                              <p className="text-[10px] text-gray-500 py-1">No hay envios asociados a este vuelo</p>
+                            ) : (
+                              enviosEntrantes.map((envio) => {
+                                const isEnvioExpanded = expandedEnvioId === envio.id
+                                return (
+                                  <div key={envio.id} className="rounded border border-gray-800 bg-gray-900/60">
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedEnvioId(isEnvioExpanded ? null : envio.id)}
+                                      className="w-full text-left px-2 py-1 hover:bg-gray-800/70 transition-colors"
+                                      title="Ver maletas individuales"
+                                    >
+                                      <div className="flex justify-between gap-2">
+                                        <span className="text-[10px] font-medium text-gray-300 truncate">{envio.id}</span>
+                                        <span className="text-[10px] text-amber-400 whitespace-nowrap">{envio.cantidad} maleta{envio.cantidad !== 1 ? 's' : ''}</span>
+                                      </div>
+                                      <div className="text-[10px] text-gray-500 truncate">
+                                        {getAirportCityCountry(envio.origen)} -&gt; {getAirportCityCountry(envio.destino)}
+                                      </div>
+                                    </button>
+
+                                    {isEnvioExpanded && (
+                                      <div className="px-2 pb-1 space-y-0.5">
+                                        {Array.from({ length: envio.cantidad }, (_, index) => (
+                                          <div key={`${envio.id}-maleta-${index + 1}`} className="flex justify-between text-[10px] text-gray-400 border-t border-gray-800 py-0.5">
+                                            <span>Maleta {index + 1}</span>
+                                            <span className="font-mono text-gray-500">{envio.id}-BAG-{String(index + 1).padStart(3, '0')}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })
+                            )}
                           </div>
                         )}
-                      </button>
+                      </div>
                     )
                   })
                 )}

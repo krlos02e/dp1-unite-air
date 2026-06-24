@@ -821,6 +821,15 @@ public class SimulationEngine {
                         estado = "EN_ESPERA";
                     }
                 }
+                LinkedHashSet<String> rutaAeropuertos = new LinkedHashSet<>();
+                rutaAeropuertos.add(paquete.getOrigenOACI());
+                if (ruta != null) {
+                    for (Vuelo vuelo : ruta.getVuelos()) {
+                        rutaAeropuertos.add(vuelo.getOrigen().getCodigoOACI());
+                        rutaAeropuertos.add(vuelo.getDestino().getCodigoOACI());
+                    }
+                }
+                rutaAeropuertos.add(paquete.getDestinoOACI());
                 enviosDTO.add(EnvioSimulacionDTO.builder()
                         .id(paquete.getId())
                         .origen(paquete.getOrigenOACI())
@@ -830,6 +839,7 @@ public class SimulationEngine {
                         .vueloActual(vueloActual)
                         .vueloEsperado(vueloEsperado)
                         .ultimoVuelo(ultimoVuelo)
+                        .rutaAeropuertos(new ArrayList<>(rutaAeropuertos))
                         .cantidad(paquete.getCantidad())
                         .build());
             }

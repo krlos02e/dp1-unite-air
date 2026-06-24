@@ -309,6 +309,7 @@ export default function OperacionDiaria() {
             isOpen={!!selectedAeropuerto && !selectedEnvio}
             onClose={() => setSelectedAeropuerto(null)}
             vuelos={vuelos}
+            envios={todosEnvios}
             tzOffset={mapTz}
             onVueloSelect={handleVueloClick}
           />
