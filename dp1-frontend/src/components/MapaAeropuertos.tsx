@@ -27,7 +27,7 @@ interface Props {
 }
 
 const INITIAL_CENTER: [number, number] = [17, 0]
-const INITIAL_ZOOM = 3.25
+const INITIAL_ZOOM = 3.00
 const WORLD_BOUNDS = L.latLngBounds(L.latLng(-60, -160), L.latLng(82, 160))
 
 function aeropuertoColor(ocu: number, max: number): string {
@@ -207,6 +207,11 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
   const [showRouteLines, setShowRouteLines] = useState(true)
   const showRouteLinesRef = useRef(showRouteLines)
   const isZoomingRef = useRef(false)
+
+  const dynamicZoom = useMemo(() => {
+    const z = 2 + window.innerWidth / 2000
+    return Math.round(z * 4) / 4
+  }, [])
   useEffect(() => {
     onVueloClickRef.current = onVueloClick
     onAeropuertoClickRef.current = onAeropuertoClick
@@ -297,13 +302,13 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
     if (mapContainerRef.current && !mapRef.current) {
       const map = L.map(mapContainerRef.current, {
         center: INITIAL_CENTER,
-        zoom: INITIAL_ZOOM,
+        zoom: dynamicZoom,
         zoomControl: true,
         preferCanvas: true,
         zoomSnap: 0.25,
         zoomDelta: 0.25,
         wheelPxPerZoomLevel: 120,
-        minZoom: INITIAL_ZOOM,
+        minZoom: Math.max(2, dynamicZoom - 0.5),
         maxZoom: 13,
         maxBounds: WORLD_BOUNDS,
         maxBoundsViscosity: 1.0
@@ -337,16 +342,10 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       map.on('zoomend', () => {
         routeLinesRef.current.forEach((pair) => {
           pair.pending.setStyle({ opacity: showRouteLinesRef.current ? 0.25 : 0 })
-          if (pair.flown) pair.flown.setStyle({ opacity: showRouteLinesRef.current ? 0.08 : 0 })
+          if (pair.flown) pair.flown.setStyle({ opacity: showRouteLinesRef.current ? 0 : 0 })
         })
         isZoomingRef.current = false
-
-        const currentZoom = map.getZoom()
-        if (currentZoom <= INITIAL_ZOOM) {
-          map.setMaxBounds(map.getBounds())
-        } else {
-          map.setMaxBounds(WORLD_BOUNDS)
-        }
+        map.setMaxBounds(WORLD_BOUNDS)
       })
     }
 
@@ -553,7 +552,6 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       const pts = bezierPoints(from, to, 40)
       const progresoActual = simulationMode ? v.progresoVuelo : calcularProgresoLocal(v, realNow)
       const tNorm = progresoActual / 100
-      const splitIndex = Math.round(tNorm * 40)
 
       const existingAnim = flightAnimsRef.current.get(v.id)
       if (existingAnim) {
