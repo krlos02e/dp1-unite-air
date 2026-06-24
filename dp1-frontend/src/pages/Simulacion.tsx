@@ -323,6 +323,25 @@ export default function Simulacion() {
   const vuelosEnTransitoCount = flightStats.enTransito
   const vuelosCancelados = flightStats.cancelados
 
+  const occupancy = useMemo(() => {
+    const flota = vuelos.reduce((acc, v) => ({
+      carga: acc.carga + v.cargaActual,
+      capacidad: acc.capacidad + v.capacidad,
+    }), { carga: 0, capacidad: 0 })
+    const aeropuertosOcu = aeropuertos.reduce((acc, a) => ({
+      ocupacion: acc.ocupacion + a.ocupacionActual,
+      capacidad: acc.capacidad + a.capacidadMaxima,
+    }), { ocupacion: 0, capacidad: 0 })
+    return { flota, aeropuertos: aeropuertosOcu }
+  }, [vuelos, aeropuertos])
+
+  function ocupColor(ratio: number): string {
+    if (ratio <= 0) return 'bg-sky-500'
+    if (ratio <= 0.7) return 'bg-emerald-500'
+    if (ratio <= 0.9) return 'bg-amber-500'
+    return 'bg-red-500'
+  }
+
   return (
     <div className="flex flex-col gap-2">
       {/* Barra superior de parámetros + tiempos */}
@@ -433,8 +452,37 @@ export default function Simulacion() {
             filteredFlightIds={panelMode === 'aviones' && !panelCollapsed ? filteredFlightIds : null}
           />
 
-          {/* Contadores flotantes - inferior izquierda */}
-          <div className="absolute bottom-4 left-4 z-[999] group">
+          {/* Indicadores flotantes - inferior izquierda */}
+          <div className="absolute bottom-4 left-4 z-[999] flex flex-col gap-2">
+            <div className="bg-gray-900/40 border border-gray-700/40 rounded-xl p-3 backdrop-blur-[2px]">
+              <h4 className="text-xs font-semibold text-gray-300 mb-2 pb-1 border-b border-gray-700/50">Ocupación Global</h4>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between text-[10px] text-gray-400 mb-0.5">
+                      <span className="truncate">Flota: {occupancy.flota.carga}/{occupancy.flota.capacidad}</span>
+                      <span className="shrink-0 ml-1">{occupancy.flota.capacidad > 0 ? Math.round(occupancy.flota.carga / occupancy.flota.capacidad * 100) : 0}%</span>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full bg-gray-800 overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${ocupColor(occupancy.flota.capacidad > 0 ? occupancy.flota.carga / occupancy.flota.capacidad : 0)}`} style={{ width: `${Math.min(occupancy.flota.capacidad > 0 ? occupancy.flota.carga / occupancy.flota.capacidad * 100 : 0, 100)}%` }} />
+                    </div>
+                  </div>
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${ocupColor(occupancy.flota.capacidad > 0 ? occupancy.flota.carga / occupancy.flota.capacidad : 0)}`} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between text-[10px] text-gray-400 mb-0.5">
+                      <span className="truncate">Aeropuertos: {occupancy.aeropuertos.ocupacion}/{occupancy.aeropuertos.capacidad}</span>
+                      <span className="shrink-0 ml-1">{occupancy.aeropuertos.capacidad > 0 ? Math.round(occupancy.aeropuertos.ocupacion / occupancy.aeropuertos.capacidad * 100) : 0}%</span>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full bg-gray-800 overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${ocupColor(occupancy.aeropuertos.capacidad > 0 ? occupancy.aeropuertos.ocupacion / occupancy.aeropuertos.capacidad : 0)}`} style={{ width: `${Math.min(occupancy.aeropuertos.capacidad > 0 ? occupancy.aeropuertos.ocupacion / occupancy.aeropuertos.capacidad * 100 : 0, 100)}%` }} />
+                    </div>
+                  </div>
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${ocupColor(occupancy.aeropuertos.capacidad > 0 ? occupancy.aeropuertos.ocupacion / occupancy.aeropuertos.capacidad : 0)}`} />
+                </div>
+              </div>
+            </div>
             <div className="bg-gray-900/40 border border-gray-700/40 rounded-xl p-3 backdrop-blur-[2px] transition-all duration-300 group-hover:bg-gray-900/95 group-hover:border-gray-700 group-hover:backdrop-blur-sm group-hover:shadow-2xl">
               <h4 className="text-xs font-semibold text-gray-300 mb-2 pb-1 border-b border-gray-700/50">Estado de Vuelos</h4>
               <div className="flex flex-col gap-1.5">

@@ -26,8 +26,8 @@ interface Props {
   filteredFlightIds?: Set<string> | null
 }
 
-const INITIAL_CENTER: [number, number] = [22, 0]
-const INITIAL_ZOOM = 2.25
+const INITIAL_CENTER: [number, number] = [17, 0]
+const INITIAL_ZOOM = 3.25
 const WORLD_BOUNDS = L.latLngBounds(L.latLng(-60, -160), L.latLng(82, 160))
 
 function aeropuertoColor(ocu: number, max: number): string {
@@ -43,6 +43,7 @@ const AIRPLANE_COLOR_YELLOW = '#eab308'
 const AIRPLANE_COLOR_RED = '#ef4444'
 const AIRPLANE_SELECTED = '#facc15'
 const BASE_ICON_SIZE = 29
+const AIRPORT_ICON_RATIO = 0.9
 
 function getAirplaneColor(cargaActual: number, capacidad: number): string {
   if (capacidad <= 0 || cargaActual <= 0) return '#38bdf8'
@@ -76,6 +77,10 @@ function getAirplaneIcon(selected: boolean, cargaActual: number, capacidad: numb
 }
 
 function airportIcon(color: string, label: string, selected = false): L.DivIcon {
+  const r = AIRPORT_ICON_RATIO
+  const circleSize = Math.round(34 * r)
+  const svgSize = Math.round(22 * r)
+  const borderWidth = Math.max(1, Math.round(2 * r))
   const markerColor = selected ? AIRPLANE_SELECTED : color
   const glow = selected
     ? 'box-shadow:0 0 6px #facc15,0 0 14px #facc15,0 0 24px rgba(250,204,21,0.65);'
@@ -83,8 +88,8 @@ function airportIcon(color: string, label: string, selected = false): L.DivIcon 
   return L.divIcon({
     className: '',
     html: `<div style="display:flex;flex-direction:column;align-items:center;pointer-events:auto;">
-      <div style="width:34px;height:34px;border-radius:50%;background-color:${markerColor};border:2px solid white;display:flex;align-items:center;justify-content:center;${glow}">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <div style="width:${circleSize}px;height:${circleSize}px;border-radius:50%;background-color:${markerColor};border:${borderWidth}px solid white;display:flex;align-items:center;justify-content:center;${glow}">
+        <svg width="${svgSize}" height="${svgSize}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <g stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
             <path d="M3.59 7h8.82a1 1 0 0 1 .902 1.433l-1.44 3a1 1 0 0 1-.901.567H5.029a1 1 0 0 1-.901-.567l-1.44-3A1 1 0 0 1 3.589 7"/>
             <path d="m6 7l-.78-2.342A.5.5 0 0 1 5.693 4h4.612a.5.5 0 0 1 .475.658L10 7M8 2v2m-2 8v9h4v-9m-7 9h18m1-16h-6l-1-1"/>
@@ -92,10 +97,10 @@ function airportIcon(color: string, label: string, selected = false): L.DivIcon 
           </g>
         </svg>
       </div>
-      <span style="font-size:10px;font-weight:bold;color:white;text-shadow:0 1px 3px rgba(0,0,0,0.8);white-space:nowrap;margin-top:2px;">${label}</span>
+      <span style="font-size:${Math.max(8, Math.round(10 * r))}px;font-weight:bold;color:white;text-shadow:0 1px 3px rgba(0,0,0,0.8);white-space:nowrap;margin-top:${Math.max(1, Math.round(2 * r))}px;">${label}</span>
     </div>`,
-    iconSize: [34, 54],
-    iconAnchor: [17, 50],
+    iconSize: [Math.round(34 * r), Math.round(54 * r)],
+    iconAnchor: [Math.round(17 * r), Math.round(50 * r)],
   })
 }
 
@@ -578,7 +583,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
           transitionStartedAt: frameNow,
           transitionDurationMs: 1,
           snapshotAt: frameNow,
-          lastRouteIndex: splitIndex,
+          lastRouteIndex: -1,
         })
       }
 
@@ -609,55 +614,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
         mk.setTooltipContent(tooltipText)
       }
 
-      const existingPair = routeLinesRef.current.get(v.id)
-      if (existingPair) {
-        if (!isZoomingRef.current) {
-          if (splitIndex < pts.length) {
-            const pendingPts = pts.slice(splitIndex)
-            existingPair.pending.setLatLngs(pendingPts)
-            existingPair.pending.setStyle({ opacity: showRouteLinesRef.current ? 0.25 : 0 })
-          }
-          if (splitIndex > 0) {
-            const flownPts = pts.slice(0, splitIndex + 1)
-            if (existingPair.flown) {
-              existingPair.flown.setLatLngs(flownPts)
-              existingPair.flown.setStyle({ opacity: showRouteLinesRef.current ? 0.08 : 0 })
-            } else {
-              const flownLine = L.polyline(flownPts, {
-                dashArray: '1, 8',
-                color: '#6b7280',
-                weight: 1.5,
-                opacity: showRouteLinesRef.current ? 0.08 : 0,
-                lineCap: 'round',
-              })
-              routeLayerRef.current?.addLayer(flownLine)
-              existingPair.flown = flownLine
-            }
-          }
-        }
-      } else if (showRouteLinesRef.current && !isZoomingRef.current) {
-        const pendingLine = L.polyline(pts, {
-          dashArray: '4, 6',
-          color: '#6b7280',
-          weight: 1.5,
-          opacity: 0.25,
-        })
-        routeLayerRef.current?.addLayer(pendingLine)
-        const pair: RoutePair = { pending: pendingLine, flown: null }
-        if (splitIndex > 0) {
-          const flownPts = pts.slice(0, splitIndex + 1)
-          const flownLine = L.polyline(flownPts, {
-            dashArray: '1, 8',
-            color: '#6b7280',
-            weight: 1.5,
-            opacity: 0.08,
-            lineCap: 'round',
-          })
-          routeLayerRef.current?.addLayer(flownLine)
-          pair.flown = flownLine
-        }
-        routeLinesRef.current.set(v.id, pair)
-      }
+
     })
   }, [vuelos, selectedVueloId, simulationMode, filteredFlightIds])
 
@@ -707,28 +664,58 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
 
         if (!isZoomingRef.current && anim.pts) {
           const splitIndex = Math.round(tNorm * (anim.pts.length - 1))
-          if (splitIndex === anim.lastRouteIndex) return
-          anim.lastRouteIndex = splitIndex
           const pair = routeLinesRef.current.get(id)
-          if (pair) {
-            if (splitIndex < anim.pts.length) {
-              pair.pending.setLatLngs(anim.pts.slice(splitIndex))
-            }
-            if (splitIndex > 0) {
-              const flownPts = anim.pts.slice(0, splitIndex + 1)
-              if (pair.flown) {
-                pair.flown.setLatLngs(flownPts)
-              } else {
+
+          if (!pair) {
+            if (showRouteLinesRef.current) {
+              const pendingLine = L.polyline(anim.pts, {
+                dashArray: '4, 6',
+                color: '#6b7280',
+                weight: 1.5,
+                opacity: 0.25,
+              })
+              routeLayerRef.current?.addLayer(pendingLine)
+              const newPair: RoutePair = { pending: pendingLine, flown: null }
+              if (splitIndex > 0) {
+                const flownPts = anim.pts.slice(0, splitIndex + 1)
                 const flownLine = L.polyline(flownPts, {
                   dashArray: '1, 8',
                   color: '#6b7280',
                   weight: 1.5,
-                  opacity: 0.08,
+                  opacity: 0,
                   lineCap: 'round',
                 })
                 routeLayerRef.current?.addLayer(flownLine)
-                pair.flown = flownLine
+                newPair.flown = flownLine
               }
+              routeLinesRef.current.set(id, newPair)
+            }
+            anim.lastRouteIndex = splitIndex
+            return
+          }
+
+          if (splitIndex === anim.lastRouteIndex) return
+          anim.lastRouteIndex = splitIndex
+
+          if (splitIndex < anim.pts.length) {
+            pair.pending.setLatLngs(anim.pts.slice(splitIndex))
+            pair.pending.setStyle({ opacity: showRouteLinesRef.current ? 0.25 : 0 })
+          }
+          if (splitIndex > 0) {
+            const flownPts = anim.pts.slice(0, splitIndex + 1)
+            if (pair.flown) {
+              pair.flown.setLatLngs(flownPts)
+              pair.flown.setStyle({ opacity: showRouteLinesRef.current ? 0 : 0 })
+            } else {
+              const flownLine = L.polyline(flownPts, {
+                dashArray: '1, 8',
+                color: '#6b7280',
+                weight: 1.5,
+                opacity: showRouteLinesRef.current ? 0 : 0,
+                lineCap: 'round',
+              })
+              routeLayerRef.current?.addLayer(flownLine)
+              pair.flown = flownLine
             }
           }
         }
