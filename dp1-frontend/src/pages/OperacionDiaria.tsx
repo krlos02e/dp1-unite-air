@@ -148,6 +148,19 @@ export default function OperacionDiaria() {
     setFilteredFlightIds(new Set(ids))
   }, [])
 
+  const handleAeropuertosContextoChanged = useCallback((aeropuertos: AeropuertoDTO[]) => {
+    setAeropuertosEstaticos(aeropuertos.length > 0 ? aeropuertos : aeropuertosFallback)
+  }, [])
+
+  const refreshOperacionContextData = useCallback(async () => {
+    const [aeropuertosData, vuelosData] = await Promise.all([
+      cargaArchivosService.obtenerAeropuertos('OPERACION'),
+      cargaArchivosService.obtenerVuelos('OPERACION'),
+    ])
+    setAeropuertosEstaticos(aeropuertosData.length > 0 ? aeropuertosData : aeropuertosFallback)
+    setVuelosOriginales(vuelosData)
+  }, [])
+
   // Cargar aeropuertos y vuelos del dataset
   useEffect(() => {
     let cancelled = false
@@ -155,8 +168,8 @@ export default function OperacionDiaria() {
       try {
         setLoading(true)
         const [aeropuertosData, vuelosData] = await Promise.all([
-          cargaArchivosService.obtenerAeropuertos(),
-          cargaArchivosService.obtenerVuelos(),
+          cargaArchivosService.obtenerAeropuertos('OPERACION'),
+          cargaArchivosService.obtenerVuelos('OPERACION'),
         ])
         if (cancelled) return
         setAeropuertosEstaticos(aeropuertosData.length > 0 ? aeropuertosData : aeropuertosFallback)
@@ -209,7 +222,7 @@ export default function OperacionDiaria() {
 
     const pollVuelos = async () => {
       try {
-        const vuelosData = await cargaArchivosService.obtenerVuelos()
+        const vuelosData = await cargaArchivosService.obtenerVuelos('OPERACION')
         setVuelosOriginales(vuelosData)
       } catch {
         // ignore polling errors
@@ -379,10 +392,14 @@ export default function OperacionDiaria() {
               selectedEnvioId={selectedEnvio?.id}
               onAlmacenSelect={handleAeropuertoClick}
               selectedAlmacenId={selectedAeropuerto?.codigoOACI}
+              contexto="OPERACION"
+              onDataChanged={handleAeropuertosContextoChanged}
             />
           ) : panelMode === 'aviones' ? (
             <VueloListPanel
               vuelos={vuelos}
+              contexto="OPERACION"
+              aeropuertosDisponibles={aeropuertosEstaticos}
               envios={todosEnvios}
               onEnvioSelect={handleEnvioSelect}
               selectedEnvioId={selectedEnvio?.id}
@@ -390,6 +407,7 @@ export default function OperacionDiaria() {
               selectedVueloId={selectedVuelo?.id}
               showStatusFilters={false}
               onVisibleFlightsChange={handleVisibleFlightsChange}
+              onDataChanged={refreshOperacionContextData}
             />
           ) : (
             <EnvioListPanel

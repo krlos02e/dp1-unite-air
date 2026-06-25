@@ -12,6 +12,9 @@ export interface VueloDTO {
   cargaActual: number;
   progresoVuelo: number;
   estado?: string;
+  programacionId?: number | null;
+  editable?: boolean;
+  recurrente?: boolean;
 }
 
 export interface AeropuertoDTO {
@@ -25,6 +28,7 @@ export interface AeropuertoDTO {
   vuelosEntrantes: string[];
   vuelosSalientes: string[];
   vuelosCanceladosSalientes: string[];
+  editable?: boolean;
 }
 
 export interface AlmacenDTO {
@@ -36,6 +40,18 @@ export interface AlmacenDTO {
   capacidadMaxima: number;
   latitud: number;
   longitud: number;
+  editable?: boolean;
+}
+
+export type AlmacenContexto = 'OPERACION' | 'SIMULACION';
+
+export interface ProgramacionVueloDTO {
+  id?: number;
+  origenOACI: string;
+  destinoOACI: string;
+  horaSalidaLocal: string;
+  horaLlegadaLocal: string;
+  capacidad: number;
 }
 
 export interface LogEntry {

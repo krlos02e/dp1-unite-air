@@ -29,6 +29,10 @@ class SimulationService extends HttpClient {
   activa(): Promise<{ activa: boolean; sessionId?: string; status?: string; progreso?: number }> {
     return this.get(`/simulacion/activa`)
   }
+
+  reiniciarContexto(): Promise<{ success: boolean }> {
+    return this.post('/simulacion/reiniciar-contexto', {})
+  }
 }
 
 export const simulationService = new SimulationService()

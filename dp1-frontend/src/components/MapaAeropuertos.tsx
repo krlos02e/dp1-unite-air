@@ -280,7 +280,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       const isActive = simulationMode
         ? v.estado === 'ACTIVO'
         : progresoLocal > 0 && progresoLocal < 100
-      const isVisible = shouldDisplayFlight(v.id) || v.id === selectedVueloId
+      const isVisible = Boolean(v.editable) || shouldDisplayFlight(v.id) || v.id === selectedVueloId
       if (!isActive || !isVisible) {
         persistentFlightsRef.current.delete(v.id)
         const mk = flightMarkersRef.current.get(v.id)

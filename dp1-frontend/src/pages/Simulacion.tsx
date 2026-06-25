@@ -43,6 +43,7 @@ export default function Simulacion() {
   } = useSimulation()
   const [sessionId, setSessionId] = useState<string>('')
   const [aeropuertosEstaticos, setAeropuertosEstaticos] = useState<AeropuertoDTO[]>(aeropuertosFallback)
+  const [vuelosEstaticos, setVuelosEstaticos] = useState<VueloDTO[]>([])
 
   // Config state
   const [fechaInicio, setFechaInicio] = useState('')
@@ -122,9 +123,37 @@ export default function Simulacion() {
     setFilteredFlightIds(new Set(ids))
   }, [])
 
+  const handleAeropuertosContextoChanged = useCallback((aeropuertos: AeropuertoDTO[]) => {
+    setAeropuertosEstaticos(aeropuertos.length > 0 ? aeropuertos : aeropuertosFallback)
+  }, [])
+
+  const refreshSimulacionContextData = useCallback(async () => {
+    const [aeropuertosData, vuelosData] = await Promise.all([
+      cargaArchivosService.obtenerAeropuertos('SIMULACION'),
+      cargaArchivosService.obtenerVuelos('SIMULACION'),
+    ])
+    setAeropuertosEstaticos(aeropuertosData.length > 0 ? aeropuertosData : aeropuertosFallback)
+    setVuelosEstaticos(vuelosData)
+  }, [])
+
   const [showResultados, setShowResultados] = useState(false)
   const hasShownResults = useRef(false)
   const [resultSnapshot, setResultSnapshot] = useState<SimulationState | null>(null)
+
+  const aeropuertos = useMemo(() => {
+    const base = simulationState?.aeropuertos?.length ? simulationState.aeropuertos : []
+    const map = new Map<string, AeropuertoDTO>()
+
+    aeropuertosEstaticos.forEach((a) => {
+      map.set(a.codigoOACI, a)
+    })
+
+    base.forEach((a) => {
+      map.set(a.codigoOACI, a)
+    })
+
+    return Array.from(map.values())
+  }, [simulationState?.aeropuertos, aeropuertosEstaticos])
 
   const isCompleted = simulationState?.status === 'COMPLETADA' || (simulationState && simulationState.progreso >= 100)
   const isColapsada = simulationState?.status === 'COLAPSADA'
@@ -132,11 +161,7 @@ export default function Simulacion() {
 
   // Restore config from sessionStorage on mount
   useEffect(() => {
-    cargaArchivosService.obtenerAeropuertos()
-      .then((data) => {
-        setAeropuertosEstaticos(data)
-      })
-      .catch(() => {})
+    refreshSimulacionContextData().catch(() => {})
 
     const saved = sessionStorage.getItem(SIM_CONFIG_KEY)
     if (saved) {
@@ -148,7 +173,7 @@ export default function Simulacion() {
         // ignore parse errors
       }
     }
-  }, [])
+  }, [refreshSimulacionContextData])
 
   // Detectar simulación activa al montar (permite ver simulación en otras pestañas)
   useEffect(() => {
@@ -293,6 +318,7 @@ export default function Simulacion() {
     hasShownResults.current = false
     setResultSnapshot(null)
     setShowResultados(false)
+    refreshSimulacionContextData().catch(() => {})
   }
 
   const showActionButton = sessionId && !isColapsada && !isError
@@ -308,11 +334,10 @@ export default function Simulacion() {
     return () => window.clearTimeout(timeoutId)
   }, [panelCollapsed])
 
-  const aeropuertos = simulationState?.aeropuertos?.length ? simulationState.aeropuertos : aeropuertosEstaticos
-  const vuelos = simulationState?.vuelos || EMPTY_FLIGHTS
+  const vuelos = simulationState?.vuelos?.length ? simulationState.vuelos : vuelosEstaticos || EMPTY_FLIGHTS
 
   const flightStats = useMemo(() => vuelos.reduce((stats, vuelo) => {
-    const visibleInSample = shouldDisplayFlight(vuelo.id) || vuelo.id === selectedVuelo?.id
+    const visibleInSample = Boolean(vuelo.editable) || shouldDisplayFlight(vuelo.id) || vuelo.id === selectedVuelo?.id
     if (vuelo.estado === 'CULMINADO' && visibleInSample) stats.culminados++
     else if (vuelo.estado === 'ACTIVO' && visibleInSample) stats.enTransito++
     else if (vuelo.estado === 'CANCELADO') stats.cancelados++
@@ -521,13 +546,13 @@ export default function Simulacion() {
             aeropuerto={selectedAeropuerto}
             isOpen={!!selectedAeropuerto && !selectedEnvio}
             onClose={() => setSelectedAeropuerto(null)}
-            vuelos={simulationState?.vuelos}
+            vuelos={vuelos}
             envios={simulationState?.envios || []}
             tzOffset={mapTz}
             onVueloSelect={handleVueloClick}
           />
-          <EnvioModal
-            envio={selectedEnvio}
+            <EnvioModal
+              envio={selectedEnvio}
             isOpen={!!selectedEnvio}
             onClose={() => {
               setSelectedEnvio(null)
@@ -535,7 +560,7 @@ export default function Simulacion() {
               setSelectedAeropuerto(null)
             }}
             onIrAVuelo={handleIrAVueloDesdeEnvio}
-            vuelos={simulationState?.vuelos}
+            vuelos={vuelos}
             dentroDelMapa
           />
         </div>
@@ -593,10 +618,14 @@ export default function Simulacion() {
               selectedEnvioId={selectedEnvio?.id}
               onAlmacenSelect={handleAeropuertoClick}
               selectedAlmacenId={selectedAeropuerto?.codigoOACI}
+              contexto="SIMULACION"
+              onDataChanged={handleAeropuertosContextoChanged}
             />
           ) : panelMode === 'aviones' ? (
             <VueloListPanel
               vuelos={vuelos}
+              contexto="SIMULACION"
+              aeropuertosDisponibles={aeropuertos}
               envios={simulationState?.envios || []}
               onEnvioSelect={handleEnvioSelect}
               selectedEnvioId={selectedEnvio?.id}
@@ -604,6 +633,7 @@ export default function Simulacion() {
               selectedVueloId={selectedVuelo?.id}
               includeCompleted
               onVisibleFlightsChange={handleVisibleFlightsChange}
+              onDataChanged={refreshSimulacionContextData}
             />
           ) : (
             <EnvioListPanel

@@ -8,6 +8,7 @@ import pe.edu.pucp.uniteair.dp1backend.dto.SimulationState;
 import pe.edu.pucp.uniteair.dp1backend.dto.SimulacionConfigRequest;
 import pe.edu.pucp.uniteair.dp1backend.service.CargaArchivosService;
 import pe.edu.pucp.uniteair.dp1backend.service.SimulationService;
+import pe.edu.pucp.uniteair.dp1backend.service.SimulationContextService;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -20,13 +21,16 @@ public class SimulationController {
     private final SimulationService simulationService;
     private final CargaArchivosService cargaArchivosService;
     private final SimulationCache simulationCache;
+    private final SimulationContextService simulationContextService;
 
     public SimulationController(SimulationService simulationService,
                                 CargaArchivosService cargaArchivosService,
-                                SimulationCache simulationCache) {
+                                SimulationCache simulationCache,
+                                SimulationContextService simulationContextService) {
         this.simulationService = simulationService;
         this.cargaArchivosService = cargaArchivosService;
         this.simulationCache = simulationCache;
+        this.simulationContextService = simulationContextService;
     }
 
     @GetMapping("/activa")
@@ -111,5 +115,11 @@ public class SimulationController {
         var state = simulationService.obtenerEstado(sessionId);
         if (state == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(state);
+    }
+
+    @PostMapping("/reiniciar-contexto")
+    public ResponseEntity<Map<String, Object>> reiniciarContextoEditable() {
+        simulationContextService.reiniciarContextoSimulacion();
+        return ResponseEntity.ok(Map.of("success", true));
     }
 }

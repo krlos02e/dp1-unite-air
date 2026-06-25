@@ -6,8 +6,10 @@ import org.springframework.web.multipart.MultipartFile;
 import pe.edu.pucp.uniteair.dp1backend.config.AeropuertoCoordenadas;
 import pe.edu.pucp.uniteair.dp1backend.dto.AeropuertoDTO;
 import pe.edu.pucp.uniteair.dp1backend.dto.VueloDTO;
+import pe.edu.pucp.uniteair.dp1backend.entity.AlmacenContexto;
 import pe.edu.pucp.uniteair.dp1backend.service.CargaArchivosService;
 import pe.edu.pucp.uniteair.dp1backend.service.AlmacenService;
+import pe.edu.pucp.uniteair.dp1backend.service.DatasetContextService;
 import pe.edu.pucp.uniteair.dp1backend.entity.Almacen;
 import tasf.core.Dataset;
 import tasf.model.Paquete;
@@ -17,6 +19,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -28,10 +31,14 @@ public class CargaArchivosController {
 
     private final CargaArchivosService cargaArchivosService;
     private final AlmacenService almacenService;
+    private final DatasetContextService datasetContextService;
 
-    public CargaArchivosController(CargaArchivosService cargaArchivosService, AlmacenService almacenService) {
+    public CargaArchivosController(CargaArchivosService cargaArchivosService,
+                                   AlmacenService almacenService,
+                                   DatasetContextService datasetContextService) {
         this.cargaArchivosService = cargaArchivosService;
         this.almacenService = almacenService;
+        this.datasetContextService = datasetContextService;
     }
 
     @PostMapping("/upload")
@@ -71,8 +78,10 @@ public class CargaArchivosController {
     }
 
     @GetMapping("/aeropuertos")
-    public ResponseEntity<List<AeropuertoDTO>> obtenerAeropuertos() {
-        Dataset dataset = cargaArchivosService.obtenerUltimoDataset();
+    public ResponseEntity<List<AeropuertoDTO>> obtenerAeropuertos(
+            @RequestParam(defaultValue = "OPERACION") AlmacenContexto contexto
+    ) {
+        Dataset dataset = datasetContextService.construirDatasetEfectivo(contexto, cargaArchivosService.obtenerUltimoDataset());
         if (dataset == null) {
             return ResponseEntity.ok(List.of());
         }
@@ -93,25 +102,32 @@ public class CargaArchivosController {
             }
         }
 
-        Map<String, Almacen> almacenMap = almacenService.getMapaAlmacenes();
-        List<AeropuertoDTO> aeropuertos = dataset.getAeropuertos().values().stream()
-                .map(a -> {
-                    double[] coord = AeropuertoCoordenadas.get(a.getCodigoOACI());
-                    int ocup = cargaArchivosService.getOcupacionAeropuerto(a.getCodigoOACI(), ahora);
-                    Almacen alm = almacenMap.get(a.getCodigoOACI());
+        Map<String, Almacen> almacenMap = almacenService.getMapaAlmacenes(contexto);
+        Set<String> codigos = new LinkedHashSet<>(dataset.getAeropuertos().keySet());
+        codigos.addAll(almacenMap.keySet());
+
+        List<AeropuertoDTO> aeropuertos = codigos.stream()
+                .map(codigo -> {
+                    var aeropuerto = dataset.getAeropuertos().get(codigo);
+                    double[] coord = AeropuertoCoordenadas.get(codigo);
+                    Almacen alm = almacenMap.get(codigo);
                     String ciudad = alm != null ? alm.getCiudad() : null;
                     String pais = alm != null ? alm.getPais() : null;
+                    double latitud = alm != null ? alm.getLatitud() : (coord != null ? coord[0] : 0.0);
+                    double longitud = alm != null ? alm.getLongitud() : (coord != null ? coord[1] : 0.0);
+                    int capacidadMaxima = alm != null ? alm.getCapacidadMaxima() : (aeropuerto != null ? aeropuerto.getCapacidadMaxima() : 0);
+                    int ocup = aeropuerto != null ? cargaArchivosService.getOcupacionAeropuerto(codigo, ahora) : 0;
                     return AeropuertoDTO.builder()
-                            .codigoOACI(a.getCodigoOACI())
-                            .latitud(coord[0])
-                            .longitud(coord[1])
+                            .codigoOACI(codigo)
+                            .latitud(latitud)
+                            .longitud(longitud)
                             .ciudad(ciudad)
                             .pais(pais)
-                            .capacidadMaxima(a.getCapacidadMaxima())
+                            .capacidadMaxima(capacidadMaxima)
                             .ocupacionActual(ocup)
-                            .vuelosEntrantes(entrantesMap.getOrDefault(a.getCodigoOACI(), List.of()))
-                            .vuelosSalientes(salientesMap.getOrDefault(a.getCodigoOACI(), List.of()))
-                            .vuelosCanceladosSalientes(canceladosMap.getOrDefault(a.getCodigoOACI(), List.of()))
+                            .vuelosEntrantes(entrantesMap.getOrDefault(codigo, List.of()))
+                            .vuelosSalientes(salientesMap.getOrDefault(codigo, List.of()))
+                            .vuelosCanceladosSalientes(canceladosMap.getOrDefault(codigo, List.of()))
                             .build();
                 })
                 .collect(Collectors.toList());
@@ -119,17 +135,26 @@ public class CargaArchivosController {
     }
 
     @GetMapping("/vuelos")
-    public ResponseEntity<List<VueloDTO>> obtenerVuelos() {
-        Dataset dataset = cargaArchivosService.obtenerUltimoDataset();
+    public ResponseEntity<List<VueloDTO>> obtenerVuelos(
+            @RequestParam(defaultValue = "OPERACION") AlmacenContexto contexto
+    ) {
+        Dataset dataset = datasetContextService.construirDatasetEfectivo(contexto, cargaArchivosService.obtenerUltimoDataset());
         if (dataset == null) {
             return ResponseEntity.ok(List.of());
         }
         Set<String> vuelosCancelados = cargaArchivosService.obtenerVuelosCancelados();
         LocalDateTime ahora = LocalDateTime.now(ZoneOffset.UTC);
+        Map<String, Almacen> almacenMap = almacenService.getMapaAlmacenes(contexto);
         List<VueloDTO> vuelos = new ArrayList<>();
         for (Vuelo v : dataset.getVuelos()) {
             double[] orig = AeropuertoCoordenadas.get(v.getOrigen().getCodigoOACI());
             double[] dest = AeropuertoCoordenadas.get(v.getDestino().getCodigoOACI());
+            Almacen almOrigen = almacenMap.get(v.getOrigen().getCodigoOACI());
+            Almacen almDestino = almacenMap.get(v.getDestino().getCodigoOACI());
+            double latOrigen = almOrigen != null ? almOrigen.getLatitud() : orig[0];
+            double lonOrigen = almOrigen != null ? almOrigen.getLongitud() : orig[1];
+            double latDestino = almDestino != null ? almDestino.getLatitud() : dest[0];
+            double lonDestino = almDestino != null ? almDestino.getLongitud() : dest[1];
             int carga = cargaArchivosService.getCargaVuelo(v.getId());
 
             String estado;
@@ -147,18 +172,36 @@ public class CargaArchivosController {
                     .id(v.getId())
                     .origen(v.getOrigen().getCodigoOACI())
                     .destino(v.getDestino().getCodigoOACI())
-                    .latOrigen(orig[0])
-                    .lonOrigen(orig[1])
-                    .latDestino(dest[0])
-                    .lonDestino(dest[1])
+                    .latOrigen(latOrigen)
+                    .lonOrigen(lonOrigen)
+                    .latDestino(latDestino)
+                    .lonDestino(lonDestino)
                     .salidaUtc(v.getSalidaUtc())
                     .llegadaUtc(v.getLlegadaUtc())
                     .capacidad(v.getCapacidadCarga())
                     .cargaActual(carga)
                     .progresoVuelo(0)
                     .estado(estado)
+                    .programacionId(extraerProgramacionId(v.getId()))
+                    .editable(v.getId() != null && v.getId().startsWith("USR-"))
+                    .recurrente(v.getId() != null && v.getId().startsWith("USR-"))
                     .build());
         }
         return ResponseEntity.ok(vuelos);
+    }
+
+    private Long extraerProgramacionId(String vueloId) {
+        if (vueloId == null || !vueloId.startsWith("USR-")) {
+            return null;
+        }
+        String[] partes = vueloId.split("-");
+        if (partes.length < 3) {
+            return null;
+        }
+        try {
+            return Long.parseLong(partes[1]);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

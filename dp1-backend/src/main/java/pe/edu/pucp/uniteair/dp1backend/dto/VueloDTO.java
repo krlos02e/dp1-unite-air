@@ -28,4 +28,7 @@ public class VueloDTO {
     private int cargaActual;
     private double progresoVuelo;
     private String estado;
+    private Long programacionId;
+    private boolean editable;
+    private boolean recurrente;
 }

@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import pe.edu.pucp.uniteair.dp1backend.entity.PlanificacionLog;
+import pe.edu.pucp.uniteair.dp1backend.entity.AlmacenContexto;
 import pe.edu.pucp.uniteair.dp1backend.repository.PlanificacionLogRepository;
 import tasf.config.Config_Simulacion;
 import tasf.core.Dataset;
@@ -40,6 +41,9 @@ public class PlanificacionPeriodicaService {
     @Autowired
     private PlanificacionLogRepository logRepository;
 
+    @Autowired
+    private DatasetContextService datasetContextService;
+
     @Scheduled(fixedRate = 300000)
     public void planificacionPeriodica() {
         if (!enabled) {
@@ -67,7 +71,8 @@ public class PlanificacionPeriodicaService {
             excluidos.addAll(paquetesEnVuelo);
             excluidos.addAll(paquetesEntregados);
 
-            Dataset datasetFiltrado = cargaArchivosService.filtrarSoloGestionEnvios(inicio, fin, excluidos);
+            Dataset datasetFiltradoBase = cargaArchivosService.filtrarSoloGestionEnvios(inicio, fin, excluidos);
+            Dataset datasetFiltrado = datasetContextService.construirDatasetEfectivo(AlmacenContexto.OPERACION, datasetFiltradoBase);
 
             if (datasetFiltrado.getPaquetes().isEmpty()) {
                 long duracionMs = (System.nanoTime() - startTime) / 1_000_000;

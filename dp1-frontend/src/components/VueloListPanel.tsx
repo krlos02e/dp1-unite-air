@@ -1,10 +1,14 @@
 import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { getAirportCity, getAirportCountry } from '../data/airportsData'
-import type { VueloDTO, EnvioEstado } from '../types'
+import { cargaArchivosService } from '../services/CargaArchivosService'
+import VueloProgramacionModal from './VueloProgramacionModal'
+import type { VueloDTO, EnvioEstado, AeropuertoDTO, AlmacenContexto, ProgramacionVueloDTO } from '../types'
 import { shouldDisplayFlight } from '../utils/flightVisibility'
 
 interface Props {
   vuelos: VueloDTO[]
+  contexto?: AlmacenContexto
+  aeropuertosDisponibles?: AeropuertoDTO[]
   envios?: EnvioEstado[]
   onEnvioSelect?: (envio: EnvioEstado) => void
   selectedEnvioId?: string | null
@@ -13,6 +17,7 @@ interface Props {
   includeCompleted?: boolean
   showStatusFilters?: boolean
   onVisibleFlightsChange?: (flightIds: string[] | null) => void
+  onDataChanged?: () => void | Promise<void>
 }
 
 function formatTime(iso: string): string {
@@ -104,7 +109,20 @@ function occupationCategory(cargaActual: number, ocupPct: number): OccupationFil
   return 'normal'
 }
 
-function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId, onVueloSelect, selectedVueloId, includeCompleted = false, showStatusFilters = true, onVisibleFlightsChange }: Props) {
+function VueloListPanel({
+  vuelos,
+  contexto,
+  aeropuertosDisponibles = [],
+  envios,
+  onEnvioSelect,
+  selectedEnvioId,
+  onVueloSelect,
+  selectedVueloId,
+  includeCompleted = false,
+  showStatusFilters = true,
+  onVisibleFlightsChange,
+  onDataChanged,
+}: Props) {
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [filterEstado, setFilterEstado] = useState<string>('ACTIVO')
@@ -114,12 +132,24 @@ function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId, onVuel
   const [occupationFilter, setOccupationFilter] = useState<OccupationFilter>('todos')
   const [sortField, setSortField] = useState<SortField>('ocupacion')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  const [programaciones, setProgramaciones] = useState<ProgramacionVueloDTO[]>([])
+  const [showProgramacionForm, setShowProgramacionForm] = useState(false)
+  const [editingProgramacion, setEditingProgramacion] = useState<ProgramacionVueloDTO | null>(null)
+  const [deletingProgramacionId, setDeletingProgramacionId] = useState<number | null>(null)
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
 
   const deferredSearch = useDeferredValue(search)
   const term = normalizeSearch(deferredSearch)
   const hasListFilters = Boolean(originFilter || destinationFilter || occupationFilter !== 'todos')
   const hasMapFilters = Boolean(term || originFilter || destinationFilter || occupationFilter !== 'todos' || filterEstado !== 'ACTIVO')
+  const canManageTransportUnits = Boolean(contexto)
+
+  useEffect(() => {
+    if (!contexto) return
+    cargaArchivosService.obtenerProgramacionesVuelo(contexto)
+      .then(setProgramaciones)
+      .catch(() => {})
+  }, [contexto])
 
   const enviosByFlight = useMemo(() => {
     const index = new Map<string, EnvioEstado[]>()
@@ -144,11 +174,12 @@ function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId, onVuel
       )
       && (
         flight.estado === 'CANCELADO'
+        || Boolean(flight.editable)
         || shouldDisplayFlight(flight.id)
         || flight.id === selectedVueloId
       )
     )),
-    [vuelos, selectedVueloId, includeCompleted],
+    [vuelos, selectedVueloId, includeCompleted, showStatusFilters],
   )
 
   const indexedFlights = useMemo(() => visibleFlights.map((flight) => {
@@ -180,7 +211,7 @@ function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId, onVuel
 
   const filtradosSinLimite = useMemo(() => {
     return indexedFlights.filter(({ flight: v, codigo, origen, destino, tramo }) => {
-      if (v.estado !== filterEstado) return false
+      if (showStatusFilters && v.estado !== filterEstado) return false
       if (originFilter && v.origen !== originFilter) return false
       if (destinationFilter && v.destino !== destinationFilter) return false
       if (occupationFilter !== 'todos' && occupationCategory(v.cargaActual, v.capacidad > 0 ? Math.round((v.cargaActual / v.capacidad) * 100) : 0) !== occupationFilter) return false
@@ -202,7 +233,7 @@ function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId, onVuel
       if (comparison === 0) comparison = a.codigo.localeCompare(b.codigo)
       return sortDirection === 'asc' ? comparison : -comparison
     }).map(({ flight }) => flight)
-  }, [indexedFlights, term, filterEstado, searchScope, searchCodeMatcher, originFilter, destinationFilter, occupationFilter, sortField, sortDirection])
+  }, [indexedFlights, term, filterEstado, searchScope, searchCodeMatcher, originFilter, destinationFilter, occupationFilter, sortField, sortDirection, showStatusFilters])
 
   const estadosDisponibles = useMemo(() => {
     const states = ['ACTIVO']
@@ -235,12 +266,7 @@ function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId, onVuel
     }
 
     const visible = filtradosSinLimite.some((flight) => flight.id === selectedVueloId)
-    if (!visible) {
-      setSearch('')
-      setOriginFilter('')
-      setDestinationFilter('')
-      setOccupationFilter('todos')
-    }
+    if (!visible) return
 
     window.setTimeout(() => {
       rowRefs.current.get(selectedVueloId)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
@@ -252,25 +278,162 @@ function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId, onVuel
   const visibleLimit = page.key === resultKey ? page.limit : DEFAULT_LIMIT
   const filtrados = filtradosSinLimite.slice(0, visibleLimit)
 
+  const programacionesFiltradas = useMemo(() => {
+    return programaciones.filter((programacion) => {
+      if (originFilter && programacion.origenOACI !== originFilter) return false
+      if (destinationFilter && programacion.destinoOACI !== destinationFilter) return false
+      if (!term) return true
+
+      const codigoProgramacion = normalizeSearch(
+        `USR-${programacion.id ?? ''}-${programacion.origenOACI}-${programacion.destinoOACI}`
+      )
+      const origen = locationTerms(programacion.origenOACI)
+      const destino = locationTerms(programacion.destinoOACI)
+      const tramo = `${origen} ${destino} ${normalizeSearch(`${programacion.origenOACI}-${programacion.destinoOACI}`)}`
+
+      if (searchScope === 'codigo') return searchCodeMatcher(codigoProgramacion)
+      if (searchScope === 'tramo') return tramo.includes(term)
+      if (searchScope === 'origen') return origen.includes(term)
+      if (searchScope === 'destino') return destino.includes(term)
+      return searchCodeMatcher(codigoProgramacion) || tramo.includes(term)
+    })
+  }, [programaciones, originFilter, destinationFilter, term, searchScope, searchCodeMatcher])
+
   const origins = useMemo(() => (
-    Array.from(new Set(visibleFlights.map((v) => v.origen))).sort()
-  ), [visibleFlights])
+    Array.from(new Set([
+      ...vuelos.map((v) => v.origen),
+      ...programaciones.map((p) => p.origenOACI),
+    ])).sort()
+  ), [vuelos, programaciones])
 
   const destinations = useMemo(() => (
-    Array.from(new Set(visibleFlights.map((v) => v.destino))).sort()
-  ), [visibleFlights])
+    Array.from(new Set([
+      ...vuelos.map((v) => v.destino),
+      ...programaciones.map((p) => p.destinoOACI),
+    ])).sort()
+  ), [vuelos, programaciones])
 
   const estadoVueloLabel: Record<string, string> = {
     ACTIVO: 'Activos',
+    PROGRAMADO: 'Programados',
     CULMINADO: 'Culminados',
     CANCELADO: 'Cancelados',
+  }
+
+  const refreshProgramaciones = async () => {
+    if (!contexto) return
+    const [programacionesActualizadas] = await Promise.all([
+      cargaArchivosService.obtenerProgramacionesVuelo(contexto),
+      onDataChanged?.(),
+    ])
+    setProgramaciones(programacionesActualizadas)
+  }
+
+  const handleProgramacionSave = async (data: ProgramacionVueloDTO) => {
+    if (!contexto) return
+    if (editingProgramacion?.id) {
+      await cargaArchivosService.actualizarProgramacionVuelo(editingProgramacion.id, data, contexto)
+    } else {
+      await cargaArchivosService.crearProgramacionVuelo(data, contexto)
+    }
+    await refreshProgramaciones()
+  }
+
+  const handleDeleteProgramacion = async (id: number) => {
+    if (!contexto) return
+    await cargaArchivosService.eliminarProgramacionVuelo(id, contexto)
+    await refreshProgramaciones()
+    setDeletingProgramacionId(null)
   }
 
   return (
     <div className="w-80 flex-1 min-h-0 bg-gray-900 border border-gray-800 rounded-xl flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-3 border-b border-gray-800">
-        <h3 className="text-sm font-semibold text-gray-200 mb-2">Unidades de transporte</h3>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <h3 className="text-sm font-semibold text-gray-200">Unidades de transporte</h3>
+          {canManageTransportUnits && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditingProgramacion(null)
+                setShowProgramacionForm(true)
+              }}
+              className="text-[11px] bg-sky-600 hover:bg-sky-500 text-white px-2 py-1 rounded-md font-medium transition-colors"
+            >
+              + Nueva UT
+            </button>
+          )}
+        </div>
+        {canManageTransportUnits && (
+          <div className="mb-3 rounded-lg border border-gray-800 bg-gray-950/70 p-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-medium text-gray-300">Programación recurrente diaria</span>
+              <span className="text-[9px] text-gray-500">{programacionesFiltradas.length} de {programaciones.length}</span>
+            </div>
+            {programaciones.length === 0 ? (
+              <p className="mt-1 text-[10px] text-gray-500">No hay UT creadas por interfaz en este contexto.</p>
+            ) : programacionesFiltradas.length === 0 ? (
+              <p className="mt-1 text-[10px] text-gray-500">No hay UT creadas por interfaz que coincidan con el filtro actual.</p>
+            ) : (
+              <div className="mt-2 space-y-1.5">
+                {programacionesFiltradas.map((programacion) => (
+                  <div key={programacion.id} className="rounded-md border border-gray-800 bg-gray-900/80 px-2 py-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-semibold text-sky-400">
+                          {programacion.origenOACI} → {programacion.destinoOACI}
+                        </div>
+                        <div className="text-[10px] text-gray-400">
+                          {programacion.horaSalidaLocal.slice(0, 5)} - {programacion.horaLlegadaLocal.slice(0, 5)} · cap. {programacion.capacidad}
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingProgramacion(programacion)
+                            setShowProgramacionForm(true)
+                          }}
+                          className="text-[10px] text-gray-400 hover:text-sky-400 px-1 py-0.5 rounded transition-colors"
+                          title="Editar programación"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletingProgramacionId(programacion.id || null)}
+                          className="text-[10px] text-gray-400 hover:text-red-400 px-1 py-0.5 rounded transition-colors"
+                          title="Eliminar programación"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                    {deletingProgramacionId === programacion.id && (
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => programacion.id && handleDeleteProgramacion(programacion.id)}
+                          className="flex-1 rounded-md bg-red-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-red-500"
+                        >
+                          Confirmar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletingProgramacionId(null)}
+                          className="flex-1 rounded-md bg-gray-700 px-2 py-1 text-[10px] font-medium text-white hover:bg-gray-600"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <div className="flex gap-1.5">
           <select
             value={searchScope}
@@ -406,7 +569,9 @@ function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId, onVuel
       <div className="flex-1 overflow-y-auto">
         {filtrados.length === 0 && (
           <p className="text-center text-xs text-gray-500 py-8">
-            {term ? 'No se encontraron vuelos' : 'No hay vuelos disponibles'}
+            {programacionesFiltradas.length > 0
+              ? 'No hay vuelos activos para este filtro. Revisa la programación recurrente superior.'
+              : term ? 'No se encontraron vuelos' : 'No hay vuelos disponibles'}
           </p>
         )}
 
@@ -542,6 +707,17 @@ function VueloListPanel({ vuelos, envios, onEnvioSelect, selectedEnvioId, onVuel
           </button>
         )}
       </div>
+
+      <VueloProgramacionModal
+        isOpen={showProgramacionForm}
+        aeropuertos={aeropuertosDisponibles}
+        programacion={editingProgramacion}
+        onClose={() => {
+          setShowProgramacionForm(false)
+          setEditingProgramacion(null)
+        }}
+        onSave={handleProgramacionSave}
+      />
     </div>
   )
 }

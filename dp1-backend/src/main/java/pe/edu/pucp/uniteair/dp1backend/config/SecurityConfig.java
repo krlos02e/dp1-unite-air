@@ -11,6 +11,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.http.HttpMethod;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -30,18 +31,28 @@ public class SecurityConfig {
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/**").permitAll()
-                .requestMatchers("/carga/**").permitAll()
-                .requestMatchers("/simulacion/**").permitAll()
-                .requestMatchers("/dashboard/**").permitAll()
-                .requestMatchers("/planificacion/**").permitAll()
-                .requestMatchers("/vuelos/**").permitAll()
-                .requestMatchers("/envios/**").permitAll()
-                .requestMatchers("/almacenes/**").permitAll()
-                .anyRequest().authenticated())
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .requestMatchers(publicPaths("auth")).permitAll()
+                .requestMatchers(publicPaths("carga")).permitAll()
+                .requestMatchers(publicPaths("simulacion")).permitAll()
+                .requestMatchers(publicPaths("dashboard")).permitAll()
+                .requestMatchers(publicPaths("planificacion")).permitAll()
+                .requestMatchers(publicPaths("vuelos")).permitAll()
+                .requestMatchers(publicPaths("envios")).permitAll()
+                .requestMatchers(publicPaths("almacenes")).permitAll()
+                .anyRequest().permitAll())
             .formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable());
         return http.build();
+    }
+
+    private static String[] publicPaths(String basePath) {
+        return new String[] {
+                "/" + basePath,
+                "/" + basePath + "/**",
+                "/api/" + basePath,
+                "/api/" + basePath + "/**"
+        };
     }
 
     @Bean
@@ -58,9 +69,14 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("*"));
+        config.setAllowedOriginPatterns(List.of(
+                "http://localhost:*",
+                "http://127.0.0.1:*",
+                "http://0.0.0.0:*"
+        ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
+        config.setExposedHeaders(List.of("*"));
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -6,6 +6,7 @@ import pe.edu.pucp.uniteair.dp1backend.dto.LogEntry;
 import pe.edu.pucp.uniteair.dp1backend.dto.SimulationState;
 import pe.edu.pucp.uniteair.dp1backend.dto.SimulacionConfigRequest;
 import pe.edu.pucp.uniteair.dp1backend.engine.SimulationEngine;
+import pe.edu.pucp.uniteair.dp1backend.entity.AlmacenContexto;
 import pe.edu.pucp.uniteair.dp1backend.entity.SimulationSession;
 import pe.edu.pucp.uniteair.dp1backend.repository.SimulationSessionRepository;
 import tasf.config.Config_Simulacion;
@@ -26,15 +27,18 @@ public class SimulationService {
     private final SimulationCache simulationCache;
     private final SimulationEngine simulationEngine;
     private final CargaArchivosService cargaArchivosService;
+    private final DatasetContextService datasetContextService;
 
     public SimulationService(SimulationSessionRepository sessionRepository,
                              SimulationCache simulationCache,
                              SimulationEngine simulationEngine,
-                             CargaArchivosService cargaArchivosService) {
+                             CargaArchivosService cargaArchivosService,
+                             DatasetContextService datasetContextService) {
         this.sessionRepository = sessionRepository;
         this.simulationCache = simulationCache;
         this.simulationEngine = simulationEngine;
         this.cargaArchivosService = cargaArchivosService;
+        this.datasetContextService = datasetContextService;
     }
 
     public SimulationState iniciarSimulacion(SimulacionConfigRequest req, Dataset dataset) {
@@ -62,7 +66,12 @@ public class SimulationService {
         config.setEvaporacionFeromona(0.4);
 
         cargaArchivosService.cargarDatasetConFechas(fecha, duracionDias);
-        dataset = cargaArchivosService.obtenerUltimoDataset();
+        dataset = datasetContextService.construirDatasetEfectivo(
+                AlmacenContexto.SIMULACION,
+                cargaArchivosService.obtenerUltimoDataset(),
+                fecha,
+                duracionDias + 2
+        );
         if (dataset == null) {
             return SimulationState.builder()
                     .sessionId(sessionId)

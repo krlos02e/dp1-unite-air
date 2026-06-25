@@ -1,10 +1,14 @@
 package pe.edu.pucp.uniteair.dp1backend.service;
 
 import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.pucp.uniteair.dp1backend.config.AeropuertoCoordenadas;
+import pe.edu.pucp.uniteair.dp1backend.entity.AlmacenConfiguracion;
+import pe.edu.pucp.uniteair.dp1backend.entity.AlmacenContexto;
 import pe.edu.pucp.uniteair.dp1backend.entity.Almacen;
+import pe.edu.pucp.uniteair.dp1backend.repository.AlmacenConfiguracionRepository;
 import pe.edu.pucp.uniteair.dp1backend.repository.AlmacenRepository;
 import tasf.core.Dataset;
 import tasf.model.Aeropuerto;
@@ -24,10 +28,14 @@ import java.util.Set;
 public class AlmacenService {
 
     private final AlmacenRepository almacenRepository;
+    private final AlmacenConfiguracionRepository almacenConfiguracionRepository;
     private final CargaArchivosService cargaArchivosService;
 
-    public AlmacenService(AlmacenRepository almacenRepository, CargaArchivosService cargaArchivosService) {
+    public AlmacenService(AlmacenRepository almacenRepository,
+                          AlmacenConfiguracionRepository almacenConfiguracionRepository,
+                          @Lazy CargaArchivosService cargaArchivosService) {
         this.almacenRepository = almacenRepository;
+        this.almacenConfiguracionRepository = almacenConfiguracionRepository;
         this.cargaArchivosService = cargaArchivosService;
     }
 
@@ -130,61 +138,168 @@ public class AlmacenService {
         return "AMERICA";
     }
 
-    public List<Almacen> listar() {
-        return almacenRepository.findAll();
+    public List<Almacen> listar(AlmacenContexto contexto) {
+        Map<String, Almacen> mapa = getMapaAlmacenes(contexto);
+        return mapa.values().stream()
+                .sorted((a, b) -> a.getCodigoOACI().compareToIgnoreCase(b.getCodigoOACI()))
+                .toList();
     }
 
-    public Optional<Almacen> obtenerPorId(String codigoOACI) {
-        return almacenRepository.findById(codigoOACI);
+    public Optional<Almacen> obtenerPorId(AlmacenContexto contexto, String codigoOACI) {
+        return Optional.ofNullable(getMapaAlmacenes(contexto).get(codigoOACI));
     }
 
     @Transactional
-    public Almacen crear(Almacen almacen) {
-        if (almacenRepository.existsById(almacen.getCodigoOACI())) {
-            throw new IllegalArgumentException("Ya existe un almacén con código " + almacen.getCodigoOACI());
+    public Almacen crear(AlmacenContexto contexto, Almacen almacen) {
+        validarDatosAlmacen(almacen, false);
+        if (almacenConfiguracionRepository.existsByContextoAndCodigoOACI(contexto, almacen.getCodigoOACI())) {
+            throw new IllegalArgumentException(
+                    "Ya existe una configuración de almacén para " + almacen.getCodigoOACI()
+                            + " en el contexto " + contexto
+            );
         }
-        mapaCacheTime = 0;
-        return almacenRepository.save(almacen);
+
+        AlmacenConfiguracion configuracion = AlmacenConfiguracion.builder()
+                .contexto(contexto)
+                .codigoOACI(almacen.getCodigoOACI())
+                .ciudad(almacen.getCiudad())
+                .pais(almacen.getPais())
+                .continente(almacen.getContinente())
+                .gmtOffsetMinutos(almacen.getGmtOffsetMinutos())
+                .capacidadMaxima(almacen.getCapacidadMaxima())
+                .latitud(almacen.getLatitud())
+                .longitud(almacen.getLongitud())
+                .build();
+        almacenConfiguracionRepository.save(configuracion);
+        invalidarCache(contexto);
+        return getMapaAlmacenes(contexto).get(almacen.getCodigoOACI());
     }
 
     @Transactional
-    public Almacen actualizar(String codigoOACI, Almacen datos) {
-        Almacen existente = almacenRepository.findById(codigoOACI)
-                .orElseThrow(() -> new IllegalArgumentException("No existe almacén " + codigoOACI));
-        existente.setCiudad(datos.getCiudad());
-        existente.setPais(datos.getPais());
-        existente.setContinente(datos.getContinente());
-        existente.setGmtOffsetMinutos(datos.getGmtOffsetMinutos());
-        existente.setCapacidadMaxima(datos.getCapacidadMaxima());
-        existente.setLatitud(datos.getLatitud());
-        existente.setLongitud(datos.getLongitud());
-        mapaCacheTime = 0;
-        return almacenRepository.save(existente);
+    public Almacen actualizar(AlmacenContexto contexto, String codigoOACI, Almacen datos) {
+        validarDatosAlmacen(datos, true);
+        AlmacenConfiguracion configuracion = almacenConfiguracionRepository
+                .findByContextoAndCodigoOACI(contexto, codigoOACI)
+                .orElseGet(() -> AlmacenConfiguracion.builder()
+                        .contexto(contexto)
+                        .codigoOACI(codigoOACI)
+                        .build());
+
+        configuracion.setCiudad(datos.getCiudad());
+        configuracion.setPais(datos.getPais());
+        configuracion.setContinente(datos.getContinente());
+        configuracion.setGmtOffsetMinutos(datos.getGmtOffsetMinutos());
+        configuracion.setCapacidadMaxima(datos.getCapacidadMaxima());
+        configuracion.setLatitud(datos.getLatitud());
+        configuracion.setLongitud(datos.getLongitud());
+        almacenConfiguracionRepository.save(configuracion);
+        invalidarCache(contexto);
+        return getMapaAlmacenes(contexto).get(codigoOACI);
     }
 
     @Transactional
-    public void eliminar(String codigoOACI) {
-        if (!almacenRepository.existsById(codigoOACI)) {
-            throw new IllegalArgumentException("No existe almacén " + codigoOACI);
+    public void eliminar(AlmacenContexto contexto, String codigoOACI) {
+        if (!almacenConfiguracionRepository.existsByContextoAndCodigoOACI(contexto, codigoOACI)) {
+            throw new IllegalArgumentException(
+                    "No existe una configuración editable para " + codigoOACI
+                            + " en el contexto " + contexto
+            );
         }
-        almacenRepository.deleteById(codigoOACI);
-        mapaCacheTime = 0;
+        almacenConfiguracionRepository.deleteByContextoAndCodigoOACI(contexto, codigoOACI);
+        invalidarCache(contexto);
     }
 
-    private volatile Map<String, Almacen> cachedMapaAlmacenes = new HashMap<>();
-    private volatile long mapaCacheTime = 0;
+    @Transactional
+    public void limpiarContexto(AlmacenContexto contexto) {
+        almacenConfiguracionRepository.deleteAllByContexto(contexto);
+        invalidarCache(contexto);
+    }
+
+    private final Map<AlmacenContexto, Map<String, Almacen>> cachedMapaAlmacenes = new HashMap<>();
+    private final Map<AlmacenContexto, Long> mapaCacheTime = new HashMap<>();
     private static final long MAPA_CACHE_TTL_MS = 5000;
 
-    public Map<String, Almacen> getMapaAlmacenes() {
+    public Map<String, Almacen> getMapaAlmacenes(AlmacenContexto contexto) {
         long now = System.currentTimeMillis();
-        if (now - mapaCacheTime > MAPA_CACHE_TTL_MS || cachedMapaAlmacenes.isEmpty()) {
-            Map<String, Almacen> mapa = new HashMap<>();
-            for (Almacen a : almacenRepository.findAll()) {
-                mapa.put(a.getCodigoOACI(), a);
-            }
-            cachedMapaAlmacenes = mapa;
-            mapaCacheTime = now;
+        long cacheTime = mapaCacheTime.getOrDefault(contexto, 0L);
+        Map<String, Almacen> cached = cachedMapaAlmacenes.get(contexto);
+        if (now - cacheTime > MAPA_CACHE_TTL_MS || cached == null || cached.isEmpty()) {
+            Map<String, Almacen> mapa = construirMapaEfectivo(contexto);
+            cachedMapaAlmacenes.put(contexto, mapa);
+            mapaCacheTime.put(contexto, now);
         }
-        return cachedMapaAlmacenes;
+        return cachedMapaAlmacenes.getOrDefault(contexto, Map.of());
+    }
+
+    private Map<String, Almacen> construirMapaEfectivo(AlmacenContexto contexto) {
+        Map<String, Almacen> mapa = new HashMap<>();
+        for (Almacen base : almacenRepository.findAll()) {
+            Almacen copia = copiar(base);
+            copia.setEditable(false);
+            mapa.put(base.getCodigoOACI(), copia);
+        }
+
+        for (AlmacenConfiguracion override : almacenConfiguracionRepository.findAllByContexto(contexto)) {
+            Almacen base = mapa.getOrDefault(
+                    override.getCodigoOACI(),
+                    Almacen.builder().codigoOACI(override.getCodigoOACI()).build()
+            );
+            Almacen efectivo = aplicarOverride(base, override);
+            efectivo.setEditable(true);
+            mapa.put(override.getCodigoOACI(), efectivo);
+        }
+        return mapa;
+    }
+
+    private Almacen aplicarOverride(Almacen base, AlmacenConfiguracion override) {
+        Almacen.AlmacenBuilder builder = Almacen.builder()
+                .codigoOACI(base.getCodigoOACI())
+                .ciudad(base.getCiudad())
+                .pais(base.getPais())
+                .continente(base.getContinente())
+                .gmtOffsetMinutos(base.getGmtOffsetMinutos())
+                .capacidadMaxima(base.getCapacidadMaxima())
+                .latitud(base.getLatitud())
+                .longitud(base.getLongitud());
+
+        if (override.getCiudad() != null) builder.ciudad(override.getCiudad());
+        if (override.getPais() != null) builder.pais(override.getPais());
+        if (override.getContinente() != null) builder.continente(override.getContinente());
+        if (override.getGmtOffsetMinutos() != null) builder.gmtOffsetMinutos(override.getGmtOffsetMinutos());
+        if (override.getCapacidadMaxima() != null) builder.capacidadMaxima(override.getCapacidadMaxima());
+        if (override.getLatitud() != null) builder.latitud(override.getLatitud());
+        if (override.getLongitud() != null) builder.longitud(override.getLongitud());
+        return builder.build();
+    }
+
+    private Almacen copiar(Almacen almacen) {
+        return Almacen.builder()
+                .codigoOACI(almacen.getCodigoOACI())
+                .ciudad(almacen.getCiudad())
+                .pais(almacen.getPais())
+                .continente(almacen.getContinente())
+                .gmtOffsetMinutos(almacen.getGmtOffsetMinutos())
+                .capacidadMaxima(almacen.getCapacidadMaxima())
+                .latitud(almacen.getLatitud())
+                .longitud(almacen.getLongitud())
+                .build();
+    }
+
+    private void validarDatosAlmacen(Almacen almacen, boolean actualizacion) {
+        String codigo = almacen.getCodigoOACI();
+        if (!actualizacion && (codigo == null || !codigo.matches("[A-Z0-9]{4}"))) {
+            throw new IllegalArgumentException("El código OACI debe tener exactamente 4 caracteres alfanuméricos en mayúscula");
+        }
+        if (almacen.getCiudad() == null || almacen.getCiudad().isBlank()) {
+            throw new IllegalArgumentException("La ciudad es obligatoria");
+        }
+        if (almacen.getCapacidadMaxima() <= 0) {
+            throw new IllegalArgumentException("La capacidad máxima debe ser mayor que 0");
+        }
+    }
+
+    private void invalidarCache(AlmacenContexto contexto) {
+        cachedMapaAlmacenes.remove(contexto);
+        mapaCacheTime.remove(contexto);
     }
 }

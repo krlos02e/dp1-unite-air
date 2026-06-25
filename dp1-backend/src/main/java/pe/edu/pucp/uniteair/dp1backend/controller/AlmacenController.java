@@ -3,6 +3,7 @@ package pe.edu.pucp.uniteair.dp1backend.controller;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import pe.edu.pucp.uniteair.dp1backend.entity.Almacen;
+import pe.edu.pucp.uniteair.dp1backend.entity.AlmacenContexto;
 import pe.edu.pucp.uniteair.dp1backend.service.AlmacenService;
 
 import java.util.List;
@@ -19,21 +20,29 @@ public class AlmacenController {
     }
 
     @GetMapping
-    public ResponseEntity<List<Almacen>> listar() {
-        return ResponseEntity.ok(almacenService.listar());
+    public ResponseEntity<List<Almacen>> listar(
+            @RequestParam(defaultValue = "OPERACION") AlmacenContexto contexto
+    ) {
+        return ResponseEntity.ok(almacenService.listar(contexto));
     }
 
     @GetMapping("/{codigo}")
-    public ResponseEntity<Almacen> obtener(@PathVariable String codigo) {
-        return almacenService.obtenerPorId(codigo)
+    public ResponseEntity<Almacen> obtener(
+            @PathVariable String codigo,
+            @RequestParam(defaultValue = "OPERACION") AlmacenContexto contexto
+    ) {
+        return almacenService.obtenerPorId(contexto, codigo)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping
-    public ResponseEntity<?> crear(@RequestBody Almacen almacen) {
+    public ResponseEntity<?> crear(
+            @RequestParam(defaultValue = "OPERACION") AlmacenContexto contexto,
+            @RequestBody Almacen almacen
+    ) {
         try {
-            Almacen creado = almacenService.crear(almacen);
+            Almacen creado = almacenService.crear(contexto, almacen);
             return ResponseEntity.ok(creado);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -41,9 +50,13 @@ public class AlmacenController {
     }
 
     @PutMapping("/{codigo}")
-    public ResponseEntity<?> actualizar(@PathVariable String codigo, @RequestBody Almacen datos) {
+    public ResponseEntity<?> actualizar(
+            @PathVariable String codigo,
+            @RequestParam(defaultValue = "OPERACION") AlmacenContexto contexto,
+            @RequestBody Almacen datos
+    ) {
         try {
-            Almacen actualizado = almacenService.actualizar(codigo, datos);
+            Almacen actualizado = almacenService.actualizar(contexto, codigo, datos);
             return ResponseEntity.ok(actualizado);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -51,9 +64,12 @@ public class AlmacenController {
     }
 
     @DeleteMapping("/{codigo}")
-    public ResponseEntity<?> eliminar(@PathVariable String codigo) {
+    public ResponseEntity<?> eliminar(
+            @PathVariable String codigo,
+            @RequestParam(defaultValue = "OPERACION") AlmacenContexto contexto
+    ) {
         try {
-            almacenService.eliminar(codigo);
+            almacenService.eliminar(contexto, codigo);
             return ResponseEntity.ok(Map.of("success", true));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

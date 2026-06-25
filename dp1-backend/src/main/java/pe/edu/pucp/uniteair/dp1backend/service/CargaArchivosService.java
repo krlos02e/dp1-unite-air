@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import pe.edu.pucp.uniteair.dp1backend.entity.AlmacenContexto;
 import tasf.config.Config_Simulacion;
 import tasf.core.Dataset;
 import tasf.core.EstadoOperacional;
@@ -53,6 +54,11 @@ public class CargaArchivosService {
         t.setDaemon(true);
         return t;
     });
+    private final DatasetContextService datasetContextService;
+
+    public CargaArchivosService(DatasetContextService datasetContextService) {
+        this.datasetContextService = datasetContextService;
+    }
 
     public record CargaResult(boolean success, String message, int aeropuertosCount, int vuelosCount,
                               int paquetesCount, String datasetId) {}
@@ -102,9 +108,10 @@ public class CargaArchivosService {
         if (dataset == null || dataset.getPaquetes().isEmpty()) return;
         if (planificando) return;
         planificando = true;
+        Dataset datasetOperacion = datasetContextService.construirDatasetEfectivo(AlmacenContexto.OPERACION, dataset);
         executor.submit(() -> {
             try {
-                planificarDataset(dataset);
+                planificarDataset(datasetOperacion);
             } finally {
                 planificando = false;
             }
@@ -192,6 +199,13 @@ public class CargaArchivosService {
 
     public synchronized Dataset obtenerUltimoDataset() {
         return lastDataset;
+    }
+
+    public synchronized void replanificarOperacionActual() {
+        if (lastDataset == null) {
+            return;
+        }
+        lanzarPlanificacionEnBackground(lastDataset);
     }
 
     public synchronized EstadoOperacional obtenerEstadoOperacional() {
@@ -374,10 +388,14 @@ public class CargaArchivosService {
             config.setMaxRutasPorPaquete(4);
             config.setMaxEscalas(2);
 
-            Dataset datasetPendientes = new Dataset(
+            Dataset datasetPendientesBase = new Dataset(
                 lastDataset.getAeropuertos(),
                 lastDataset.getVuelos(),
                 pendientes
+            );
+            Dataset datasetPendientes = datasetContextService.construirDatasetEfectivo(
+                    AlmacenContexto.OPERACION,
+                    datasetPendientesBase
             );
 
             PlanificacionUtils.limpiarCacheGlobal();
@@ -391,10 +409,14 @@ public class CargaArchivosService {
             this.rutasAsignadas = todasLasRutas;
 
             // 6. Reconstruir estado completo desde las rutas mergeadas
-            Dataset datasetCompleto = new Dataset(
+            Dataset datasetCompletoBase = new Dataset(
                 lastDataset.getAeropuertos(),
                 lastDataset.getVuelos(),
                 paquetesIncrementales
+            );
+            Dataset datasetCompleto = datasetContextService.construirDatasetEfectivo(
+                    AlmacenContexto.OPERACION,
+                    datasetCompletoBase
             );
             this.estadoOperacional = PlanificacionUtils.construirEstadoConAsignaciones(
                 todasLasRutas, datasetCompleto, config);
@@ -523,7 +545,8 @@ public class CargaArchivosService {
             if (a != null) aeropuertosFiltrados.put(codigo, a);
         }
 
-        return new Dataset(aeropuertosFiltrados, vuelosFiltrados, paquetesFiltrados);
+        Dataset base = new Dataset(aeropuertosFiltrados, vuelosFiltrados, paquetesFiltrados);
+        return datasetContextService.construirDatasetEfectivo(AlmacenContexto.OPERACION, base);
     }
 
     public synchronized Dataset filtrarSoloGestionEnvios(
@@ -569,7 +592,8 @@ public class CargaArchivosService {
             if (a != null) aeropuertosFiltrados.put(codigo, a);
         }
 
-        return new Dataset(aeropuertosFiltrados, vuelosFiltrados, paquetesFiltrados);
+        Dataset base = new Dataset(aeropuertosFiltrados, vuelosFiltrados, paquetesFiltrados);
+        return datasetContextService.construirDatasetEfectivo(AlmacenContexto.OPERACION, base);
     }
 
     public synchronized void actualizarEstadoOperacional(
@@ -634,9 +658,8 @@ public class CargaArchivosService {
     }
 
     private Vuelo buscarVuelo(String origen, String destino, LocalDate fecha, LocalTime horaSalidaLocal) {
-        if (lastDataset == null) return null;
-
-        for (Vuelo v : lastDataset.getVuelos()) {
+        Dataset datasetOperacion = datasetContextService.construirDatasetEfectivo(AlmacenContexto.OPERACION, lastDataset);
+        for (Vuelo v : datasetOperacion.getVuelos()) {
             if (v.getOrigen().getCodigoOACI().equals(origen)
                     && v.getDestino().getCodigoOACI().equals(destino)
                     && v.getSalidaUtc().toLocalDate().equals(fecha)

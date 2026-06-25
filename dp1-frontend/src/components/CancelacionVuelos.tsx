@@ -19,7 +19,7 @@ export default function CancelacionVuelos() {
     try {
       setLoading(true)
       const [vuelosData, canceladosData] = await Promise.all([
-        cargaArchivosService.obtenerVuelos(),
+        cargaArchivosService.obtenerVuelos('OPERACION'),
         cargaArchivosService.obtenerVuelosCancelados(),
       ])
       setVuelos(vuelosData)

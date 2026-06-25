@@ -1,5 +1,17 @@
 import { HttpClient } from './HttpClient'
-import type { CargaResult, AeropuertoDTO, VueloDTO, CancelarVueloResult, EnvioEntrada, AgregarEnviosResult, EnviosIncrementalesResponse, EnvioBusquedaResponse, AlmacenDTO } from '../types'
+import type {
+  CargaResult,
+  AeropuertoDTO,
+  VueloDTO,
+  CancelarVueloResult,
+  EnvioEntrada,
+  AgregarEnviosResult,
+  EnviosIncrementalesResponse,
+  EnvioBusquedaResponse,
+  AlmacenDTO,
+  AlmacenContexto,
+  ProgramacionVueloDTO,
+} from '../types'
 
 class CargaArchivosService extends HttpClient {
   upload(
@@ -21,12 +33,12 @@ class CargaArchivosService extends HttpClient {
     }).then((r) => r.data as CargaResult)
   }
 
-  obtenerAeropuertos(): Promise<AeropuertoDTO[]> {
-    return this.get<AeropuertoDTO[]>('/carga/aeropuertos')
+  obtenerAeropuertos(contexto: AlmacenContexto = 'OPERACION'): Promise<AeropuertoDTO[]> {
+    return this.get<AeropuertoDTO[]>('/carga/aeropuertos', { contexto })
   }
 
-  obtenerVuelos(): Promise<VueloDTO[]> {
-    return this.get<VueloDTO[]>('/carga/vuelos')
+  obtenerVuelos(contexto: AlmacenContexto = 'OPERACION'): Promise<VueloDTO[]> {
+    return this.get<VueloDTO[]>('/carga/vuelos', { contexto })
   }
 
   cancelarVuelo(origen: string, destino: string, horaSalidaLocal: string): Promise<CancelarVueloResult> {
@@ -36,6 +48,22 @@ class CargaArchivosService extends HttpClient {
 
   obtenerVuelosCancelados(): Promise<string[]> {
     return this.get<string[]>('/vuelos/cancelados')
+  }
+
+  obtenerProgramacionesVuelo(contexto: AlmacenContexto = 'OPERACION'): Promise<ProgramacionVueloDTO[]> {
+    return this.get<ProgramacionVueloDTO[]>('/vuelos/programaciones', { contexto })
+  }
+
+  crearProgramacionVuelo(data: ProgramacionVueloDTO, contexto: AlmacenContexto = 'OPERACION'): Promise<ProgramacionVueloDTO> {
+    return this.instance.post('/vuelos/programaciones', data, { params: { contexto } }).then((r) => r.data)
+  }
+
+  actualizarProgramacionVuelo(id: number, data: ProgramacionVueloDTO, contexto: AlmacenContexto = 'OPERACION'): Promise<ProgramacionVueloDTO> {
+    return this.instance.put(`/vuelos/programaciones/${id}`, data, { params: { contexto } }).then((r) => r.data)
+  }
+
+  eliminarProgramacionVuelo(id: number, contexto: AlmacenContexto = 'OPERACION'): Promise<void> {
+    return this.instance.delete(`/vuelos/programaciones/${id}`, { params: { contexto } }).then(() => undefined)
   }
 
   agregarEnvios(envios: EnvioEntrada[]): Promise<AgregarEnviosResult> {
@@ -61,20 +89,20 @@ class CargaArchivosService extends HttpClient {
   }
 
   // ---- Almacenes CRUD ----
-  obtenerAlmacenes(): Promise<AlmacenDTO[]> {
-    return this.get<AlmacenDTO[]>('/almacenes')
+  obtenerAlmacenes(contexto: AlmacenContexto = 'OPERACION'): Promise<AlmacenDTO[]> {
+    return this.get<AlmacenDTO[]>('/almacenes', { contexto })
   }
 
-  crearAlmacen(data: AlmacenDTO): Promise<AlmacenDTO> {
-    return this.instance.post('/almacenes', data).then((r) => r.data)
+  crearAlmacen(data: AlmacenDTO, contexto: AlmacenContexto = 'OPERACION'): Promise<AlmacenDTO> {
+    return this.instance.post('/almacenes', data, { params: { contexto } }).then((r) => r.data)
   }
 
-  actualizarAlmacen(codigo: string, data: Partial<AlmacenDTO>): Promise<AlmacenDTO> {
-    return this.instance.put(`/almacenes/${codigo}`, data).then((r) => r.data)
+  actualizarAlmacen(codigo: string, data: Partial<AlmacenDTO>, contexto: AlmacenContexto = 'OPERACION'): Promise<AlmacenDTO> {
+    return this.instance.put(`/almacenes/${codigo}`, data, { params: { contexto } }).then((r) => r.data)
   }
 
-  eliminarAlmacen(codigo: string): Promise<void> {
-    return this.instance.delete(`/almacenes/${codigo}`)
+  eliminarAlmacen(codigo: string, contexto: AlmacenContexto = 'OPERACION'): Promise<void> {
+    return this.instance.delete(`/almacenes/${codigo}`, { params: { contexto } }).then(() => undefined)
   }
 }
 

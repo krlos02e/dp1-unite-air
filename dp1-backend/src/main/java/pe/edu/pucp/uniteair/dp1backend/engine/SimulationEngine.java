@@ -5,7 +5,10 @@ import org.springframework.stereotype.Service;
 import pe.edu.pucp.uniteair.dp1backend.cache.SimulationCache;
 import pe.edu.pucp.uniteair.dp1backend.config.AeropuertoCoordenadas;
 import pe.edu.pucp.uniteair.dp1backend.dto.*;
+import pe.edu.pucp.uniteair.dp1backend.entity.Almacen;
+import pe.edu.pucp.uniteair.dp1backend.entity.AlmacenContexto;
 import pe.edu.pucp.uniteair.dp1backend.repository.SimulationSessionRepository;
+import pe.edu.pucp.uniteair.dp1backend.service.AlmacenService;
 import pe.edu.pucp.uniteair.dp1backend.service.CargaArchivosService;
 import tasf.config.Config_Simulacion;
 import tasf.core.Dataset;
@@ -38,6 +41,7 @@ public class SimulationEngine {
     private final SimulationCache simulationCache;
     private final SimulationSessionRepository sessionRepository;
     private final CargaArchivosService cargaArchivosService;
+    private final AlmacenService almacenService;
     private final Map<String, CompletableFuture<Void>> activeSimulations = new ConcurrentHashMap<>();
     private final Map<String, Boolean> cancellationFlags = new ConcurrentHashMap<>();
     private final Map<String, Boolean> pauseFlags = new ConcurrentHashMap<>();
@@ -47,10 +51,14 @@ public class SimulationEngine {
     private final Map<String, Map<String, double[]>> flightCoordCache = new ConcurrentHashMap<>();
     private final Map<String, Map<String, Long>> flightDurationCache = new ConcurrentHashMap<>();
 
-    public SimulationEngine(SimulationCache simulationCache, SimulationSessionRepository sessionRepository, CargaArchivosService cargaArchivosService) {
+    public SimulationEngine(SimulationCache simulationCache,
+                            SimulationSessionRepository sessionRepository,
+                            CargaArchivosService cargaArchivosService,
+                            AlmacenService almacenService) {
         this.simulationCache = simulationCache;
         this.sessionRepository = sessionRepository;
         this.cargaArchivosService = cargaArchivosService;
+        this.almacenService = almacenService;
     }
 
     public void pausarSimulacion(String sessionId) {
@@ -609,6 +617,7 @@ public class SimulationEngine {
     }
 
     private void precalcularCaches(String sessionId, Dataset dataset) {
+        Map<String, Almacen> almacenMap = almacenService.getMapaAlmacenes(AlmacenContexto.SIMULACION);
         Map<String, List<String>> entrantesMap = new HashMap<>();
         Map<String, List<String>> salientesMap = new HashMap<>();
         for (Vuelo v : dataset.getVuelos()) {
@@ -619,15 +628,24 @@ public class SimulationEngine {
         }
 
         List<AeropuertoDTO> airportBase = new ArrayList<>();
-        for (Aeropuerto a : dataset.getAeropuertos().values()) {
-            double[] coord = AeropuertoCoordenadas.get(a.getCodigoOACI());
+        Set<String> codigos = new LinkedHashSet<>(dataset.getAeropuertos().keySet());
+        codigos.addAll(almacenMap.keySet());
+        for (String codigo : codigos) {
+            Aeropuerto a = dataset.getAeropuertos().get(codigo);
+            double[] coord = AeropuertoCoordenadas.get(codigo);
+            Almacen almacen = almacenMap.get(codigo);
+            double latitud = almacen != null ? almacen.getLatitud() : (coord != null ? coord[0] : 0.0);
+            double longitud = almacen != null ? almacen.getLongitud() : (coord != null ? coord[1] : 0.0);
+            int capacidad = almacen != null ? almacen.getCapacidadMaxima() : (a != null ? a.getCapacidadMaxima() : 0);
             airportBase.add(AeropuertoDTO.builder()
-                    .codigoOACI(a.getCodigoOACI())
-                    .latitud(coord[0]).longitud(coord[1])
-                    .capacidadMaxima(a.getCapacidadMaxima())
+                    .codigoOACI(codigo)
+                    .latitud(latitud).longitud(longitud)
+                    .ciudad(almacen != null ? almacen.getCiudad() : null)
+                    .pais(almacen != null ? almacen.getPais() : null)
+                    .capacidadMaxima(capacidad)
                     .ocupacionActual(0)
-                    .vuelosEntrantes(entrantesMap.getOrDefault(a.getCodigoOACI(), new ArrayList<>()))
-                    .vuelosSalientes(salientesMap.getOrDefault(a.getCodigoOACI(), new ArrayList<>()))
+                    .vuelosEntrantes(entrantesMap.getOrDefault(codigo, new ArrayList<>()))
+                    .vuelosSalientes(salientesMap.getOrDefault(codigo, new ArrayList<>()))
                     .build());
         }
         airportBaseCache.put(sessionId, airportBase);
@@ -637,7 +655,13 @@ public class SimulationEngine {
         for (Vuelo v : dataset.getVuelos()) {
             double[] orig = AeropuertoCoordenadas.get(v.getOrigen().getCodigoOACI());
             double[] dest = AeropuertoCoordenadas.get(v.getDestino().getCodigoOACI());
-            flightCoords.put(v.getId(), new double[]{orig[0], orig[1], dest[0], dest[1]});
+            Almacen almOrigen = almacenMap.get(v.getOrigen().getCodigoOACI());
+            Almacen almDestino = almacenMap.get(v.getDestino().getCodigoOACI());
+            double latOrigen = almOrigen != null ? almOrigen.getLatitud() : orig[0];
+            double lonOrigen = almOrigen != null ? almOrigen.getLongitud() : orig[1];
+            double latDestino = almDestino != null ? almDestino.getLatitud() : dest[0];
+            double lonDestino = almDestino != null ? almDestino.getLongitud() : dest[1];
+            flightCoords.put(v.getId(), new double[]{latOrigen, lonOrigen, latDestino, lonDestino});
             if (v.getSalidaUtc() != null && v.getLlegadaUtc() != null) {
                 flightDurations.put(v.getId(), ChronoUnit.MINUTES.between(v.getSalidaUtc(), v.getLlegadaUtc()));
             }
@@ -729,6 +753,9 @@ public class SimulationEngine {
                             .cargaActual(cargaVuelo.getOrDefault(v.getId(), 0))
                             .progresoVuelo(progreso)
                             .estado(estado)
+                            .programacionId(extraerProgramacionId(v.getId()))
+                            .editable(v.getId() != null && v.getId().startsWith("USR-"))
+                            .recurrente(v.getId() != null && v.getId().startsWith("USR-"))
                             .build());
                 }
             }
@@ -770,6 +797,8 @@ public class SimulationEngine {
                 aeropuertosDTO.add(AeropuertoDTO.builder()
                         .codigoOACI(base.getCodigoOACI())
                         .latitud(base.getLatitud()).longitud(base.getLongitud())
+                        .ciudad(base.getCiudad())
+                        .pais(base.getPais())
                         .capacidadMaxima(base.getCapacidadMaxima())
                         .ocupacionActual(ocup)
                         .vuelosEntrantes(entrantes)
@@ -864,6 +893,21 @@ public class SimulationEngine {
                 .build();
 
         simulationCache.put(sessionId, state);
+    }
+
+    private Long extraerProgramacionId(String vueloId) {
+        if (vueloId == null || !vueloId.startsWith("USR-")) {
+            return null;
+        }
+        String[] partes = vueloId.split("-");
+        if (partes.length < 3) {
+            return null;
+        }
+        try {
+            return Long.parseLong(partes[1]);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private void actualizarEstadoColapsado(String sessionId, LocalDateTime simTime, String motivo, List<LogEntry> logs) {

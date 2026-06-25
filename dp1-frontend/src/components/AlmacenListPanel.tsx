@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { cargaArchivosService } from '../services/CargaArchivosService'
 import { getAirportCity, getAirportCountry } from '../data/airportsData'
 import AlmacenFormModal from './AlmacenFormModal'
-import type { AeropuertoDTO, EnvioEstado, AlmacenDTO } from '../types'
+import type { AeropuertoDTO, EnvioEstado, AlmacenDTO, AlmacenContexto } from '../types'
 
 interface Props {
   aeropuertos: AeropuertoDTO[]
@@ -11,11 +11,22 @@ interface Props {
   selectedEnvioId?: string | null
   onAlmacenSelect?: (almacen: AeropuertoDTO) => void
   selectedAlmacenId?: string | null
+  contexto: AlmacenContexto
+  onDataChanged?: (aeropuertos: AeropuertoDTO[]) => void | Promise<void>
 }
 
 const DEFAULT_LIMIT = 50
 
-export default function AlmacenListPanel({ aeropuertos, envios, onEnvioSelect, selectedEnvioId, onAlmacenSelect, selectedAlmacenId }: Props) {
+export default function AlmacenListPanel({
+  aeropuertos,
+  envios,
+  onEnvioSelect,
+  selectedEnvioId,
+  onAlmacenSelect,
+  selectedAlmacenId,
+  contexto,
+  onDataChanged,
+}: Props) {
   const [search, setSearch] = useState('')
   const [expandedOACI, setExpandedOACI] = useState<string | null>(null)
   const [almacenesDB, setAlmacenesDB] = useState<AlmacenDTO[]>([])
@@ -25,12 +36,13 @@ export default function AlmacenListPanel({ aeropuertos, envios, onEnvioSelect, s
   const [showAll, setShowAll] = useState(false)
   const [detalleEnviosOACI, setDetalleEnviosOACI] = useState<string | null>(null)
   const [detallePaquetesOACI, setDetallePaquetesOACI] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
-    cargaArchivosService.obtenerAlmacenes()
+    cargaArchivosService.obtenerAlmacenes(contexto)
       .then(setAlmacenesDB)
       .catch(() => {})
-  }, [])
+  }, [contexto])
 
   const almacenMap = useMemo(() => {
     const map = new Map<string, AlmacenDTO>()
@@ -38,8 +50,35 @@ export default function AlmacenListPanel({ aeropuertos, envios, onEnvioSelect, s
     return map
   }, [almacenesDB])
 
+  const aeropuertosCombinados = useMemo(() => {
+    const map = new Map<string, AeropuertoDTO>()
+
+    aeropuertos.forEach((a) => {
+      map.set(a.codigoOACI, a)
+    })
+
+    almacenesDB.forEach((almacen) => {
+      const actual = map.get(almacen.codigoOACI)
+      map.set(almacen.codigoOACI, {
+        codigoOACI: almacen.codigoOACI,
+        latitud: almacen.latitud,
+        longitud: almacen.longitud,
+        ciudad: almacen.ciudad || actual?.ciudad,
+        pais: almacen.pais || actual?.pais,
+        capacidadMaxima: almacen.capacidadMaxima || actual?.capacidadMaxima || 0,
+        ocupacionActual: actual?.ocupacionActual || 0,
+        vuelosEntrantes: actual?.vuelosEntrantes || [],
+        vuelosSalientes: actual?.vuelosSalientes || [],
+        vuelosCanceladosSalientes: actual?.vuelosCanceladosSalientes || [],
+        editable: almacen.editable,
+      })
+    })
+
+    return Array.from(map.values())
+  }, [aeropuertos, almacenesDB])
+
   const term = search.toLowerCase().trim()
-  const filtradosSinLimite = aeropuertos.filter(a => {
+  const filtradosSinLimite = aeropuertosCombinados.filter(a => {
     if (!term) return true
     const ciudad = (a.ciudad || getAirportCity(a.codigoOACI) || '').toLowerCase()
     const codigo = a.codigoOACI.toLowerCase()
@@ -68,22 +107,31 @@ export default function AlmacenListPanel({ aeropuertos, envios, onEnvioSelect, s
 
   const handleSave = async (data: AlmacenDTO) => {
     if (editingAlmacen) {
-      await cargaArchivosService.actualizarAlmacen(data.codigoOACI, data)
+      await cargaArchivosService.actualizarAlmacen(data.codigoOACI, data, contexto)
     } else {
-      await cargaArchivosService.crearAlmacen(data)
+      await cargaArchivosService.crearAlmacen(data, contexto)
     }
-    const updated = await cargaArchivosService.obtenerAlmacenes()
+    const updated = await cargaArchivosService.obtenerAlmacenes(contexto)
     setAlmacenesDB(updated)
+    if (onDataChanged) {
+      const refreshedAeropuertos = await cargaArchivosService.obtenerAeropuertos(contexto)
+      await onDataChanged(refreshedAeropuertos)
+    }
   }
 
   const handleDelete = async (codigo: string) => {
     try {
-      await cargaArchivosService.eliminarAlmacen(codigo)
-      const updated = await cargaArchivosService.obtenerAlmacenes()
+      await cargaArchivosService.eliminarAlmacen(codigo, contexto)
+      const updated = await cargaArchivosService.obtenerAlmacenes(contexto)
       setAlmacenesDB(updated)
+      if (onDataChanged) {
+        const refreshedAeropuertos = await cargaArchivosService.obtenerAeropuertos(contexto)
+        await onDataChanged(refreshedAeropuertos)
+      }
       setDeleteConfirm(null)
-    } catch {
-      // ignore
+      setDeleteError(null)
+    } catch (err: any) {
+      setDeleteError(err?.response?.data?.error || 'No se pudo eliminar el almacén')
     }
   }
 
@@ -120,6 +168,11 @@ export default function AlmacenListPanel({ aeropuertos, envios, onEnvioSelect, s
           onChange={(e) => setSearch(e.target.value)}
           className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-sky-500"
         />
+        {deleteError && (
+          <div className="mt-2 rounded-lg border border-red-700 bg-red-900/40 px-3 py-2 text-xs text-red-300">
+            {deleteError}
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -140,6 +193,7 @@ export default function AlmacenListPanel({ aeropuertos, envios, onEnvioSelect, s
           const enviosAqui = enviosEnAlmacen(a.codigoOACI)
           const enviosAsociados = enviosAsociadosAeropuerto(a.codigoOACI)
           const paquetesAsociados = enviosAsociados.reduce((sum, envio) => sum + envio.cantidad, 0)
+          const esEditable = Boolean(almacenDB?.editable)
 
           return (
             <div key={a.codigoOACI} className="border-b border-gray-800/50">
@@ -196,13 +250,26 @@ export default function AlmacenListPanel({ aeropuertos, envios, onEnvioSelect, s
                     >
                       ✏️
                     </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setDeleteConfirm(a.codigoOACI) }}
-                      className="text-[10px] text-gray-500 hover:text-red-400 px-1 py-0.5 rounded transition-colors"
-                      title="Eliminar"
-                    >
-                      🗑️
-                    </button>
+                    {esEditable ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setDeleteError(null)
+                          setDeleteConfirm(a.codigoOACI)
+                        }}
+                        className="text-[10px] text-gray-500 hover:text-red-400 px-1 py-0.5 rounded transition-colors"
+                        title="Eliminar"
+                      >
+                        🗑️
+                      </button>
+                    ) : (
+                      <span
+                        className="text-[10px] text-gray-600 px-1 py-0.5 rounded cursor-not-allowed"
+                        title="Este almacén proviene del maestro y no se puede eliminar"
+                      >
+                        🗑️
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -279,8 +346,8 @@ export default function AlmacenListPanel({ aeropuertos, envios, onEnvioSelect, s
 
       {/* Footer */}
       <div className="px-3 py-1.5 border-t border-gray-800 text-[10px] text-gray-600 flex justify-between items-center">
-        <span>{filtrados.length} de {aeropuertos.length} almacenes</span>
-        {!showAll && !term && aeropuertos.length > DEFAULT_LIMIT && (
+        <span>{filtrados.length} de {aeropuertosCombinados.length} almacenes</span>
+        {!showAll && !term && aeropuertosCombinados.length > DEFAULT_LIMIT && (
           <button onClick={() => setShowAll(true)} className="text-sky-400 hover:text-sky-300 font-medium cursor-pointer">
             Mostrar todos
           </button>
