@@ -1,5 +1,6 @@
 import type { VueloDTO } from '../types'
-import { getAirportCityCountry } from '../data/airportsData'
+import type { AeropuertoDTO } from '../types'
+import { buildAirportLookup, getAirportCityCountryResolved } from '../data/airportsData'
 import { formatTimeInTimezone, formatDateInTimezone } from '../utils/timezoneFormat'
 
 interface Props {
@@ -7,13 +8,15 @@ interface Props {
   isOpen: boolean
   onClose: () => void
   tzOffset: number
+  aeropuertos?: AeropuertoDTO[]
 }
 
-export default function VueloModal({ vuelo, isOpen, onClose, tzOffset }: Props) {
+export default function VueloModal({ vuelo, isOpen, onClose, tzOffset, aeropuertos = [] }: Props) {
   if (!isOpen || !vuelo) return null
 
-  const origenInfo = getAirportCityCountry(vuelo.origen)
-  const destinoInfo = getAirportCityCountry(vuelo.destino)
+  const airportLookup = buildAirportLookup(aeropuertos)
+  const origenInfo = getAirportCityCountryResolved(vuelo.origen, airportLookup)
+  const destinoInfo = getAirportCityCountryResolved(vuelo.destino, airportLookup)
 
   return (
     <div className="absolute bottom-4 right-4 z-[1001] w-80 max-w-[calc(100%-2rem)] sm:w-[22rem]">

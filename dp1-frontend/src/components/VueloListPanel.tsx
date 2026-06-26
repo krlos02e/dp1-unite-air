@@ -1,5 +1,10 @@
 import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { getAirportCity, getAirportCountry } from '../data/airportsData'
+import {
+  type AirportLookupData,
+  buildAirportLookup,
+  getAirportCityResolved,
+  getAirportCountryResolved,
+} from '../data/airportsData'
 import { cargaArchivosService } from '../services/CargaArchivosService'
 import VueloProgramacionModal from './VueloProgramacionModal'
 import type { VueloDTO, EnvioEstado, AeropuertoDTO, AlmacenContexto, ProgramacionVueloDTO } from '../types'
@@ -56,8 +61,12 @@ function normalizeSearch(value: string): string {
     .trim()
 }
 
-function locationTerms(code: string): string {
-  return normalizeSearch([code, getAirportCity(code), getAirportCountry(code)].filter(Boolean).join(' '))
+function locationTerms(code: string, airportLookup: Map<string, AirportLookupData>): string {
+  return normalizeSearch([
+    code,
+    getAirportCityResolved(code, airportLookup),
+    getAirportCountryResolved(code, airportLookup),
+  ].filter(Boolean).join(' '))
 }
 
 function createCodePatternMatcher(rawPattern: string): (code: string) => boolean {
@@ -78,8 +87,8 @@ function createCodePatternMatcher(rawPattern: string): (code: string) => boolean
   return (code) => regex.test(code)
 }
 
-function locationLabel(code: string): string {
-  const city = getAirportCity(code)
+function locationLabel(code: string, airportLookup: Map<string, AirportLookupData>): string {
+  const city = getAirportCityResolved(code, airportLookup)
   return city ? `${code} · ${city}` : code
 }
 
@@ -137,6 +146,7 @@ function VueloListPanel({
   const [editingProgramacion, setEditingProgramacion] = useState<ProgramacionVueloDTO | null>(null)
   const [deletingProgramacionId, setDeletingProgramacionId] = useState<number | null>(null)
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
+  const airportLookup = useMemo(() => buildAirportLookup(aeropuertosDisponibles), [aeropuertosDisponibles])
 
   const deferredSearch = useDeferredValue(search)
   const term = normalizeSearch(deferredSearch)
@@ -184,8 +194,8 @@ function VueloListPanel({
 
   const indexedFlights = useMemo(() => visibleFlights.map((flight) => {
     const codigo = normalizeSearch(flight.id)
-    const origen = locationTerms(flight.origen)
-    const destino = locationTerms(flight.destino)
+    const origen = locationTerms(flight.origen, airportLookup)
+    const destino = locationTerms(flight.destino, airportLookup)
     return {
       flight,
       codigo,
@@ -199,10 +209,10 @@ function VueloListPanel({
       ),
       salida: timeOfDay(flight.salidaUtc),
       llegada: timeOfDay(flight.llegadaUtc),
-      origenOrden: normalizeSearch(getAirportCountry(flight.origen) || getAirportCity(flight.origen) || flight.origen),
-      destinoOrden: normalizeSearch(getAirportCountry(flight.destino) || getAirportCity(flight.destino) || flight.destino),
+      origenOrden: normalizeSearch(getAirportCountryResolved(flight.origen, airportLookup) || getAirportCityResolved(flight.origen, airportLookup) || flight.origen),
+      destinoOrden: normalizeSearch(getAirportCountryResolved(flight.destino, airportLookup) || getAirportCityResolved(flight.destino, airportLookup) || flight.destino),
     }
-  }), [visibleFlights])
+  }), [visibleFlights, airportLookup])
 
   const searchCodeMatcher = useMemo(
     () => createCodePatternMatcher(deferredSearch),
@@ -287,8 +297,8 @@ function VueloListPanel({
       const codigoProgramacion = normalizeSearch(
         `USR-${programacion.id ?? ''}-${programacion.origenOACI}-${programacion.destinoOACI}`
       )
-      const origen = locationTerms(programacion.origenOACI)
-      const destino = locationTerms(programacion.destinoOACI)
+      const origen = locationTerms(programacion.origenOACI, airportLookup)
+      const destino = locationTerms(programacion.destinoOACI, airportLookup)
       const tramo = `${origen} ${destino} ${normalizeSearch(`${programacion.origenOACI}-${programacion.destinoOACI}`)}`
 
       if (searchScope === 'codigo') return searchCodeMatcher(codigoProgramacion)
@@ -297,7 +307,7 @@ function VueloListPanel({
       if (searchScope === 'destino') return destino.includes(term)
       return searchCodeMatcher(codigoProgramacion) || tramo.includes(term)
     })
-  }, [programaciones, originFilter, destinationFilter, term, searchScope, searchCodeMatcher])
+  }, [programaciones, originFilter, destinationFilter, term, searchScope, searchCodeMatcher, airportLookup])
 
   const origins = useMemo(() => (
     Array.from(new Set([
@@ -493,7 +503,7 @@ function VueloListPanel({
               className="min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
             >
               <option value="">Todos los orígenes</option>
-              {origins.map((code) => <option key={code} value={code}>{locationLabel(code)}</option>)}
+                  {origins.map((code) => <option key={code} value={code}>{locationLabel(code, airportLookup)}</option>)}
             </select>
             <select
               value={destinationFilter}
@@ -502,7 +512,7 @@ function VueloListPanel({
               className="min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
             >
               <option value="">Todos los destinos</option>
-              {destinations.map((code) => <option key={code} value={code}>{locationLabel(code)}</option>)}
+                  {destinations.map((code) => <option key={code} value={code}>{locationLabel(code, airportLookup)}</option>)}
             </select>
           </div>
           <select
@@ -582,8 +592,8 @@ function VueloListPanel({
           const totalMaletas = enviosEnEsteVuelo.reduce((sum, e) => sum + e.cantidad, 0)
           const ocupPct = v.capacidad > 0 ? Math.round((v.cargaActual / v.capacidad) * 100) : 0
           const ocupacion = occupationStatus(v.cargaActual, ocupPct)
-          const origenPais = getAirportCountry(v.origen) || getAirportCity(v.origen) || v.origen
-          const destinoPais = getAirportCountry(v.destino) || getAirportCity(v.destino) || v.destino
+          const origenPais = getAirportCountryResolved(v.origen, airportLookup) || getAirportCityResolved(v.origen, airportLookup) || v.origen
+          const destinoPais = getAirportCountryResolved(v.destino, airportLookup) || getAirportCityResolved(v.destino, airportLookup) || v.destino
 
           return (
             <div
@@ -673,9 +683,9 @@ function VueloListPanel({
                               <div className="min-w-0 flex-1">
                                 <div className="text-[9px] font-mono text-sky-400 truncate">Envío {envio.id}</div>
                                 <div className="text-[10px] text-gray-300 truncate">
-                                  <span className="font-medium">{getAirportCity(envio.origen) || envio.origen}</span>
+                                  <span className="font-medium">{getAirportCityResolved(envio.origen, airportLookup) || envio.origen}</span>
                                   <span className="text-gray-600 mx-0.5">→</span>
-                                  <span className="font-medium">{getAirportCity(envio.destino) || envio.destino}</span>
+                                  <span className="font-medium">{getAirportCityResolved(envio.destino, airportLookup) || envio.destino}</span>
                                 </div>
                                 <div className="text-[9px] text-gray-500">{envio.cantidad} maleta{envio.cantidad !== 1 ? 's' : ''}</div>
                               </div>

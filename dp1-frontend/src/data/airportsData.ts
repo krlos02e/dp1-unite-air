@@ -8,6 +8,15 @@ export interface AirportStaticData {
   gmtOffset: string;
 }
 
+export interface AirportLookupData {
+  codigoOACI: string;
+  ciudad?: string;
+  pais?: string;
+  latitud?: number;
+  longitud?: number;
+  capacidadMaxima?: number;
+}
+
 export const AIRPORTS_DATA: Record<string, AirportStaticData> = {
   SKBO: { codigoOACI: 'SKBO', ciudad: 'Bogota', pais: 'Colombia', capacidad: 430, latitud: 4.701389, longitud: -74.146944, gmtOffset: 'UTC-5' },
   SEQM: { codigoOACI: 'SEQM', ciudad: 'Quito', pais: 'Ecuador', capacidad: 410, latitud: 0.113333, longitud: -78.358611, gmtOffset: 'UTC-5' },
@@ -53,6 +62,35 @@ export function getAirportCityCountry(oaci: string): string {
   const data = AIRPORTS_DATA[oaci];
   if (!data) return oaci;
   return `${data.ciudad}, ${data.pais}`;
+}
+
+export function buildAirportLookup(airports: AirportLookupData[] = []): Map<string, AirportLookupData> {
+  return new Map(airports.map((airport) => [airport.codigoOACI, airport]));
+}
+
+export function getAirportCityResolved(
+  oaci: string,
+  lookup?: Map<string, AirportLookupData>,
+): string | undefined {
+  return lookup?.get(oaci)?.ciudad || getAirportCity(oaci);
+}
+
+export function getAirportCountryResolved(
+  oaci: string,
+  lookup?: Map<string, AirportLookupData>,
+): string | undefined {
+  return lookup?.get(oaci)?.pais || getAirportCountry(oaci);
+}
+
+export function getAirportCityCountryResolved(
+  oaci: string,
+  lookup?: Map<string, AirportLookupData>,
+): string {
+  const city = getAirportCityResolved(oaci, lookup);
+  const country = getAirportCountryResolved(oaci, lookup);
+  if (city && country) return `${city}, ${country}`;
+  if (city) return city;
+  return oaci;
 }
 
 export function getAirportTimezone(oaci: string): string | undefined {

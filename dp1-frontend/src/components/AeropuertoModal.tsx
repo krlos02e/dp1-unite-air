@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import type { AeropuertoDTO, EnvioEstado, VueloDTO } from '../types'
-import { AIRPORTS_DATA, getAirportCityCountry } from '../data/airportsData'
+import { buildAirportLookup, getAirportCityCountryResolved } from '../data/airportsData'
 import { formatTimeInTimezone, formatDateInTimezone } from '../utils/timezoneFormat'
 
 interface Props {
@@ -12,9 +12,19 @@ interface Props {
   tzOffset: number
   onVueloSelect?: (vuelo: VueloDTO) => void
   onEnvioSelect?: (envio: EnvioEstado) => void
+  aeropuertos?: AeropuertoDTO[]
 }
 
-export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = [], envios = [], tzOffset, onVueloSelect }: Props) {
+export default function AeropuertoModal({
+  aeropuerto,
+  isOpen,
+  onClose,
+  vuelos = [],
+  envios = [],
+  tzOffset,
+  onVueloSelect,
+  aeropuertos = [],
+}: Props) {
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedSection, setExpandedSection] = useState<'entrantes' | 'salientes' | 'cancelados' | null>(null)
   const [expandedIncomingFlightId, setExpandedIncomingFlightId] = useState<string | null>(null)
@@ -23,8 +33,8 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
   const [filtroSalientes, setFiltroSalientes] = useState<'id' | 'ciudad'>('ciudad')
   const [filtroCancelados, setFiltroCancelados] = useState<'id' | 'ciudad'>('ciudad')
 
-  const staticData = aeropuerto ? AIRPORTS_DATA[aeropuerto.codigoOACI] : null
-  const pais = staticData?.pais || ''
+  const airportLookup = useMemo(() => buildAirportLookup(aeropuertos), [aeropuertos])
+  const pais = aeropuerto?.pais || ''
 
   const vuelosMap = useMemo(() => {
     const map = new Map<string, VueloDTO>()
@@ -54,7 +64,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
       if (filtroEntrantes === 'id') {
         return id.toLowerCase().includes(searchTerm.toLowerCase())
       } else {
-        const ciudadOrigen = getAirportCityCountry(vuelo.origen)
+        const ciudadOrigen = getAirportCityCountryResolved(vuelo.origen, airportLookup)
         return ciudadOrigen.toLowerCase().includes(searchTerm.toLowerCase())
       }
     })
@@ -69,7 +79,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
       if (filtroSalientes === 'id') {
         return id.toLowerCase().includes(searchTerm.toLowerCase())
       } else {
-        const ciudadDestino = getAirportCityCountry(vuelo.destino)
+        const ciudadDestino = getAirportCityCountryResolved(vuelo.destino, airportLookup)
         return ciudadDestino.toLowerCase().includes(searchTerm.toLowerCase())
       }
     })
@@ -84,7 +94,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
       if (filtroCancelados === 'id') {
         return id.toLowerCase().includes(searchTerm.toLowerCase())
       } else {
-        const ciudadDestino = getAirportCityCountry(vuelo.destino)
+        const ciudadDestino = getAirportCityCountryResolved(vuelo.destino, airportLookup)
         return ciudadDestino.toLowerCase().includes(searchTerm.toLowerCase())
       }
     })
@@ -119,7 +129,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
           <div>
             <h2 className="text-sm font-bold text-emerald-400">{aeropuerto.codigoOACI}</h2>
             <p className="text-[10px] text-gray-400">
-              {staticData?.ciudad || aeropuerto.ciudad || ''}{pais ? `, ${pais}` : ''}
+              {aeropuerto.ciudad || ''}{pais ? `, ${pais}` : ''}
             </p>
           </div>
           <button
@@ -224,7 +234,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
                         >
                           <div className="flex justify-between gap-2">
                             <span className="font-medium text-gray-300">{id}</span>
-                            <span className="text-sky-400 truncate">Desde: {vuelo ? getAirportCityCountry(vuelo.origen) : '?'}</span>
+                            <span className="text-sky-400 truncate">Desde: {vuelo ? getAirportCityCountryResolved(vuelo.origen, airportLookup) : '?'}</span>
                           </div>
                           {vuelo && (
                             <div className="text-gray-500">
@@ -256,7 +266,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
                                         <span className="text-[10px] text-amber-400 whitespace-nowrap">{envio.cantidad} maleta{envio.cantidad !== 1 ? 's' : ''}</span>
                                       </div>
                                       <div className="text-[10px] text-gray-500 truncate">
-                                        {getAirportCityCountry(envio.origen)} -&gt; {getAirportCityCountry(envio.destino)}
+                                        {getAirportCityCountryResolved(envio.origen, airportLookup)} -&gt; {getAirportCityCountryResolved(envio.destino, airportLookup)}
                                       </div>
                                     </button>
 
@@ -334,7 +344,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
                       >
                         <div className="flex justify-between">
                           <span className="font-medium text-gray-300">{id}</span>
-                          <span className="text-emerald-400">Hacia: {vuelo ? getAirportCityCountry(vuelo.destino) : '?'}</span>
+                          <span className="text-emerald-400">Hacia: {vuelo ? getAirportCityCountryResolved(vuelo.destino, airportLookup) : '?'}</span>
                         </div>
                         {vuelo && (
                           <div className="text-gray-500">
@@ -392,7 +402,7 @@ export default function AeropuertoModal({ aeropuerto, isOpen, onClose, vuelos = 
                       <div key={id} className="text-xs text-gray-400 border-t border-gray-800 pt-1">
                         <div className="flex justify-between">
                           <span className="font-medium text-gray-300">{id}</span>
-                          <span className="text-red-400">Hacia: {vuelo ? getAirportCityCountry(vuelo.destino) : '?'}</span>
+                          <span className="text-red-400">Hacia: {vuelo ? getAirportCityCountryResolved(vuelo.destino, airportLookup) : '?'}</span>
                         </div>
                         {vuelo && (
                           <div className="text-gray-500">

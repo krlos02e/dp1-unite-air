@@ -2,13 +2,13 @@ import {useEffect, useRef, useState, memo, useMemo} from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { AeropuertoDTO, VueloDTO } from '../types'
-import { getAirportCity, AIRPORTS_DATA } from '../data/airportsData'
+import { buildAirportLookup, getAirportCityResolved, AIRPORTS_DATA } from '../data/airportsData'
 import { TIMEZONE_OPTIONS } from '../utils/timezoneFormat'
 import { shouldDisplayFlight } from '../utils/flightVisibility'
 
-function tooltipForFlight(v: VueloDTO): string {
-  const origen = getAirportCity(v.origen) || v.origen
-  const destino = getAirportCity(v.destino) || v.destino
+function tooltipForFlight(v: VueloDTO, airportLookup: Map<string, AeropuertoDTO>): string {
+  const origen = getAirportCityResolved(v.origen, airportLookup) || v.origen
+  const destino = getAirportCityResolved(v.destino, airportLookup) || v.destino
   return `<b>${v.id}</b><br>${origen} → ${destino}<br>Progreso: ${Math.round(calcularProgresoLocal(v, new Date()))}%<br>Maletas: ${v.cargaActual}/${v.capacidad}`
 }
 
@@ -187,6 +187,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
   const flightAngleRef = useRef<Map<string, number>>(new Map())
   const airportDataRef = useRef<Map<string, AeropuertoDTO>>(new Map())
   const persistentFlightsRef = useRef<Map<string, VueloDTO>>(new Map())
+  const airportLookup = useMemo(() => buildAirportLookup(aeropuertos), [aeropuertos])
   const selectedRouteRef = useRef<L.Polyline | null>(null)
   const selectedOriginRef = useRef<L.CircleMarker | null>(null)
   const selectedDestRef = useRef<L.CircleMarker | null>(null)
@@ -391,7 +392,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
     aeropuertos.forEach((a) => {
       const existing = airportMarkersRef.current.get(a.codigoOACI)
       const color = aeropuertoColor(a.ocupacionActual, a.capacidadMaxima)
-      const cityName = a.ciudad || getAirportCity(a.codigoOACI) || a.codigoOACI
+      const cityName = getAirportCityResolved(a.codigoOACI, airportLookup) || a.codigoOACI
       const label = cityName
 
       const staticData = AIRPORTS_DATA[a.codigoOACI]
@@ -512,7 +513,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
     airportMarkersRef.current.forEach((mk, code) => {
       const airport = airportMap.get(code)
       if (!airport) return
-      const cityName = airport.ciudad || getAirportCity(code) || code
+      const cityName = getAirportCityResolved(code, airportLookup) || code
       const color = aeropuertoColor(airport.ocupacionActual, airport.capacidadMaxima)
       mk.setIcon(airportIcon(color, cityName, code === selectedAeropuertoId))
     })
@@ -547,7 +548,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       const from: [number, number] = [v.latOrigen, v.lonOrigen]
       const to: [number, number] = [v.latDestino, v.lonDestino]
       const isSelected = v.id === selectedVueloIdRef.current
-      const tooltipText = tooltipForFlight(v)
+      const tooltipText = tooltipForFlight(v, airportLookup)
       const pts = bezierPoints(from, to, 40)
       const progresoActual = simulationMode ? v.progresoVuelo : calcularProgresoLocal(v, realNow)
       const tNorm = progresoActual / 100
