@@ -642,6 +642,7 @@ export default function Simulacion() {
               onEnvioSelect={handleEnvioSelect}
               selectedEnvioId={selectedEnvio?.id}
               enviosExternos={simulationState?.envios || []}
+              currentTime={simulationState?.simulationTime}
             />
           )}
         </div>

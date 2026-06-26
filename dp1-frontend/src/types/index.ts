@@ -149,6 +149,7 @@ export interface EnvioEstado {
   vueloEsperado: string | null;
   vueloActual: string | null;
   ultimoVuelo?: string | null;
+  ultimaLlegadaUtc?: string | null;
   rutaAeropuertos?: string[];
   cantidad: number;
 }

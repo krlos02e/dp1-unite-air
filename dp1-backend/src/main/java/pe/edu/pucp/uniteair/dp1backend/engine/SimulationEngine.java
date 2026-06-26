@@ -819,11 +819,13 @@ public class SimulationEngine {
                 String vueloActual = null;
                 String vueloEsperado = null;
                 String ultimoVuelo = null;
+                LocalDateTime ultimaLlegada = null;
                 if (ruta == null || ruta.getVuelos().isEmpty()) {
                     estado = "EN_ESPERA";
                 } else {
                     List<Vuelo> vuelosRuta = ruta.getVuelos();
                     ultimoVuelo = vuelosRuta.get(vuelosRuta.size() - 1).getId();
+                    ultimaLlegada = vuelosRuta.get(vuelosRuta.size() - 1).getLlegadaUtc();
                     Vuelo vueloEnCurso = null;
                     Vuelo proximoVuelo = null;
                     for (Vuelo v : vuelosRuta) {
@@ -868,6 +870,7 @@ public class SimulationEngine {
                         .vueloActual(vueloActual)
                         .vueloEsperado(vueloEsperado)
                         .ultimoVuelo(ultimoVuelo)
+                        .ultimaLlegadaUtc(ultimaLlegada != null ? ultimaLlegada.toString() : null)
                         .rutaAeropuertos(new ArrayList<>(rutaAeropuertos))
                         .cantidad(paquete.getCantidad())
                         .build());

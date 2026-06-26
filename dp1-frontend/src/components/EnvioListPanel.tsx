@@ -20,11 +20,26 @@ interface Props {
   onEnvioSelect: (envio: EnvioEstado) => void
   selectedEnvioId?: string | null
   enviosExternos?: EnvioEstado[]
+  currentTime?: string | null
 }
 
 const DEFAULT_LIMIT = 50
 
-export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosExternos }: Props) {
+function estaDentroDeHoras(envio: EnvioEstado, horas?: number, currentTime?: string | null): boolean {
+  if (!horas || envio.estado !== 'ENTREGADO') return true
+  if (!envio.ultimaLlegadaUtc) return false
+
+  const llegadaMs = Date.parse(envio.ultimaLlegadaUtc)
+  if (Number.isNaN(llegadaMs)) return false
+
+  const referenciaMs = currentTime ? Date.parse(currentTime) : Date.now()
+  if (Number.isNaN(referenciaMs)) return false
+
+  const diffMs = referenciaMs - llegadaMs
+  return diffMs >= 0 && diffMs <= horas * 60 * 60 * 1000
+}
+
+export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosExternos, currentTime }: Props) {
   const [tab, setTab] = useState<Tab>('envuelo')
   const [search, setSearch] = useState('')
   const [filtroId, setFiltroId] = useState(true)
@@ -54,7 +69,8 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosE
       pollingRef.current = true
       setLoading(true)
       try {
-        const res = await cargaArchivosService.listarEnvios(config.estados, undefined, config.horas)
+        const horasFiltro = tab === 'entregados' && showAll ? undefined : config.horas
+        const res = await cargaArchivosService.listarEnvios(config.estados, undefined, horasFiltro)
         if (mountedRef.current) setEnvios(res.envios)
       } catch {
         // ignore
@@ -66,12 +82,18 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosE
     fetch()
     const interval = setInterval(fetch, 15000)
     return () => clearInterval(interval)
-  }, [tab, enviosExternos])
+  }, [tab, enviosExternos, showAll])
 
-  useEffect(() => { setShowAll(false) }, [tab, envios])
+  useEffect(() => { setShowAll(false) }, [tab])
 
   const enviosVisibles = enviosExternos
-    ? enviosExternos.filter(e => e.estado === config.estados)
+    ? enviosExternos.filter((e) => {
+        if (e.estado !== config.estados) return false
+        if (tab === 'entregados' && !showAll) {
+          return estaDentroDeHoras(e, config.horas, currentTime)
+        }
+        return true
+      })
     : envios
   const term = search.toLowerCase().trim()
   const filtradosSinLimite = term
@@ -213,12 +235,36 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosE
       <div className="px-3 py-1.5 border-t border-gray-800 text-[10px] text-gray-600 flex justify-between items-center">
         <span>Mostrando {filtrados.length} de {enviosVisibles.length}</span>
         <div className="flex items-center gap-2">
-          {!showAll && !term && enviosVisibles.length > DEFAULT_LIMIT && (
+          {tab === 'entregados' ? (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setShowAll(false)}
+                className={`px-2 py-0.5 rounded-full font-medium transition-colors ${
+                  !showAll
+                    ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40'
+                    : 'bg-gray-800 text-gray-500 border border-gray-700 hover:text-gray-300'
+                }`}
+              >
+                Ultimas 4h
+              </button>
+              <button
+                onClick={() => setShowAll(true)}
+                className={`px-2 py-0.5 rounded-full font-medium transition-colors ${
+                  showAll
+                    ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40'
+                    : 'bg-gray-800 text-gray-500 border border-gray-700 hover:text-gray-300'
+                }`}
+              >
+                Mostrar todos
+              </button>
+            </div>
+          ) : (
+            !showAll && !term && enviosVisibles.length > DEFAULT_LIMIT && (
             <button onClick={() => setShowAll(true)} className="text-sky-400 hover:text-sky-300 font-medium cursor-pointer">
               Mostrar todos
             </button>
+            )
           )}
-          {tab === 'entregados' && !enviosExternos && <span>Últimas 4h</span>}
         </div>
       </div>
     </div>
