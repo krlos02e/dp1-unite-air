@@ -78,6 +78,7 @@ export interface SimulationState {
   motivoColapso: string;
   logs: LogEntry[];
   envios?: EnvioEstado[];
+  maletas?: MaletaEstado[];
 }
 
 export interface AuthResponse {
@@ -157,7 +158,18 @@ export interface EnvioEstado {
   cantidad: number;
 }
 
+export interface MaletaEstado extends EnvioEstado {
+  envioId: string;
+  indice: number;
+  subrutaIndex?: number;
+}
+
 export interface EnvioBusquedaResponse {
   total: number;
   envios: EnvioEstado[];
+}
+
+export interface MaletaBusquedaResponse {
+  total: number;
+  maletas: MaletaEstado[];
 }

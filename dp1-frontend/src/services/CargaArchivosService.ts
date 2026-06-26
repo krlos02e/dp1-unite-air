@@ -8,6 +8,7 @@ import type {
   AgregarEnviosResult,
   EnviosIncrementalesResponse,
   EnvioBusquedaResponse,
+  MaletaBusquedaResponse,
   AlmacenDTO,
   AlmacenContexto,
   ProgramacionVueloDTO,
@@ -86,6 +87,15 @@ class CargaArchivosService extends HttpClient {
     if (horas !== undefined) params.set('horas', String(horas))
     const qs = params.toString()
     return this.get<EnvioBusquedaResponse>(`/envios/lista${qs ? '?' + qs : ''}`)
+  }
+
+  listarMaletas(estados?: string, origen?: string, horas?: number): Promise<MaletaBusquedaResponse> {
+    const params = new URLSearchParams()
+    if (estados) params.set('estados', estados)
+    if (origen) params.set('origen', origen)
+    if (horas !== undefined) params.set('horas', String(horas))
+    const qs = params.toString()
+    return this.get<MaletaBusquedaResponse>(`/envios/maletas/lista${qs ? '?' + qs : ''}`)
   }
 
   // ---- Almacenes CRUD ----

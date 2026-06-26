@@ -121,7 +121,7 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosE
   }
 
   return (
-    <div className="w-80 flex-1 min-h-0 bg-gray-900 border border-gray-800 rounded-xl flex flex-col overflow-hidden">
+    <div className="w-96 flex-1 min-h-0 bg-gray-900 border border-gray-800 rounded-xl flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-3 border-b border-gray-800">
         <h3 className="text-sm font-semibold text-gray-200 mb-2">Envíos</h3>

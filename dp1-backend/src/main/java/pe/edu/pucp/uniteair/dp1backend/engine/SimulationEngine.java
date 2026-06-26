@@ -11,9 +11,11 @@ import pe.edu.pucp.uniteair.dp1backend.repository.SimulationSessionRepository;
 import pe.edu.pucp.uniteair.dp1backend.service.AlmacenService;
 import pe.edu.pucp.uniteair.dp1backend.service.CargaArchivosService;
 import tasf.config.Config_Simulacion;
+import tasf.core.AsignacionPaquete;
 import tasf.core.Dataset;
 import tasf.core.EstadoOperacional;
 import tasf.core.PlanificacionUtils;
+import tasf.core.RutaConCantidad;
 import tasf.core.Solucion;
 import tasf.model.Aeropuerto;
 import tasf.model.Paquete;
@@ -108,6 +110,7 @@ public class SimulationEngine {
                 final Solucion[] solucionRef = {null};
                 final List<LogEntry> vizLogs = Collections.synchronizedList(new ArrayList<>(logs));
                 final Map<String, Ruta> rutasAnteriores = new ConcurrentHashMap<>();
+                final Map<String, AsignacionPaquete> asignacionesSplit = new ConcurrentHashMap<>();
 
                 // Inicializar visualización inmediatamente con datos del dataset
                 logs.add(LogEntry.builder()
@@ -116,7 +119,7 @@ public class SimulationEngine {
                         .mensaje("Planificando rutas...")
                         .build());
                 actualizarEstadoEnCache(sessionId, fechaInicio, dataset, cargaVuelo, ocupacionAeropuerto,
-                        0, 0, 0, duracionHoras, false, null, logs, "PLANIFICANDO", fechaInicio, null, rutasAnteriores);
+                        0, 0, 0, duracionHoras, false, null, logs, "PLANIFICANDO", fechaInicio, null, rutasAnteriores, asignacionesSplit);
 
                 // Hilo de planificación
                 Thread planificadorThread = new Thread(() -> {
@@ -202,8 +205,9 @@ public class SimulationEngine {
                         }
 
                         Map<String, Ruta> vizRutas = sol != null ? sol.getRutasAsignadas() : new HashMap<>();
+                        Map<String, AsignacionPaquete> vizSplits = sol != null ? sol.getAsignacionesSplit() : new HashMap<>();
                         actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
-                                vizEntregadas, vizEnTransito, hora, duracionHoras, false, null, vizLogs, "PLANIFICANDO", fechaInicio, vizRutas, rutasAnteriores);
+                                vizEntregadas, vizEnTransito, hora, duracionHoras, false, null, vizLogs, "PLANIFICANDO", fechaInicio, vizRutas, rutasAnteriores, vizSplits);
 
                         long sleepMs = (long) (15000.0 / Math.max(0.5, velocidad));
                         if (sleepMs > 0) {
@@ -240,6 +244,8 @@ public class SimulationEngine {
                 }
 
                 Map<String, Ruta> rutas = new HashMap<>(solucion.getRutasAsignadas());
+                asignacionesSplit.clear();
+                asignacionesSplit.putAll(solucion.getAsignacionesSplit());
                 Set<String> noAsignados = calcularNoAsignadosEnVentana(dataset, config, rutas, fechaInicio, Collections.emptySet());
                 boolean hayColapso = !noAsignados.isEmpty();
                 maletasEnTransito = 0;
@@ -362,6 +368,7 @@ public class SimulationEngine {
                                     rutas,
                                     rutasEntregadas,
                                     rutasAnteriores,
+                                    asignacionesSplit,
                                     simTime,
                                     logs,
                                     true
@@ -396,7 +403,7 @@ public class SimulationEngine {
                     }
 
                     actualizarEstadoEnCache(sessionId, simTime, dataset, cargaVuelo, ocupacionAeropuerto,
-                            maletasEntregadas, maletasEnTransito, hora, duracionHoras, false, null, logs, "EJECUTANDO", fechaInicio, rutas, rutasAnteriores);
+                            maletasEntregadas, maletasEnTransito, hora, duracionHoras, false, null, logs, "EJECUTANDO", fechaInicio, rutas, rutasAnteriores, asignacionesSplit);
 
                     long sleepMs = (long) (15000.0 / Math.max(0.5, velocidad));
                     if (sleepMs > 0) {
@@ -466,6 +473,7 @@ public class SimulationEngine {
             Map<String, Ruta> rutasActuales,
             Set<String> rutasEntregadas,
             Map<String, Ruta> rutasAnteriores,
+            Map<String, AsignacionPaquete> asignacionesSplitActuales,
             LocalDateTime simTime,
             List<LogEntry> logs,
             boolean registrarLog
@@ -507,6 +515,14 @@ public class SimulationEngine {
                         ))
                         .build());
             }
+            Map<String, AsignacionPaquete> splitsComprometidos = new HashMap<>();
+            for (Map.Entry<String, AsignacionPaquete> entry : asignacionesSplitActuales.entrySet()) {
+                if (rutasComprometidas.containsKey(entry.getKey())) {
+                    splitsComprometidos.put(entry.getKey(), entry.getValue());
+                }
+            }
+            asignacionesSplitActuales.clear();
+            asignacionesSplitActuales.putAll(splitsComprometidos);
             return rutasComprometidas;
         }
 
@@ -520,6 +536,15 @@ public class SimulationEngine {
         Map<String, Ruta> rutasMerge = new HashMap<>(rutasComprometidas);
         rutasMerge.putAll(solParcial.getRutasAsignadas());
         registrarRutasAnteriores(rutasActuales, rutasMerge, rutasAnteriores);
+        Map<String, AsignacionPaquete> splitsMerge = new HashMap<>();
+        for (Map.Entry<String, AsignacionPaquete> entry : asignacionesSplitActuales.entrySet()) {
+            if (rutasComprometidas.containsKey(entry.getKey())) {
+                splitsMerge.put(entry.getKey(), entry.getValue());
+            }
+        }
+        splitsMerge.putAll(solParcial.getAsignacionesSplit());
+        asignacionesSplitActuales.clear();
+        asignacionesSplitActuales.putAll(splitsMerge);
 
         if (registrarLog) {
             logs.add(LogEntry.builder()
@@ -585,6 +610,96 @@ public class SimulationEngine {
         }
         rutaAeropuertos.add(paquete.getDestinoOACI());
         return new ArrayList<>(rutaAeropuertos);
+    }
+
+    private List<MaletaSimulacionDTO> construirMaletasPaquete(
+            Paquete paquete,
+            LocalDateTime simTime,
+            Map<String, Ruta> rutasAnteriores,
+            Map<String, AsignacionPaquete> asignacionesSplit
+    ) {
+        List<MaletaSimulacionDTO> maletas = new ArrayList<>();
+        AsignacionPaquete asignacion = asignacionesSplit != null ? asignacionesSplit.get(paquete.getId()) : null;
+        Ruta rutaAnterior = rutasAnteriores != null ? rutasAnteriores.get(paquete.getId()) : null;
+        int indiceGlobal = 1;
+
+        if (asignacion != null && !asignacion.isEmpty()) {
+            int subrutaIndex = 1;
+            for (RutaConCantidad rc : asignacion.getRutas()) {
+                for (int i = 0; i < rc.getCantidad(); i++) {
+                    maletas.add(construirMaleta(paquete, indiceGlobal++, subrutaIndex, rc.getRuta(), rutaAnterior, simTime));
+                }
+                subrutaIndex++;
+            }
+        }
+
+        while (indiceGlobal <= paquete.getCantidad()) {
+            maletas.add(construirMaleta(paquete, indiceGlobal++, 1, null, rutaAnterior, simTime));
+        }
+
+        return maletas;
+    }
+
+    private MaletaSimulacionDTO construirMaleta(
+            Paquete paquete,
+            int indice,
+            int subrutaIndex,
+            Ruta ruta,
+            Ruta rutaAnterior,
+            LocalDateTime simTime
+    ) {
+        String aeropuertoActual = paquete.getOrigenOACI();
+        String vueloActual = null;
+        String vueloEsperado = null;
+        LocalDateTime ultimaLlegada = null;
+        String estado = "EN_ESPERA";
+
+        if (ruta != null && !ruta.getVuelos().isEmpty()) {
+            List<Vuelo> vuelosRuta = ruta.getVuelos();
+            ultimaLlegada = vuelosRuta.get(vuelosRuta.size() - 1).getLlegadaUtc();
+            Vuelo vueloEnCurso = null;
+            Vuelo proximoVuelo = null;
+            for (Vuelo v : vuelosRuta) {
+                if (!simTime.isBefore(v.getSalidaUtc()) && simTime.isBefore(v.getLlegadaUtc())) {
+                    vueloEnCurso = v;
+                    break;
+                }
+                if (simTime.isBefore(v.getSalidaUtc()) && proximoVuelo == null) {
+                    proximoVuelo = v;
+                }
+            }
+            if (vueloEnCurso != null) {
+                estado = "EN_VUELO";
+                vueloActual = vueloEnCurso.getId();
+                aeropuertoActual = vueloEnCurso.getOrigen().getCodigoOACI();
+            } else if (simTime.isAfter(vuelosRuta.get(vuelosRuta.size() - 1).getLlegadaUtc())) {
+                estado = "ENTREGADO";
+                aeropuertoActual = paquete.getDestinoOACI();
+            } else if (proximoVuelo != null) {
+                estado = "EMBARCADO";
+                vueloEsperado = proximoVuelo.getId();
+                aeropuertoActual = proximoVuelo.getOrigen().getCodigoOACI();
+            }
+        }
+
+        return MaletaSimulacionDTO.builder()
+                .id(paquete.getId() + "-BAG-" + String.format("%03d", indice))
+                .envioId(paquete.getId())
+                .indice(indice)
+                .subrutaIndex(subrutaIndex)
+                .origen(paquete.getOrigenOACI())
+                .destino(paquete.getDestinoOACI())
+                .estado(estado)
+                .aeropuertoActual(aeropuertoActual)
+                .vueloActual(vueloActual)
+                .vueloEsperado(vueloEsperado)
+                .ultimaLlegadaUtc(ultimaLlegada != null ? ultimaLlegada.toString() : null)
+                .rutaAeropuertos(construirRutaAeropuertos(paquete, ruta))
+                .rutaVuelos(construirRutaVuelos(ruta))
+                .rutaAnteriorAeropuertos(rutaAnterior != null ? construirRutaAeropuertos(paquete, rutaAnterior) : null)
+                .rutaAnteriorVuelos(rutaAnterior != null ? construirRutaVuelos(rutaAnterior) : null)
+                .cantidad(1)
+                .build();
     }
 
     private List<Paquete> filtrarPaquetesPendientesEnVentana(
@@ -726,7 +841,8 @@ public class SimulationEngine {
                                           String motivo, List<LogEntry> logs, String status,
                                           LocalDateTime fechaInicio,
                                           Map<String, Ruta> rutasAsignadas,
-                                          Map<String, Ruta> rutasAnteriores) {
+                                          Map<String, Ruta> rutasAnteriores,
+                                          Map<String, AsignacionPaquete> asignacionesSplit) {
         // Monotonicity guard: never let simulation time/progress go backwards
         SimulationState prevState = simulationCache.get(sessionId);
         int prevHora = 0;
@@ -859,6 +975,7 @@ public class SimulationEngine {
         }
 
         List<EnvioSimulacionDTO> enviosDTO = new ArrayList<>();
+        List<MaletaSimulacionDTO> maletasDTO = new ArrayList<>();
         if (rutasAsignadas != null && simTime != null) {
             for (Map.Entry<String, Ruta> entry : rutasAsignadas.entrySet()) {
                 Paquete paquete = dataset.getPaquetePorId(entry.getKey());
@@ -919,6 +1036,7 @@ public class SimulationEngine {
                         .rutaAnteriorVuelos(rutaAnterior != null ? construirRutaVuelos(rutaAnterior) : null)
                         .cantidad(paquete.getCantidad())
                         .build());
+                maletasDTO.addAll(construirMaletasPaquete(paquete, simTime, rutasAnteriores, asignacionesSplit));
             }
         }
 
@@ -938,6 +1056,7 @@ public class SimulationEngine {
                 .motivoColapso(motivo)
                 .logs(new ArrayList<>(logs))
                 .envios(enviosDTO)
+                .maletas(maletasDTO)
                 .build();
 
         simulationCache.put(sessionId, state);
@@ -972,6 +1091,7 @@ public class SimulationEngine {
                 .motivoColapso(motivo)
                 .logs(logs)
                 .envios(new ArrayList<>())
+                .maletas(new ArrayList<>())
                 .build();
         simulationCache.put(sessionId, updated);
     }

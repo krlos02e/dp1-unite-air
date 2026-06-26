@@ -91,6 +91,7 @@ public class SimulationService {
                             .tipo("ERROR")
                             .mensaje("No se pudo cargar el dataset para las fechas seleccionadas")
                             .build()))
+                    .maletas(new ArrayList<>())
                     .build();
         }
 
@@ -129,6 +130,7 @@ public class SimulationService {
                 .progreso(0)
                 .colapsada(false)
                 .logs(logs)
+                .maletas(new ArrayList<>())
                 .build();
         simulationCache.put(sessionId, initialState);
 
@@ -156,6 +158,7 @@ public class SimulationService {
                         .colapsada("COLAPSADA".equals(session.getEstado()))
                         .motivoColapso(session.getMotivoColapso())
                         .logs(new ArrayList<>())
+                        .maletas(new ArrayList<>())
                         .build();
             }
             return null;
@@ -180,6 +183,7 @@ public class SimulationService {
                 .motivoColapso(state.getMotivoColapso())
                 .logs(logs != null ? new ArrayList<>(logs) : null)
                 .envios(state.getEnvios())
+                .maletas(state.getMaletas())
                 .build();
     }
 

@@ -28,4 +28,5 @@ public class SimulationState {
     private String motivoColapso;
     private List<LogEntry> logs;
     private List<EnvioSimulacionDTO> envios;
+    private List<MaletaSimulacionDTO> maletas;
 }

@@ -149,7 +149,7 @@ export default function AlmacenListPanel({
   }
 
   return (
-    <div className="w-80 flex-1 min-h-0 bg-gray-900 border border-gray-800 rounded-xl flex flex-col overflow-hidden">
+    <div className="w-96 flex-1 min-h-0 bg-gray-900 border border-gray-800 rounded-xl flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-3 border-b border-gray-800">
         <div className="flex items-center justify-between mb-2">

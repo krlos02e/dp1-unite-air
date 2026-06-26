@@ -5,10 +5,12 @@ import VueloModal from '../components/VueloModal'
 import AeropuertoModal from '../components/AeropuertoModal'
 import EnvioModal from '../components/EnvioModal'
 import EnvioListPanel from '../components/EnvioListPanel'
+import MaletaListPanel from '../components/MaletaListPanel'
+import MaletaModal from '../components/MaletaModal'
 import AlmacenListPanel from '../components/AlmacenListPanel'
 import VueloListPanel from '../components/VueloListPanel'
 import { AIRPORTS_DATA } from '../data/airportsData'
-import type { VueloDTO, AeropuertoDTO, EnvioEstado } from '../types'
+import type { VueloDTO, AeropuertoDTO, EnvioEstado, MaletaEstado } from '../types'
 
 const aeropuertosFallback: AeropuertoDTO[] = Object.values(AIRPORTS_DATA).map((a) => ({
   codigoOACI: a.codigoOACI,
@@ -82,9 +84,11 @@ export default function OperacionDiaria() {
   const [selectedVuelo, setSelectedVuelo] = useState<VueloDTO | null>(null)
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
   const [selectedEnvio, setSelectedEnvio] = useState<EnvioEstado | null>(null)
+  const [selectedMaleta, setSelectedMaleta] = useState<MaletaEstado | null>(null)
   const [selectedEnvioRouteMode, setSelectedEnvioRouteMode] = useState<'actual' | 'anterior'>('actual')
+  const [selectedMaletaRouteMode, setSelectedMaletaRouteMode] = useState<'actual' | 'anterior'>('actual')
   const [mapTz, setMapTz] = useState(0)
-  const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('aviones')
+  const [panelMode, setPanelMode] = useState<'envios' | 'maletas' | 'almacenes' | 'aviones'>('aviones')
   const [panelCollapsed, setPanelCollapsed] = useState(true)
   const [panelRendered, setPanelRendered] = useState(false)
   const [panelShown, setPanelShown] = useState(false)
@@ -96,7 +100,9 @@ export default function OperacionDiaria() {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
     setSelectedAeropuerto(null)
     setSelectedEnvio(null)
+    setSelectedMaleta(null)
     setSelectedEnvioRouteMode('actual')
+    setSelectedMaletaRouteMode('actual')
     setPanelMode('aviones')
     setPanelCollapsed(false)
   }, [])
@@ -105,7 +111,9 @@ export default function OperacionDiaria() {
     setSelectedAeropuerto((prev) => (prev?.codigoOACI === a.codigoOACI ? null : a))
     setSelectedVuelo(null)
     setSelectedEnvio(null)
+    setSelectedMaleta(null)
     setSelectedEnvioRouteMode('actual')
+    setSelectedMaletaRouteMode('actual')
   }, [])
 
   const handleEnvioSelect = useCallback((envio: EnvioEstado) => {
@@ -113,11 +121,14 @@ export default function OperacionDiaria() {
       if (prev?.id === envio.id) {
         setSelectedVuelo(null)
         setSelectedAeropuerto(null)
+        setSelectedMaleta(null)
         setSelectedEnvioRouteMode('actual')
         return null
       }
 
       setSelectedEnvioRouteMode('actual')
+      setSelectedMaleta(null)
+      setSelectedMaletaRouteMode('actual')
       const vueloId = envio.vueloActual || envio.vueloEsperado || envio.ultimoVuelo
       const vuelo = vueloId ? vuelos.find((v) => v.id === vueloId) : null
       if (vuelo) {
@@ -132,12 +143,40 @@ export default function OperacionDiaria() {
     })
   }, [aeropuertosEstaticos, vuelos])
 
+  const handleMaletaSelect = useCallback((maleta: MaletaEstado) => {
+    setSelectedMaleta((prev) => {
+      if (prev?.id === maleta.id) {
+        setSelectedVuelo(null)
+        setSelectedAeropuerto(null)
+        setSelectedMaletaRouteMode('actual')
+        return null
+      }
+
+      setSelectedEnvio(null)
+      setSelectedEnvioRouteMode('actual')
+      setSelectedMaletaRouteMode('actual')
+      const vueloId = maleta.vueloActual || maleta.vueloEsperado || maleta.ultimoVuelo
+      const vuelo = vueloId ? vuelos.find((v) => v.id === vueloId) : null
+      if (vuelo) {
+        setSelectedVuelo(vuelo)
+        setSelectedAeropuerto(null)
+      } else {
+        const aeropuerto = aeropuertosEstaticos.find((a) => a.codigoOACI === maleta.aeropuertoActual)
+        setSelectedVuelo(null)
+        setSelectedAeropuerto(aeropuerto || null)
+      }
+      return maleta
+    })
+  }, [aeropuertosEstaticos, vuelos])
+
   const handleIrAVueloDesdeEnvio = useCallback((vueloId: string) => {
     const vuelo = vuelos.find((v) => v.id === vueloId)
     if (vuelo) {
       setSelectedVuelo(vuelo)
       setSelectedEnvio(null)
+      setSelectedMaleta(null)
       setSelectedEnvioRouteMode('actual')
+      setSelectedMaletaRouteMode('actual')
     }
   }, [vuelos])
 
@@ -301,8 +340,8 @@ export default function OperacionDiaria() {
             vuelos={vuelos}
             selectedVueloId={selectedVuelo?.id || null}
             selectedAeropuertoId={selectedAeropuerto?.codigoOACI || null}
-            selectedEnvio={selectedEnvio}
-            selectedEnvioRouteMode={selectedEnvioRouteMode}
+            selectedEnvio={selectedMaleta ?? selectedEnvio}
+            selectedEnvioRouteMode={selectedMaleta ? selectedMaletaRouteMode : selectedEnvioRouteMode}
             velocidad={1}
             onAeropuertoClick={handleAeropuertoClick}
             onVueloClick={handleVueloClick}
@@ -321,14 +360,14 @@ export default function OperacionDiaria() {
 
           <VueloModal
             vuelo={selectedVuelo}
-            isOpen={!!selectedVuelo && !selectedEnvio}
+            isOpen={!!selectedVuelo && !selectedEnvio && !selectedMaleta}
             onClose={() => setSelectedVuelo(null)}
             tzOffset={mapTz}
             aeropuertos={aeropuertosEstaticos}
           />
           <AeropuertoModal
             aeropuerto={selectedAeropuerto}
-            isOpen={!!selectedAeropuerto && !selectedEnvio}
+            isOpen={!!selectedAeropuerto && !selectedEnvio && !selectedMaleta}
             onClose={() => setSelectedAeropuerto(null)}
             vuelos={vuelos}
             envios={todosEnvios}
@@ -338,7 +377,7 @@ export default function OperacionDiaria() {
           />
           <EnvioModal
             envio={selectedEnvio}
-            isOpen={!!selectedEnvio}
+            isOpen={!!selectedEnvio && !selectedMaleta}
             onClose={() => {
               setSelectedEnvio(null)
               setSelectedVuelo(null)
@@ -350,6 +389,21 @@ export default function OperacionDiaria() {
             dentroDelMapa
             routeMode={selectedEnvioRouteMode}
             onRouteModeChange={setSelectedEnvioRouteMode}
+          />
+          <MaletaModal
+            maleta={selectedMaleta}
+            isOpen={!!selectedMaleta}
+            onClose={() => {
+              setSelectedMaleta(null)
+              setSelectedVuelo(null)
+              setSelectedAeropuerto(null)
+              setSelectedMaletaRouteMode('actual')
+            }}
+            onIrAVuelo={handleIrAVueloDesdeEnvio}
+            vuelos={vuelos}
+            dentroDelMapa
+            routeMode={selectedMaletaRouteMode}
+            onRouteModeChange={setSelectedMaletaRouteMode}
           />
         </div>
         {panelRendered && (
@@ -368,6 +422,16 @@ export default function OperacionDiaria() {
               }`}
             >
               📦 Envíos
+            </button>
+            <button
+              onClick={() => setPanelMode('maletas')}
+              className={`flex-1 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                panelMode === 'maletas'
+                  ? 'bg-sky-600 text-white'
+                  : 'text-gray-400 hover:text-gray-200 bg-gray-800'
+              }`}
+            >
+              🧳 Maletas
             </button>
             <button
               onClick={() => setPanelMode('almacenes')}
@@ -421,6 +485,11 @@ export default function OperacionDiaria() {
               showStatusFilters={false}
               onVisibleFlightsChange={handleVisibleFlightsChange}
               onDataChanged={refreshOperacionContextData}
+            />
+          ) : panelMode === 'maletas' ? (
+            <MaletaListPanel
+              onMaletaSelect={handleMaletaSelect}
+              selectedMaletaId={selectedMaleta?.id}
             />
           ) : (
             <EnvioListPanel

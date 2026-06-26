@@ -6,9 +6,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import pe.edu.pucp.uniteair.dp1backend.entity.AlmacenContexto;
 import tasf.config.Config_Simulacion;
+import tasf.core.AsignacionPaquete;
 import tasf.core.Dataset;
 import tasf.core.EstadoOperacional;
 import tasf.core.PlanificacionUtils;
+import tasf.core.RutaConCantidad;
 import tasf.core.Solucion;
 import tasf.io.DatasetTextoLoader;
 import tasf.model.Aeropuerto;
@@ -46,6 +48,7 @@ public class CargaArchivosService {
     private volatile Map<String, Integer> cargaVueloCache;
     private volatile Map<String, Ruta> rutasAsignadas = new HashMap<>();
     private volatile Map<String, Ruta> rutasAnteriores = new HashMap<>();
+    private volatile Map<String, AsignacionPaquete> asignacionesSplit = new HashMap<>();
     private volatile boolean planificando = false;
     private volatile Set<String> vuelosCancelados = new HashSet<>();
     private volatile List<Paquete> paquetesIncrementales = new ArrayList<>();
@@ -80,6 +83,7 @@ public class CargaArchivosService {
             this.cargaVueloCache = null;
             this.rutasAsignadas = new HashMap<>();
             this.rutasAnteriores = new HashMap<>();
+            this.asignacionesSplit = new HashMap<>();
             this.planificando = false;
             deleteTempDir(tempDir);
             System.out.println("[CargaArchivosService] Dataset por defecto cargado. Paquetes: " + dataset.getPaquetes().size());
@@ -99,6 +103,7 @@ public class CargaArchivosService {
             this.cargaVueloCache = null;
             this.rutasAsignadas = new HashMap<>();
             this.rutasAnteriores = new HashMap<>();
+            this.asignacionesSplit = new HashMap<>();
             this.planificando = false;
             deleteTempDir(tempDir);
             lanzarPlanificacionEnBackground(dataset);
@@ -189,6 +194,7 @@ public class CargaArchivosService {
             this.cargaVueloCache = null;
             this.rutasAsignadas = new HashMap<>();
             this.rutasAnteriores = new HashMap<>();
+            this.asignacionesSplit = new HashMap<>();
             this.planificando = false;
 
             lanzarPlanificacionEnBackground(dataset);
@@ -260,6 +266,7 @@ public class CargaArchivosService {
 
             registrarRutasAnteriores(rutas);
             this.rutasAsignadas = new HashMap<>(rutas);
+            this.asignacionesSplit = new HashMap<>(solucion.getAsignacionesSplit());
             this.estadoOperacional = PlanificacionUtils.construirEstadoConAsignaciones(rutas, datasetGestion, config);
             Map<String, Integer> nuevoCache = new HashMap<>();
             for (Vuelo v : dataset.getVuelos()) {
@@ -390,6 +397,70 @@ public class CargaArchivosService {
         rutasAnteriores = historial;
     }
 
+    private List<Paquete> obtenerTodosLosPaquetes() {
+        List<Paquete> todos = new ArrayList<>();
+        if (lastDataset != null) {
+            todos.addAll(lastDataset.getPaquetes());
+        }
+        todos.addAll(paquetesIncrementales);
+        return todos;
+    }
+
+    private List<Map<String, Object>> construirMaletasPaquete(Paquete paquete, LocalDateTime ahoraUtc) {
+        List<Map<String, Object>> maletas = new ArrayList<>();
+        AsignacionPaquete asignacion = asignacionesSplit.get(paquete.getId());
+        Ruta rutaAnterior = rutasAnteriores.get(paquete.getId());
+        int indiceGlobal = 1;
+
+        if (asignacion != null && !asignacion.isEmpty()) {
+            int subrutaIndex = 1;
+            for (RutaConCantidad rc : asignacion.getRutas()) {
+                EstadoEnvio estado = computarEstado(paquete, rc.getRuta(), ahoraUtc);
+                for (int i = 0; i < rc.getCantidad(); i++) {
+                    maletas.add(construirMaleta(paquete, indiceGlobal++, subrutaIndex, rc.getRuta(), rutaAnterior, estado));
+                }
+                subrutaIndex++;
+            }
+        }
+
+        while (indiceGlobal <= paquete.getCantidad()) {
+            Ruta ruta = rutasAsignadas.get(paquete.getId());
+            EstadoEnvio estado = computarEstado(paquete, ruta, ahoraUtc);
+            maletas.add(construirMaleta(paquete, indiceGlobal++, 1, ruta, rutaAnterior, estado));
+        }
+
+        return maletas;
+    }
+
+    private Map<String, Object> construirMaleta(
+            Paquete paquete,
+            int indice,
+            int subrutaIndex,
+            Ruta ruta,
+            Ruta rutaAnterior,
+            EstadoEnvio estado
+    ) {
+        Map<String, Object> maleta = new HashMap<>();
+        String maletaId = paquete.getId() + "-BAG-" + String.format("%03d", indice);
+        maleta.put("id", maletaId);
+        maleta.put("envioId", paquete.getId());
+        maleta.put("indice", indice);
+        maleta.put("subrutaIndex", subrutaIndex);
+        maleta.put("origen", paquete.getOrigenOACI());
+        maleta.put("destino", paquete.getDestinoOACI());
+        maleta.put("estado", estado.estado());
+        maleta.put("aeropuertoActual", estado.aeropuertoActual());
+        maleta.put("vueloEsperado", estado.vueloEsperado());
+        maleta.put("vueloActual", estado.vueloActual());
+        maleta.put("ultimaLlegadaUtc", estado.ultimaLlegada() != null ? estado.ultimaLlegada().toString() : null);
+        maleta.put("rutaAeropuertos", construirRutaAeropuertos(paquete, ruta));
+        maleta.put("rutaVuelos", construirRutaVuelos(ruta));
+        maleta.put("rutaAnteriorAeropuertos", rutaAnterior != null ? construirRutaAeropuertos(paquete, rutaAnterior) : null);
+        maleta.put("rutaAnteriorVuelos", rutaAnterior != null ? construirRutaVuelos(rutaAnterior) : null);
+        maleta.put("cantidad", 1);
+        return maleta;
+    }
+
     @Scheduled(fixedRate = 300000)
     public synchronized void rePlanificarProgramado() {
         if (lastDataset == null || planificando) return;
@@ -443,12 +514,21 @@ public class CargaArchivosService {
             TwoPhaseOrchestrator orchestrator = new TwoPhaseOrchestrator(new ALNS_RutasPlanner());
             var solucion = orchestrator.ejecutarFlujoCompleto(datasetPendientes, config);
             var nuevasRutas = solucion.getRutasAsignadas();
+            var nuevosSplits = solucion.getAsignacionesSplit();
 
             // 5. Merge: activos (intocables) + nuevos (re-planificados)
             Map<String, Ruta> todasLasRutas = new HashMap<>(rutasActivos);
             todasLasRutas.putAll(nuevasRutas);
             registrarRutasAnteriores(todasLasRutas);
             this.rutasAsignadas = todasLasRutas;
+            Map<String, AsignacionPaquete> splitsActivos = new HashMap<>();
+            for (Map.Entry<String, AsignacionPaquete> entry : this.asignacionesSplit.entrySet()) {
+                if (!pendientesIds.contains(entry.getKey())) {
+                    splitsActivos.put(entry.getKey(), entry.getValue());
+                }
+            }
+            splitsActivos.putAll(nuevosSplits);
+            this.asignacionesSplit = splitsActivos;
 
             // 6. Reconstruir estado completo desde las rutas mergeadas
             Dataset datasetCompletoBase = new Dataset(
@@ -873,8 +953,7 @@ public class CargaArchivosService {
         }
 
         String term = searchTerm.toLowerCase();
-        List<Paquete> todos = new ArrayList<>(lastDataset.getPaquetes());
-        todos.addAll(paquetesIncrementales);
+        List<Paquete> todos = obtenerTodosLosPaquetes();
 
         for (Paquete p : todos) {
             if (p.getId().toLowerCase().contains(term)) {
@@ -885,6 +964,38 @@ public class CargaArchivosService {
             }
             if (resultados.size() >= 20) break;
         }
+        return resultados;
+    }
+
+    public synchronized List<Map<String, Object>> listarMaletas(
+            String estados,
+            String origen,
+            Integer horas
+    ) {
+        List<Map<String, Object>> resultados = new ArrayList<>();
+        if (lastDataset == null) return resultados;
+
+        Set<String> estadosSet = (estados == null || estados.isEmpty())
+                ? Set.of("EN_ESPERA", "EMBARCADO", "EN_VUELO", "ENTREGADO")
+                : Set.of(estados.split(","));
+
+        LocalDateTime ahoraUtc = LocalDateTime.now(ZoneOffset.UTC);
+        for (Paquete p : obtenerTodosLosPaquetes()) {
+            if (origen != null && !origen.isEmpty() && !p.getOrigenOACI().equals(origen)) continue;
+            for (Map<String, Object> maleta : construirMaletasPaquete(p, ahoraUtc)) {
+                String estado = (String) maleta.get("estado");
+                if (!estadosSet.contains(estado)) continue;
+                if ("ENTREGADO".equals(estado) && horas != null && horas > 0) {
+                    String ultimaLlegada = (String) maleta.get("ultimaLlegadaUtc");
+                    if (ultimaLlegada != null) {
+                        long diffHoras = Duration.between(LocalDateTime.parse(ultimaLlegada), ahoraUtc).toHours();
+                        if (diffHoras > horas) continue;
+                    }
+                }
+                resultados.add(maleta);
+            }
+        }
+
         return resultados;
     }
 
@@ -901,7 +1012,7 @@ public class CargaArchivosService {
                 : Set.of(estados.split(","));
 
         LocalDateTime ahoraUtc = LocalDateTime.now(ZoneOffset.UTC);
-        List<Paquete> todos = new ArrayList<>(paquetesIncrementales);
+        List<Paquete> todos = obtenerTodosLosPaquetes();
 
         for (Paquete p : todos) {
             if (origen != null && !origen.isEmpty() && !p.getOrigenOACI().equals(origen)) continue;
