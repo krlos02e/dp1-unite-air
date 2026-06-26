@@ -82,6 +82,7 @@ export default function OperacionDiaria() {
   const [selectedVuelo, setSelectedVuelo] = useState<VueloDTO | null>(null)
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
   const [selectedEnvio, setSelectedEnvio] = useState<EnvioEstado | null>(null)
+  const [selectedEnvioRouteMode, setSelectedEnvioRouteMode] = useState<'actual' | 'anterior'>('actual')
   const [mapTz, setMapTz] = useState(0)
   const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('aviones')
   const [panelCollapsed, setPanelCollapsed] = useState(true)
@@ -95,6 +96,7 @@ export default function OperacionDiaria() {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
     setSelectedAeropuerto(null)
     setSelectedEnvio(null)
+    setSelectedEnvioRouteMode('actual')
     setPanelMode('aviones')
     setPanelCollapsed(false)
   }, [])
@@ -103,6 +105,7 @@ export default function OperacionDiaria() {
     setSelectedAeropuerto((prev) => (prev?.codigoOACI === a.codigoOACI ? null : a))
     setSelectedVuelo(null)
     setSelectedEnvio(null)
+    setSelectedEnvioRouteMode('actual')
   }, [])
 
   const handleEnvioSelect = useCallback((envio: EnvioEstado) => {
@@ -110,9 +113,11 @@ export default function OperacionDiaria() {
       if (prev?.id === envio.id) {
         setSelectedVuelo(null)
         setSelectedAeropuerto(null)
+        setSelectedEnvioRouteMode('actual')
         return null
       }
 
+      setSelectedEnvioRouteMode('actual')
       const vueloId = envio.vueloActual || envio.vueloEsperado || envio.ultimoVuelo
       const vuelo = vueloId ? vuelos.find((v) => v.id === vueloId) : null
       if (vuelo) {
@@ -132,6 +137,7 @@ export default function OperacionDiaria() {
     if (vuelo) {
       setSelectedVuelo(vuelo)
       setSelectedEnvio(null)
+      setSelectedEnvioRouteMode('actual')
     }
   }, [vuelos])
 
@@ -295,6 +301,8 @@ export default function OperacionDiaria() {
             vuelos={vuelos}
             selectedVueloId={selectedVuelo?.id || null}
             selectedAeropuertoId={selectedAeropuerto?.codigoOACI || null}
+            selectedEnvio={selectedEnvio}
+            selectedEnvioRouteMode={selectedEnvioRouteMode}
             velocidad={1}
             onAeropuertoClick={handleAeropuertoClick}
             onVueloClick={handleVueloClick}
@@ -335,10 +343,13 @@ export default function OperacionDiaria() {
               setSelectedEnvio(null)
               setSelectedVuelo(null)
               setSelectedAeropuerto(null)
+              setSelectedEnvioRouteMode('actual')
             }}
             onIrAVuelo={handleIrAVueloDesdeEnvio}
             vuelos={vuelos}
             dentroDelMapa
+            routeMode={selectedEnvioRouteMode}
+            onRouteModeChange={setSelectedEnvioRouteMode}
           />
         </div>
         {panelRendered && (

@@ -45,6 +45,7 @@ public class CargaArchivosService {
     private volatile EstadoOperacional estadoOperacional;
     private volatile Map<String, Integer> cargaVueloCache;
     private volatile Map<String, Ruta> rutasAsignadas = new HashMap<>();
+    private volatile Map<String, Ruta> rutasAnteriores = new HashMap<>();
     private volatile boolean planificando = false;
     private volatile Set<String> vuelosCancelados = new HashSet<>();
     private volatile List<Paquete> paquetesIncrementales = new ArrayList<>();
@@ -78,6 +79,7 @@ public class CargaArchivosService {
             this.estadoOperacional = null;
             this.cargaVueloCache = null;
             this.rutasAsignadas = new HashMap<>();
+            this.rutasAnteriores = new HashMap<>();
             this.planificando = false;
             deleteTempDir(tempDir);
             System.out.println("[CargaArchivosService] Dataset por defecto cargado. Paquetes: " + dataset.getPaquetes().size());
@@ -96,6 +98,7 @@ public class CargaArchivosService {
             this.estadoOperacional = null;
             this.cargaVueloCache = null;
             this.rutasAsignadas = new HashMap<>();
+            this.rutasAnteriores = new HashMap<>();
             this.planificando = false;
             deleteTempDir(tempDir);
             lanzarPlanificacionEnBackground(dataset);
@@ -185,6 +188,7 @@ public class CargaArchivosService {
             this.estadoOperacional = null;
             this.cargaVueloCache = null;
             this.rutasAsignadas = new HashMap<>();
+            this.rutasAnteriores = new HashMap<>();
             this.planificando = false;
 
             lanzarPlanificacionEnBackground(dataset);
@@ -254,6 +258,7 @@ public class CargaArchivosService {
             var solucion = orchestrator.ejecutarFlujoCompleto(datasetGestion, config);
             var rutas = solucion.getRutasAsignadas();
 
+            registrarRutasAnteriores(rutas);
             this.rutasAsignadas = new HashMap<>(rutas);
             this.estadoOperacional = PlanificacionUtils.construirEstadoConAsignaciones(rutas, datasetGestion, config);
             Map<String, Integer> nuevoCache = new HashMap<>();
@@ -349,6 +354,42 @@ public class CargaArchivosService {
         return new ArrayList<>(aeropuertos);
     }
 
+    private List<String> construirRutaVuelos(Ruta ruta) {
+        if (ruta == null || ruta.getVuelos().isEmpty()) {
+            return new ArrayList<>();
+        }
+        return ruta.getVuelos().stream()
+                .map(Vuelo::getId)
+                .collect(Collectors.toCollection(ArrayList::new));
+    }
+
+    private String firmaRuta(Ruta ruta) {
+        if (ruta == null || ruta.getVuelos().isEmpty()) {
+            return "";
+        }
+        return ruta.getVuelos().stream()
+                .map(Vuelo::getId)
+                .collect(Collectors.joining("|"));
+    }
+
+    private void registrarRutasAnteriores(Map<String, Ruta> nuevasRutas) {
+        if (nuevasRutas == null || nuevasRutas.isEmpty() || rutasAsignadas.isEmpty()) {
+            return;
+        }
+        Map<String, Ruta> historial = new HashMap<>(rutasAnteriores);
+        for (Map.Entry<String, Ruta> entry : nuevasRutas.entrySet()) {
+            Ruta actual = rutasAsignadas.get(entry.getKey());
+            Ruta nueva = entry.getValue();
+            if (actual == null) {
+                continue;
+            }
+            if (!Objects.equals(firmaRuta(actual), firmaRuta(nueva))) {
+                historial.put(entry.getKey(), actual);
+            }
+        }
+        rutasAnteriores = historial;
+    }
+
     @Scheduled(fixedRate = 300000)
     public synchronized void rePlanificarProgramado() {
         if (lastDataset == null || planificando) return;
@@ -406,6 +447,7 @@ public class CargaArchivosService {
             // 5. Merge: activos (intocables) + nuevos (re-planificados)
             Map<String, Ruta> todasLasRutas = new HashMap<>(rutasActivos);
             todasLasRutas.putAll(nuevasRutas);
+            registrarRutasAnteriores(todasLasRutas);
             this.rutasAsignadas = todasLasRutas;
 
             // 6. Reconstruir estado completo desde las rutas mergeadas
@@ -805,6 +847,7 @@ public class CargaArchivosService {
 
         LocalDateTime ahoraUtc = LocalDateTime.now(ZoneOffset.UTC);
         Ruta ruta = rutasAsignadas.get(paquete.getId());
+        Ruta rutaAnterior = rutasAnteriores.get(paquete.getId());
         EstadoEnvio e = computarEstado(paquete, ruta, ahoraUtc);
 
         Map<String, Object> result = new HashMap<>();
@@ -816,6 +859,9 @@ public class CargaArchivosService {
         result.put("vueloEsperado", e.vueloEsperado());
         result.put("vueloActual", e.vueloActual());
         result.put("rutaAeropuertos", construirRutaAeropuertos(paquete, ruta));
+        result.put("rutaVuelos", construirRutaVuelos(ruta));
+        result.put("rutaAnteriorAeropuertos", rutaAnterior != null ? construirRutaAeropuertos(paquete, rutaAnterior) : null);
+        result.put("rutaAnteriorVuelos", rutaAnterior != null ? construirRutaVuelos(rutaAnterior) : null);
         result.put("cantidad", paquete.getCantidad());
         return result;
     }
@@ -861,6 +907,7 @@ public class CargaArchivosService {
             if (origen != null && !origen.isEmpty() && !p.getOrigenOACI().equals(origen)) continue;
 
             Ruta ruta = rutasAsignadas.get(p.getId());
+            Ruta rutaAnterior = rutasAnteriores.get(p.getId());
             EstadoEnvio e = computarEstado(p, ruta, ahoraUtc);
 
             if (!estadosSet.contains(e.estado())) continue;
@@ -879,6 +926,9 @@ public class CargaArchivosService {
             envio.put("vueloEsperado", e.vueloEsperado());
             envio.put("vueloActual", e.vueloActual());
             envio.put("rutaAeropuertos", construirRutaAeropuertos(p, ruta));
+            envio.put("rutaVuelos", construirRutaVuelos(ruta));
+            envio.put("rutaAnteriorAeropuertos", rutaAnterior != null ? construirRutaAeropuertos(p, rutaAnterior) : null);
+            envio.put("rutaAnteriorVuelos", rutaAnterior != null ? construirRutaVuelos(rutaAnterior) : null);
             envio.put("cantidad", p.getCantidad());
             resultados.add(envio);
         }

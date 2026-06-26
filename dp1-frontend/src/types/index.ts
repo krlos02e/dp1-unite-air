@@ -151,6 +151,9 @@ export interface EnvioEstado {
   ultimoVuelo?: string | null;
   ultimaLlegadaUtc?: string | null;
   rutaAeropuertos?: string[];
+  rutaVuelos?: string[];
+  rutaAnteriorAeropuertos?: string[] | null;
+  rutaAnteriorVuelos?: string[] | null;
   cantidad: number;
 }
 

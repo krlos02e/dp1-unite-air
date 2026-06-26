@@ -56,6 +56,7 @@ export default function Simulacion() {
   const [selectedVuelo, setSelectedVuelo] = useState<VueloDTO | null>(null)
   const [selectedAeropuerto, setSelectedAeropuerto] = useState<AeropuertoDTO | null>(null)
   const [selectedEnvio, setSelectedEnvio] = useState<EnvioEstado | null>(null)
+  const [selectedEnvioRouteMode, setSelectedEnvioRouteMode] = useState<'actual' | 'anterior'>('actual')
   const [showStopConfirm, setShowStopConfirm] = useState(false)
   const [mapTz, setMapTz] = useState(0)
   const [panelMode, setPanelMode] = useState<'envios' | 'almacenes' | 'aviones'>('aviones')
@@ -69,6 +70,7 @@ export default function Simulacion() {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
     setSelectedAeropuerto(null)
     setSelectedEnvio(null)
+    setSelectedEnvioRouteMode('actual')
     setPanelMode('aviones')
     setPanelCollapsed(false)
   }, [])
@@ -77,6 +79,7 @@ export default function Simulacion() {
     setSelectedAeropuerto((prev) => (prev?.codigoOACI === a.codigoOACI ? null : a))
     setSelectedVuelo(null)
     setSelectedEnvio(null)
+    setSelectedEnvioRouteMode('actual')
   }, [])
 
   const handleEnvioSelect = useCallback((envio: EnvioEstado) => {
@@ -84,9 +87,11 @@ export default function Simulacion() {
       if (prev?.id === envio.id) {
         setSelectedVuelo(null)
         setSelectedAeropuerto(null)
+        setSelectedEnvioRouteMode('actual')
         return null
       }
 
+      setSelectedEnvioRouteMode('actual')
       const vueloId = envio.vueloActual || envio.vueloEsperado || envio.ultimoVuelo
       const vuelo = vueloId ? simulationState?.vuelos.find((v) => v.id === vueloId) : null
       if (vuelo) {
@@ -107,6 +112,7 @@ export default function Simulacion() {
     if (vuelo) {
       setSelectedVuelo(vuelo)
       setSelectedEnvio(null)
+      setSelectedEnvioRouteMode('actual')
     }
   }, [simulationState])
 
@@ -468,6 +474,8 @@ export default function Simulacion() {
             vuelos={vuelos}
             selectedVueloId={selectedVuelo?.id || null}
             selectedAeropuertoId={selectedAeropuerto?.codigoOACI || null}
+            selectedEnvio={selectedEnvio}
+            selectedEnvioRouteMode={selectedEnvioRouteMode}
             velocidad={1}
             onAeropuertoClick={handleAeropuertoClick}
             onVueloClick={handleVueloClick}
@@ -560,10 +568,13 @@ export default function Simulacion() {
               setSelectedEnvio(null)
               setSelectedVuelo(null)
               setSelectedAeropuerto(null)
+              setSelectedEnvioRouteMode('actual')
             }}
             onIrAVuelo={handleIrAVueloDesdeEnvio}
             vuelos={vuelos}
             dentroDelMapa
+            routeMode={selectedEnvioRouteMode}
+            onRouteModeChange={setSelectedEnvioRouteMode}
           />
         </div>
 

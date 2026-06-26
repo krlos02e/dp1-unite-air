@@ -1,12 +1,12 @@
 import {useEffect, useRef, useState, memo, useMemo} from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import type { AeropuertoDTO, VueloDTO } from '../types'
-import { buildAirportLookup, getAirportCityResolved, AIRPORTS_DATA } from '../data/airportsData'
+import type { AeropuertoDTO, VueloDTO, EnvioEstado } from '../types'
+import { buildAirportLookup, getAirportCityResolved, AIRPORTS_DATA, type AirportLookupData } from '../data/airportsData'
 import { TIMEZONE_OPTIONS } from '../utils/timezoneFormat'
 import { shouldDisplayFlight } from '../utils/flightVisibility'
 
-function tooltipForFlight(v: VueloDTO, airportLookup: Map<string, AeropuertoDTO>): string {
+function tooltipForFlight(v: VueloDTO, airportLookup: Map<string, AirportLookupData>): string {
   const origen = getAirportCityResolved(v.origen, airportLookup) || v.origen
   const destino = getAirportCityResolved(v.destino, airportLookup) || v.destino
   return `<b>${v.id}</b><br>${origen} → ${destino}<br>Progreso: ${Math.round(calcularProgresoLocal(v, new Date()))}%<br>Maletas: ${v.cargaActual}/${v.capacidad}`
@@ -17,6 +17,8 @@ interface Props {
   vuelos: VueloDTO[]
   selectedVueloId?: string | null
   selectedAeropuertoId?: string | null
+  selectedEnvio?: EnvioEstado | null
+  selectedEnvioRouteMode?: 'actual' | 'anterior'
   velocidad?: number
   onAeropuertoClick?: (a: AeropuertoDTO) => void
   onVueloClick?: (v: VueloDTO) => void
@@ -139,6 +141,15 @@ function interpolatePosition(from: [number, number], to: [number, number], t: nu
   return [lat, lon]
 }
 
+function airportCoords(code: string, airportMap: Map<string, AeropuertoDTO>): [number, number] | null {
+  const airport = airportMap.get(code)
+  const staticData = AIRPORTS_DATA[code]
+  const lat = airport?.latitud && airport.latitud !== 0 ? airport.latitud : staticData?.latitud
+  const lon = airport?.longitud && airport.longitud !== 0 ? airport.longitud : staticData?.longitud
+  if (lat === undefined || lon === undefined) return null
+  return [lat, lon]
+}
+
 function bezierPoints(from: [number, number], to: [number, number], steps: number): [number, number][] {
   const pts: [number, number][] = []
   for (let i = 0; i <= steps; i++) {
@@ -177,7 +188,7 @@ function animatedProgress(anim: FlightAnim, now: number): number {
   return anim.startProgress + (anim.targetProgress - anim.startProgress) * fraction
 }
 
-function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropuertoId, velocidad = 1, onAeropuertoClick, onVueloClick, mapTz, onMapTzChange, simulationMode = false, filteredFlightIds = null }: Props) {
+function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropuertoId, selectedEnvio = null, selectedEnvioRouteMode = 'actual', velocidad = 1, onAeropuertoClick, onVueloClick, mapTz, onMapTzChange, simulationMode = false, filteredFlightIds = null }: Props) {
   const mapRef = useRef<L.Map | null>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const circleLayerRef = useRef<L.LayerGroup | null>(null)
@@ -189,8 +200,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
   const persistentFlightsRef = useRef<Map<string, VueloDTO>>(new Map())
   const airportLookup = useMemo(() => buildAirportLookup(aeropuertos), [aeropuertos])
   const selectedRouteRef = useRef<L.Polyline | null>(null)
-  const selectedOriginRef = useRef<L.CircleMarker | null>(null)
-  const selectedDestRef = useRef<L.CircleMarker | null>(null)
+  const selectedStopsLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLinesRef = useRef<Map<string, RoutePair>>(new Map())
   const flightAnimsRef = useRef<Map<string, FlightAnim>>(new Map())
@@ -429,16 +439,14 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       mapRef.current.removeLayer(selectedRouteRef.current)
       selectedRouteRef.current = null
     }
-    if (selectedOriginRef.current) {
-      mapRef.current.removeLayer(selectedOriginRef.current)
-      selectedOriginRef.current = null
-    }
-    if (selectedDestRef.current) {
-      mapRef.current.removeLayer(selectedDestRef.current)
-      selectedDestRef.current = null
+    if (selectedStopsLayerRef.current) {
+      mapRef.current.removeLayer(selectedStopsLayerRef.current)
+      selectedStopsLayerRef.current = null
     }
 
-    const selection = selectedVueloId
+    const selection = selectedEnvio
+      ? `envio:${selectedEnvio.id}:${selectedEnvioRouteMode}`
+      : selectedVueloId
       ? `vuelo:${selectedVueloId}`
       : selectedAeropuertoId
         ? `aeropuerto:${selectedAeropuertoId}`
@@ -448,7 +456,53 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       prevViewRef.current = { center: mapRef.current.getCenter(), zoom: mapRef.current.getZoom() }
     }
 
-    if (selectedVueloId) {
+    const airportMap = new Map(aeropuertos.map((a) => [a.codigoOACI, a]))
+
+    if (selectedEnvio) {
+      const routeCodes = selectedEnvioRouteMode === 'anterior'
+        ? (selectedEnvio.rutaAnteriorAeropuertos || [])
+        : (selectedEnvio.rutaAeropuertos || [])
+      const routeFlights = selectedEnvioRouteMode === 'anterior'
+        ? (selectedEnvio.rutaAnteriorVuelos || [])
+        : (selectedEnvio.rutaVuelos || [])
+      const points = routeCodes
+        .map((code) => ({ code, coords: airportCoords(code, airportMap) }))
+        .filter((point): point is { code: string; coords: [number, number] } => Boolean(point.coords))
+
+      if (points.length >= 2 && mapRef.current) {
+        const latLngs = points.map((point) => point.coords)
+        if (selection !== prevSelectionRef.current) {
+          mapRef.current.fitBounds(L.latLngBounds(latLngs), { padding: [40, 40], animate: true, maxZoom: 5 })
+        }
+
+        selectedRouteRef.current = L.polyline(latLngs, {
+          color: selectedEnvioRouteMode === 'anterior' ? '#f97316' : '#facc15',
+          weight: 3,
+          opacity: 0.95,
+          dashArray: selectedEnvioRouteMode === 'anterior' ? '8, 8' : undefined,
+        }).addTo(mapRef.current)
+
+        const stopsLayer = L.layerGroup().addTo(mapRef.current)
+        points.forEach((point, index) => {
+          const color = index === 0 ? '#22c55e' : index === points.length - 1 ? '#ef4444' : '#38bdf8'
+          const role = index === 0 ? 'Origen' : index === points.length - 1 ? 'Destino' : `Escala ${index}`
+          const flightId = routeFlights[index - 1]
+          const marker = L.circleMarker(point.coords, {
+            radius: index === 0 || index === points.length - 1 ? 8 : 6,
+            color,
+            fillColor: color,
+            fillOpacity: 0.35,
+            weight: 2,
+          }).bindTooltip([
+            `<b>${role}</b>`,
+            getAirportCityResolved(point.code, airportLookup) || point.code,
+            flightId ? `UT: ${flightId}` : null,
+          ].filter(Boolean).join('<br>'))
+          stopsLayer.addLayer(marker)
+        })
+        selectedStopsLayerRef.current = stopsLayer
+      }
+    } else if (selectedVueloId) {
       const selectedVuelo = persistentFlightsRef.current.get(selectedVueloId) ?? vuelos.find((v) => v.id === selectedVueloId)
       if (selectedVuelo && mapRef.current) {
         const from: [number, number] = [selectedVuelo.latOrigen, selectedVuelo.lonOrigen]
@@ -468,21 +522,22 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
           opacity: 0.9,
         }).addTo(mapRef.current)
 
-        selectedOriginRef.current = L.circleMarker(from, {
+        const stopsLayer = L.layerGroup().addTo(mapRef.current)
+        stopsLayer.addLayer(L.circleMarker(from, {
           radius: 8,
           color: '#22c55e',
           fillColor: '#22c55e',
           fillOpacity: 0.3,
           weight: 2,
-        }).addTo(mapRef.current)
-
-        selectedDestRef.current = L.circleMarker(to, {
+        }))
+        stopsLayer.addLayer(L.circleMarker(to, {
           radius: 8,
           color: '#ef4444',
           fillColor: '#ef4444',
           fillOpacity: 0.3,
           weight: 2,
-        }).addTo(mapRef.current)
+        }))
+        selectedStopsLayerRef.current = stopsLayer
       }
     } else if (selectedAeropuertoId) {
       const marker = airportMarkersRef.current.get(selectedAeropuertoId)
@@ -509,7 +564,6 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       }
     })
 
-    const airportMap = new Map(aeropuertos.map((a) => [a.codigoOACI, a]))
     airportMarkersRef.current.forEach((mk, code) => {
       const airport = airportMap.get(code)
       if (!airport) return
@@ -517,7 +571,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       const color = aeropuertoColor(airport.ocupacionActual, airport.capacidadMaxima)
       mk.setIcon(airportIcon(color, cityName, code === selectedAeropuertoId))
     })
-  }, [selectedVueloId, selectedAeropuertoId, vuelos, aeropuertos])
+  }, [selectedEnvio, selectedEnvioRouteMode, selectedVueloId, selectedAeropuertoId, vuelos, aeropuertos, airportLookup])
 
   useEffect(() => {
     if (!markerLayerRef.current) return

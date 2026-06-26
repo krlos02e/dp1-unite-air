@@ -22,5 +22,8 @@ public class EnvioSimulacionDTO {
     private String ultimoVuelo;
     private String ultimaLlegadaUtc;
     private List<String> rutaAeropuertos;
+    private List<String> rutaVuelos;
+    private List<String> rutaAnteriorAeropuertos;
+    private List<String> rutaAnteriorVuelos;
     private int cantidad;
 }
