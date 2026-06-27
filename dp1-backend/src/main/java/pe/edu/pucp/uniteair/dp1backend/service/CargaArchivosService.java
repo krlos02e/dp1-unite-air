@@ -98,6 +98,10 @@ public class CargaArchivosService {
             Path tempDir = Files.createTempDirectory("simulacion_carga_");
             copiarRecursosACarpeta(tempDir);
             Dataset dataset = cargarDatasetEnTemp(tempDir, fechaInicio, dias);
+            System.out.println("[CargaArchivosService] cargarDatasetConFechas fechaInicio=" + fechaInicio
+                    + " dias=" + dias
+                    + " paquetes=" + dataset.getPaquetes().size()
+                    + " vuelos=" + dataset.getVuelos().size());
             this.lastDataset = dataset;
             this.estadoOperacional = null;
             this.cargaVueloCache = null;
@@ -109,6 +113,7 @@ public class CargaArchivosService {
             lanzarPlanificacionEnBackground(dataset);
         } catch (Exception e) {
             System.err.println("No se pudo cargar dataset con fechas: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -237,7 +242,7 @@ public class CargaArchivosService {
     }
 
     private void planificarDataset(Dataset dataset) {
-        List<Paquete> paquetes = new ArrayList<>(paquetesIncrementales);
+        List<Paquete> paquetes = combinarPaquetes(dataset != null ? dataset.getPaquetes() : List.of(), paquetesIncrementales);
         if (dataset == null || paquetes.isEmpty()) {
             this.estadoOperacional = new EstadoOperacional();
             this.cargaVueloCache = new HashMap<>();
@@ -398,12 +403,21 @@ public class CargaArchivosService {
     }
 
     private List<Paquete> obtenerTodosLosPaquetes() {
-        List<Paquete> todos = new ArrayList<>();
-        if (lastDataset != null) {
-            todos.addAll(lastDataset.getPaquetes());
+        return combinarPaquetes(
+                lastDataset != null ? lastDataset.getPaquetes() : List.of(),
+                paquetesIncrementales
+        );
+    }
+
+    private List<Paquete> combinarPaquetes(List<Paquete> base, List<Paquete> adicionales) {
+        Map<String, Paquete> combinados = new LinkedHashMap<>();
+        for (Paquete paquete : base) {
+            combinados.put(paquete.getId(), paquete);
         }
-        todos.addAll(paquetesIncrementales);
-        return todos;
+        for (Paquete paquete : adicionales) {
+            combinados.put(paquete.getId(), paquete);
+        }
+        return new ArrayList<>(combinados.values());
     }
 
     private List<Map<String, Object>> construirMaletasPaquete(Paquete paquete, LocalDateTime ahoraUtc) {
@@ -467,12 +481,12 @@ public class CargaArchivosService {
 
         LocalDateTime ahoraUtc = LocalDateTime.now(ZoneOffset.UTC);
 
-        // 1. Recolectar solo paquetes incrementales (lo que ingresa el usuario)
-        if (paquetesIncrementales.isEmpty()) return;
+        List<Paquete> paquetesPlanificables = obtenerTodosLosPaquetes();
+        if (paquetesPlanificables.isEmpty()) return;
 
-        // 2. Filtrar pendientes: EN_ESPERA o EMBARCADO
+        // 1. Filtrar pendientes: EN_ESPERA o EMBARCADO
         List<Paquete> pendientes = new ArrayList<>();
-        for (Paquete p : paquetesIncrementales) {
+        for (Paquete p : paquetesPlanificables) {
             Ruta ruta = rutasAsignadas.get(p.getId());
             EstadoEnvio e = computarEstado(p, ruta, ahoraUtc);
             if ("EN_ESPERA".equals(e.estado()) || "EMBARCADO".equals(e.estado())) {
@@ -481,7 +495,7 @@ public class CargaArchivosService {
         }
         if (pendientes.isEmpty()) return;
 
-        // 3. Preservar rutas de paquetes activos (EN_VUELO / ENTREGADO)
+        // 2. Preservar rutas de paquetes activos (EN_VUELO / ENTREGADO)
         Set<String> pendientesIds = pendientes.stream().map(Paquete::getId).collect(Collectors.toSet());
         Map<String, Ruta> rutasActivos = new HashMap<>();
         for (Map.Entry<String, Ruta> entry : this.rutasAsignadas.entrySet()) {
@@ -490,7 +504,7 @@ public class CargaArchivosService {
             }
         }
 
-        // 4. Planificar solo pendientes
+        // 3. Planificar solo pendientes
         planificando = true;
         try {
             Config_Simulacion config = new Config_Simulacion();
@@ -516,7 +530,7 @@ public class CargaArchivosService {
             var nuevasRutas = solucion.getRutasAsignadas();
             var nuevosSplits = solucion.getAsignacionesSplit();
 
-            // 5. Merge: activos (intocables) + nuevos (re-planificados)
+            // 4. Merge: activos (intocables) + nuevos (re-planificados)
             Map<String, Ruta> todasLasRutas = new HashMap<>(rutasActivos);
             todasLasRutas.putAll(nuevasRutas);
             registrarRutasAnteriores(todasLasRutas);
@@ -530,11 +544,11 @@ public class CargaArchivosService {
             splitsActivos.putAll(nuevosSplits);
             this.asignacionesSplit = splitsActivos;
 
-            // 6. Reconstruir estado completo desde las rutas mergeadas
+            // 5. Reconstruir estado completo desde las rutas mergeadas
             Dataset datasetCompletoBase = new Dataset(
                 lastDataset.getAeropuertos(),
                 lastDataset.getVuelos(),
-                paquetesIncrementales
+                paquetesPlanificables
             );
             Dataset datasetCompleto = datasetContextService.construirDatasetEfectivo(
                     AlmacenContexto.OPERACION,
@@ -543,7 +557,7 @@ public class CargaArchivosService {
             this.estadoOperacional = PlanificacionUtils.construirEstadoConAsignaciones(
                 todasLasRutas, datasetCompleto, config);
 
-            // 7. Reconstruir cache de carga de vuelos
+            // 6. Reconstruir cache de carga de vuelos
             Map<String, Integer> nuevoCache = new HashMap<>();
             for (Vuelo v : lastDataset.getVuelos()) {
                 int carga = this.estadoOperacional.getCargaVuelo(v.getId());
@@ -683,7 +697,7 @@ public class CargaArchivosService {
         List<Paquete> paquetesFiltrados = new ArrayList<>();
         Set<String> aeropuertosInvolucrados = new HashSet<>();
 
-        for (Paquete p : paquetesIncrementales) {
+        for (Paquete p : obtenerTodosLosPaquetes()) {
             if (excluirPaquetes.contains(p.getId())) continue;
 
             Aeropuerto aeropuertoOrigen = lastDataset.getAeropuerto(p.getOrigenOACI());

@@ -3,8 +3,10 @@ package pe.edu.pucp.uniteair.dp1backend.controller;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import pe.edu.pucp.uniteair.dp1backend.cache.SimulationCache;
 import pe.edu.pucp.uniteair.dp1backend.config.AeropuertoCoordenadas;
 import pe.edu.pucp.uniteair.dp1backend.dto.AeropuertoDTO;
+import pe.edu.pucp.uniteair.dp1backend.dto.SimulationState;
 import pe.edu.pucp.uniteair.dp1backend.dto.VueloDTO;
 import pe.edu.pucp.uniteair.dp1backend.entity.AlmacenContexto;
 import pe.edu.pucp.uniteair.dp1backend.service.CargaArchivosService;
@@ -32,13 +34,16 @@ public class CargaArchivosController {
     private final CargaArchivosService cargaArchivosService;
     private final AlmacenService almacenService;
     private final DatasetContextService datasetContextService;
+    private final SimulationCache simulationCache;
 
     public CargaArchivosController(CargaArchivosService cargaArchivosService,
                                    AlmacenService almacenService,
-                                   DatasetContextService datasetContextService) {
+                                   DatasetContextService datasetContextService,
+                                   SimulationCache simulationCache) {
         this.cargaArchivosService = cargaArchivosService;
         this.almacenService = almacenService;
         this.datasetContextService = datasetContextService;
+        this.simulationCache = simulationCache;
     }
 
     @PostMapping("/upload")
@@ -81,6 +86,14 @@ public class CargaArchivosController {
     public ResponseEntity<List<AeropuertoDTO>> obtenerAeropuertos(
             @RequestParam(defaultValue = "OPERACION") AlmacenContexto contexto
     ) {
+        boolean esSimulacion = contexto == AlmacenContexto.SIMULACION;
+        if (contexto == AlmacenContexto.SIMULACION) {
+            SimulationState estadoSimulacion = obtenerEstadoSimulacionActivo();
+            if (estadoSimulacion != null && estadoSimulacion.getAeropuertos() != null) {
+                return ResponseEntity.ok(estadoSimulacion.getAeropuertos());
+            }
+        }
+
         Dataset dataset = datasetContextService.construirDatasetEfectivo(contexto, cargaArchivosService.obtenerUltimoDataset());
         if (dataset == null) {
             return ResponseEntity.ok(List.of());
@@ -116,7 +129,9 @@ public class CargaArchivosController {
                     double latitud = alm != null ? alm.getLatitud() : (coord != null ? coord[0] : 0.0);
                     double longitud = alm != null ? alm.getLongitud() : (coord != null ? coord[1] : 0.0);
                     int capacidadMaxima = alm != null ? alm.getCapacidadMaxima() : (aeropuerto != null ? aeropuerto.getCapacidadMaxima() : 0);
-                    int ocup = aeropuerto != null ? cargaArchivosService.getOcupacionAeropuerto(codigo, ahora) : 0;
+                    int ocup = (!esSimulacion && aeropuerto != null)
+                            ? cargaArchivosService.getOcupacionAeropuerto(codigo, ahora)
+                            : 0;
                     return AeropuertoDTO.builder()
                             .codigoOACI(codigo)
                             .latitud(latitud)
@@ -138,11 +153,19 @@ public class CargaArchivosController {
     public ResponseEntity<List<VueloDTO>> obtenerVuelos(
             @RequestParam(defaultValue = "OPERACION") AlmacenContexto contexto
     ) {
+        boolean esSimulacion = contexto == AlmacenContexto.SIMULACION;
+        if (contexto == AlmacenContexto.SIMULACION) {
+            SimulationState estadoSimulacion = obtenerEstadoSimulacionActivo();
+            if (estadoSimulacion != null && estadoSimulacion.getVuelos() != null) {
+                return ResponseEntity.ok(estadoSimulacion.getVuelos());
+            }
+        }
+
         Dataset dataset = datasetContextService.construirDatasetEfectivo(contexto, cargaArchivosService.obtenerUltimoDataset());
         if (dataset == null) {
             return ResponseEntity.ok(List.of());
         }
-        Set<String> vuelosCancelados = cargaArchivosService.obtenerVuelosCancelados();
+        Set<String> vuelosCancelados = esSimulacion ? Set.of() : cargaArchivosService.obtenerVuelosCancelados();
         LocalDateTime ahora = LocalDateTime.now(ZoneOffset.UTC);
         Map<String, Almacen> almacenMap = almacenService.getMapaAlmacenes(contexto);
         List<VueloDTO> vuelos = new ArrayList<>();
@@ -155,7 +178,7 @@ public class CargaArchivosController {
             double lonOrigen = almOrigen != null ? almOrigen.getLongitud() : orig[1];
             double latDestino = almDestino != null ? almDestino.getLatitud() : dest[0];
             double lonDestino = almDestino != null ? almDestino.getLongitud() : dest[1];
-            int carga = cargaArchivosService.getCargaVuelo(v.getId());
+            int carga = esSimulacion ? 0 : cargaArchivosService.getCargaVuelo(v.getId());
 
             String estado;
             if (vuelosCancelados.contains(v.getId())) {
@@ -203,5 +226,13 @@ public class CargaArchivosController {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    private SimulationState obtenerEstadoSimulacionActivo() {
+        String sessionId = simulationCache.getActiveSessionId();
+        if (sessionId == null) {
+            return null;
+        }
+        return simulationCache.get(sessionId);
     }
 }

@@ -59,19 +59,36 @@ public class SimulationService {
         Config_Simulacion config = new Config_Simulacion();
         config.setAeropuertoHub("SKBO");
         config.setMinimaConexion(java.time.Duration.ofMinutes(10));
-        config.setIteracionesALNS(20);
-        config.setMaxRutasPorPaquete(4);
+        config.setIteracionesALNS(15);
+        config.setMaxRutasPorPaquete(5);
         config.setMaxEscalas(2);
         config.setVentanaActualizacionPesos(5);
         config.setEvaporacionFeromona(0.4);
 
+        System.out.println("[SimulationService] iniciarSimulacion sessionId=" + sessionId
+                + " fecha=" + fecha
+                + " hora=" + hora
+                + " duracionDias=" + duracionDias
+                + " algoritmo=" + algoritmo
+                + " iteracionesALNS=" + config.getIteracionesALNS()
+                + " maxRutas=" + config.getMaxRutasPorPaquete());
         cargaArchivosService.cargarDatasetConFechas(fecha, duracionDias);
+        Dataset ultimoDataset = cargaArchivosService.obtenerUltimoDataset();
+        System.out.println("[SimulationService] ultimoDataset paquetes="
+                + (ultimoDataset != null ? ultimoDataset.getPaquetes().size() : -1)
+                + " vuelos="
+                + (ultimoDataset != null ? ultimoDataset.getVuelos().size() : -1));
         dataset = datasetContextService.construirDatasetEfectivo(
                 AlmacenContexto.SIMULACION,
-                cargaArchivosService.obtenerUltimoDataset(),
+                ultimoDataset,
                 fecha,
                 duracionDias + 2
         );
+        System.out.println("[SimulationService] dataset simulacion efectivo paquetes="
+                + (dataset != null ? dataset.getPaquetes().size() : -1)
+                + " vuelos="
+                + (dataset != null ? dataset.getVuelos().size() : -1)
+                + " (dataset completo para la simulacion; ALNS usa ventana rodante aparte)");
         if (dataset == null) {
             return SimulationState.builder()
                     .sessionId(sessionId)

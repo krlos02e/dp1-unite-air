@@ -40,7 +40,7 @@ function estaDentroDeHoras(envio: EnvioEstado, horas?: number, currentTime?: str
 }
 
 export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosExternos, currentTime }: Props) {
-  const [tab, setTab] = useState<Tab>('envuelo')
+  const [tab, setTab] = useState<Tab>('pendientes')
   const [search, setSearch] = useState('')
   const [filtroId, setFiltroId] = useState(true)
   const [filtroOrigen, setFiltroOrigen] = useState(true)
@@ -85,6 +85,31 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosE
   }, [tab, enviosExternos, showAll])
 
   useEffect(() => { setShowAll(false) }, [tab])
+
+  useEffect(() => {
+    if (!enviosExternos) return
+
+    const counts: Record<Tab, number> = {
+      pendientes: countByEstado(enviosExternos, 'EN_ESPERA'),
+      planificados: countByEstado(enviosExternos, 'EMBARCADO'),
+      envuelo: countByEstado(enviosExternos, 'EN_VUELO'),
+      entregados: enviosExternos.filter((e) =>
+        e.estado === 'ENTREGADO' && estaDentroDeHoras(e, 4, currentTime)
+      ).length,
+    }
+
+    if (counts[tab] > 0) return
+
+    if (counts.pendientes > 0) {
+      setTab('pendientes')
+    } else if (counts.planificados > 0) {
+      setTab('planificados')
+    } else if (counts.envuelo > 0) {
+      setTab('envuelo')
+    } else if (counts.entregados > 0) {
+      setTab('entregados')
+    }
+  }, [enviosExternos, currentTime, tab])
 
   const enviosVisibles = enviosExternos
     ? enviosExternos.filter((e) => {
