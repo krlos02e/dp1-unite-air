@@ -522,6 +522,7 @@ export default function Simulacion() {
             mapTz={mapTz}
             onMapTzChange={setMapTz}
             simulationMode={true}
+            simulationTime={simulationState?.simulationTime ?? null}
             filteredFlightIds={panelMode === 'aviones' && !panelCollapsed ? filteredFlightIds : null}
           />
 

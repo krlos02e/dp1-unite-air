@@ -203,6 +203,7 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
             mapTz={mapTz}
             onMapTzChange={setMapTz}
             simulationMode={true}
+            simulationTime={simulationState.simulationTime}
           />
         </div>
 

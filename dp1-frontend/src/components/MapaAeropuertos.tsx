@@ -25,6 +25,7 @@ interface Props {
   mapTz: number
   onMapTzChange: (tz: number) => void
   simulationMode?: boolean
+  simulationTime?: string | null
   filteredFlightIds?: Set<string> | null
 }
 
@@ -122,6 +123,10 @@ function calcularProgresoLocal(v: VueloDTO, now: Date): number {
   return (transcurrido / totalMs) * 100
 }
 
+function calcularProgresoEnSimulacion(v: VueloDTO, simulationNow: Date): number {
+  return calcularProgresoLocal(v, simulationNow)
+}
+
 function bearing(from: [number, number], to: [number, number]): number {
   const dLon = (to[1] - from[1]) * Math.PI / 180
   const lat1 = from[0] * Math.PI / 180
@@ -182,6 +187,12 @@ interface FlightAnim {
   lastRouteIndex: number
 }
 
+interface SimClockSnapshot {
+  simulationTimeMs: number
+  receivedAtMs: number
+  rateMsPerRealMs: number
+}
+
 function animatedProgress(anim: FlightAnim, now: number): number {
   const elapsed = now - anim.transitionStartedAt
   const fraction = Math.min(1, Math.max(0, elapsed / anim.transitionDurationMs))
@@ -194,7 +205,7 @@ function shouldKeepFlightVisibleOnMap(vuelo: VueloDTO, simulationMode: boolean, 
   return Boolean(vuelo.editable) || shouldDisplayFlight(vuelo.id)
 }
 
-function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropuertoId, selectedEnvio = null, selectedEnvioRouteMode = 'actual', velocidad = 1, onAeropuertoClick, onVueloClick, mapTz, onMapTzChange, simulationMode = false, filteredFlightIds = null }: Props) {
+function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropuertoId, selectedEnvio = null, selectedEnvioRouteMode = 'actual', velocidad = 1, onAeropuertoClick, onVueloClick, mapTz, onMapTzChange, simulationMode = false, simulationTime = null, filteredFlightIds = null }: Props) {
   const mapRef = useRef<L.Map | null>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const circleLayerRef = useRef<L.LayerGroup | null>(null)
@@ -223,6 +234,16 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
   const [showRouteLines, setShowRouteLines] = useState(true)
   const showRouteLinesRef = useRef(showRouteLines)
   const isZoomingRef = useRef(false)
+  const simClockRef = useRef<SimClockSnapshot | null>(null)
+
+  const getSimulationNow = (frameNow?: number): Date | null => {
+    if (!simulationMode) return null
+    const clock = simClockRef.current
+    if (!clock) return simulationTime ? parseUtc(simulationTime) : null
+    const realNow = frameNow ?? performance.now()
+    const elapsedRealMs = Math.max(0, realNow - clock.receivedAtMs)
+    return new Date(clock.simulationTimeMs + (elapsedRealMs * clock.rateMsPerRealMs))
+  }
 
   const dynamicZoom = useMemo(() => {
     const z = 2 + window.innerWidth / 2000
@@ -236,6 +257,32 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
     selectedAeropuertoIdRef.current = selectedAeropuertoId
     showRouteLinesRef.current = showRouteLines
   }, [onVueloClick, onAeropuertoClick, velocidad, selectedVueloId, selectedAeropuertoId, showRouteLines])
+
+  useEffect(() => {
+    if (!simulationMode || !simulationTime) {
+      simClockRef.current = null
+      return
+    }
+
+    const simulationDate = parseUtc(simulationTime)
+    const now = performance.now()
+    const previous = simClockRef.current
+    let rateMsPerRealMs = previous?.rateMsPerRealMs ?? 0
+
+    if (previous) {
+      const realDelta = now - previous.receivedAtMs
+      const simulationDelta = simulationDate.getTime() - previous.simulationTimeMs
+      if (realDelta > 0 && simulationDelta >= 0) {
+        rateMsPerRealMs = simulationDelta / realDelta
+      }
+    }
+
+    simClockRef.current = {
+      simulationTimeMs: simulationDate.getTime(),
+      receivedAtMs: now,
+      rateMsPerRealMs,
+    }
+  }, [simulationMode, simulationTime])
 
   function removeRoute(id: string) {
     const pair = routeLinesRef.current.get(id)
@@ -292,8 +339,11 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
     })
 
     const realNow = simulationMode ? null : new Date()
+    const simulationNow = simulationMode ? getSimulationNow() : null
     vuelos.forEach((v) => {
-      const progresoLocal = simulationMode ? v.progresoVuelo : calcularProgresoLocal(v, realNow!)
+      const progresoLocal = simulationMode
+        ? (simulationNow ? calcularProgresoEnSimulacion(v, simulationNow) : v.progresoVuelo)
+        : calcularProgresoLocal(v, realNow!)
       const isActive = simulationMode
         ? v.estado === 'ACTIVO'
         : progresoLocal > 0 && progresoLocal < 100
@@ -440,6 +490,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
 
   useEffect(() => {
     if (!mapRef.current) return
+    const simulationNow = simulationMode ? getSimulationNow() : null
 
     if (selectedRouteRef.current) {
       mapRef.current.removeLayer(selectedRouteRef.current)
@@ -514,7 +565,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
         const from: [number, number] = [selectedVuelo.latOrigen, selectedVuelo.lonOrigen]
         const to: [number, number] = [selectedVuelo.latDestino, selectedVuelo.lonDestino]
         const anim = flightAnimsRef.current.get(selectedVueloId)
-        const progress = anim?.displayedProgress ?? selectedVuelo.progresoVuelo
+        const progress = anim?.displayedProgress ?? (simulationNow ? calcularProgresoEnSimulacion(selectedVuelo, simulationNow) : selectedVuelo.progresoVuelo)
         const pos = interpolatePosition(from, to, progress / 100)
         if (selection !== prevSelectionRef.current) {
           mapRef.current.setView(pos, Math.min(mapRef.current.getZoom() + 1, 5), { animate: true })
@@ -584,9 +635,12 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
 
     const realNow = new Date()
     const frameNow = performance.now()
+    const simulationNow = simulationMode ? getSimulationNow(frameNow) : null
 
     const displayFlights = Array.from(persistentFlightsRef.current.values()).filter((v) => {
-      const progreso = simulationMode ? v.progresoVuelo : calcularProgresoLocal(v, realNow)
+      const progreso = simulationMode
+        ? (simulationNow ? calcularProgresoEnSimulacion(v, simulationNow) : v.progresoVuelo)
+        : calcularProgresoLocal(v, realNow)
       const passesPanelFilter = !filteredFlightIds || filteredFlightIds.has(v.id) || v.id === selectedVueloIdRef.current
       return progreso > 0 && progreso < 100 && passesPanelFilter
     })
@@ -610,14 +664,14 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       const isSelected = v.id === selectedVueloIdRef.current
       const tooltipText = tooltipForFlight(v, airportLookup)
       const pts = bezierPoints(from, to, 40)
-      const progresoActual = simulationMode ? v.progresoVuelo : calcularProgresoLocal(v, realNow)
+      const progresoActual = simulationMode
+        ? (simulationNow ? calcularProgresoEnSimulacion(v, simulationNow) : v.progresoVuelo)
+        : calcularProgresoLocal(v, realNow)
       const tNorm = progresoActual / 100
 
       const existingAnim = flightAnimsRef.current.get(v.id)
       if (existingAnim) {
-        const currentProgress = simulationMode
-          ? animatedProgress(existingAnim, frameNow)
-          : progresoActual
+        const currentProgress = simulationMode ? progresoActual : progresoActual
         const snapshotInterval = Math.min(20_000, Math.max(1_000, frameNow - existingAnim.snapshotAt))
         existingAnim.vuelo = v
         existingAnim.from = from
@@ -691,12 +745,15 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       }
       lastAnimationFrameRef.current = frameNow
       const realNow = simulationMode ? null : new Date()
+      const simulationNow = simulationMode ? getSimulationNow(frameNow) : null
       flightAnimsRef.current.forEach((anim, id) => {
         if (!visibleFlightIdsRef.current.has(id)) return
         const mk = flightMarkersRef.current.get(id)
         if (!mk) return
 
-        const currentProgress = simulationMode ? animatedProgress(anim, frameNow) : calcularProgresoLocal(anim.vuelo, realNow!)
+        const currentProgress = simulationMode
+          ? (simulationNow ? calcularProgresoEnSimulacion(anim.vuelo, simulationNow) : animatedProgress(anim, frameNow))
+          : calcularProgresoLocal(anim.vuelo, realNow!)
         anim.displayedProgress = currentProgress
         if (currentProgress >= 100) {
           markerLayerRef.current?.removeLayer(mk)
