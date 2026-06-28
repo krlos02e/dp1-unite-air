@@ -2,7 +2,7 @@ import {useEffect, useRef, useState, memo, useMemo} from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { AeropuertoDTO, VueloDTO, EnvioEstado } from '../types'
-import { buildAirportLookup, getAirportCityResolved, AIRPORTS_DATA, type AirportLookupData } from '../data/airportsData'
+import { buildAirportLookup, getAirportCityResolved, getAirportCountryResolved, AIRPORTS_DATA, type AirportLookupData } from '../data/airportsData'
 import { TIMEZONE_OPTIONS } from '../utils/timezoneFormat'
 import { shouldDisplayFlight } from '../utils/flightVisibility'
 
@@ -49,6 +49,9 @@ const AIRPORT_ICON_RATIO = 0.9
 const ROUTE_POINT_COUNT = 28
 const ROUTE_UPDATE_INTERVAL_MS = 220
 const ROUTE_MIN_INDEX_DELTA = 2
+
+type RouteDisplayMode = 'all' | 'selected'
+type RouteDirectionFilter = 'both' | 'outbound' | 'inbound'
 
 function getAirplaneColor(cargaActual: number, capacidad: number): string {
   if (capacidad <= 0 || cargaActual <= 0) return '#38bdf8'
@@ -128,6 +131,14 @@ function calcularProgresoLocal(v: VueloDTO, now: Date): number {
 
 function calcularProgresoEnSimulacion(v: VueloDTO, simulationNow: Date): number {
   return calcularProgresoLocal(v, simulationNow)
+}
+
+function normalizeSearch(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
 }
 
 function bearing(from: [number, number], to: [number, number]): number {
@@ -220,7 +231,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
   const airportDataRef = useRef<Map<string, AeropuertoDTO>>(new Map())
   const persistentFlightsRef = useRef<Map<string, VueloDTO>>(new Map())
   const airportLookup = useMemo(() => buildAirportLookup(aeropuertos), [aeropuertos])
-  const selectedRouteRef = useRef<L.Polyline | null>(null)
+  const selectedRouteRef = useRef<L.LayerGroup | null>(null)
   const selectedStopsLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLayerRef = useRef<L.LayerGroup | null>(null)
   const routeLinesRef = useRef<Map<string, RoutePair>>(new Map())
@@ -236,7 +247,15 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
   const prevSelectionRef = useRef<string | null>(null)
   const prevViewRef = useRef<{ center: L.LatLng; zoom: number } | null>(null)
   const [showRouteLines, setShowRouteLines] = useState(true)
+  const [routeDisplayMode, setRouteDisplayMode] = useState<RouteDisplayMode>('all')
+  const [routeDirectionFilter, setRouteDirectionFilter] = useState<RouteDirectionFilter>('both')
+  const [routeFilterQuery, setRouteFilterQuery] = useState('')
+  const [selectedRouteAirports, setSelectedRouteAirports] = useState<string[]>([])
+  const [showRouteFilterPanel, setShowRouteFilterPanel] = useState(false)
   const showRouteLinesRef = useRef(showRouteLines)
+  const routeDisplayModeRef = useRef<RouteDisplayMode>(routeDisplayMode)
+  const routeDirectionFilterRef = useRef<RouteDirectionFilter>(routeDirectionFilter)
+  const selectedRouteAirportsRef = useRef<string[]>(selectedRouteAirports)
   const isZoomingRef = useRef(false)
   const simClockRef = useRef<SimClockSnapshot | null>(null)
 
@@ -253,6 +272,34 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
     const z = 2 + window.innerWidth / 2000
     return Math.round(z * 4) / 4
   }, [])
+  const routeAirportOptions = useMemo(() => {
+    return [...airportLookup.keys()]
+      .map((code) => ({
+        code,
+        city: getAirportCityResolved(code, airportLookup) || code,
+        country: getAirportCountryResolved(code, airportLookup) || '',
+        search: normalizeSearch([
+          code,
+          getAirportCityResolved(code, airportLookup) || '',
+          getAirportCountryResolved(code, airportLookup) || '',
+        ].join(' ')),
+      }))
+      .sort((a, b) => a.city.localeCompare(b.city))
+  }, [airportLookup])
+  const filteredRouteAirportOptions = useMemo(() => {
+    const query = normalizeSearch(routeFilterQuery)
+    if (!query) return routeAirportOptions
+    return routeAirportOptions.filter((option) => option.search.includes(query))
+  }, [routeAirportOptions, routeFilterQuery])
+  const selectedRouteAirportsLabel = useMemo(() => {
+    if (routeDisplayMode === 'all') return 'Todos'
+    if (selectedRouteAirports.length === 0) return 'Ninguno'
+    if (selectedRouteAirports.length === 1) {
+      const code = selectedRouteAirports[0]
+      return getAirportCityResolved(code, airportLookup) || code
+    }
+    return `${selectedRouteAirports.length} aeropuertos`
+  }, [routeDisplayMode, selectedRouteAirports, airportLookup])
   useEffect(() => {
     onVueloClickRef.current = onVueloClick
     onAeropuertoClickRef.current = onAeropuertoClick
@@ -260,7 +307,10 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
     selectedVueloIdRef.current = selectedVueloId
     selectedAeropuertoIdRef.current = selectedAeropuertoId
     showRouteLinesRef.current = showRouteLines
-  }, [onVueloClick, onAeropuertoClick, velocidad, selectedVueloId, selectedAeropuertoId, showRouteLines])
+    routeDisplayModeRef.current = routeDisplayMode
+    routeDirectionFilterRef.current = routeDirectionFilter
+    selectedRouteAirportsRef.current = selectedRouteAirports
+  }, [onVueloClick, onAeropuertoClick, velocidad, selectedVueloId, selectedAeropuertoId, showRouteLines, routeDisplayMode, routeDirectionFilter, selectedRouteAirports])
 
   useEffect(() => {
     if (!simulationMode || !simulationTime) {
@@ -302,6 +352,18 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       if (pair.flown) routeLayerRef.current?.removeLayer(pair.flown)
     })
     routeLinesRef.current.clear()
+  }
+
+  function shouldDisplayRouteForFlight(vuelo: VueloDTO): boolean {
+    if (!showRouteLinesRef.current) return false
+    if (routeDisplayModeRef.current === 'all') return true
+    const selectedCodes = selectedRouteAirportsRef.current
+    if (selectedCodes.length === 0) return false
+    const matchesOutbound = selectedCodes.includes(vuelo.origen)
+    const matchesInbound = selectedCodes.includes(vuelo.destino)
+    if (routeDirectionFilterRef.current === 'outbound') return matchesOutbound
+    if (routeDirectionFilterRef.current === 'inbound') return matchesInbound
+    return matchesOutbound || matchesInbound
   }
 
   useEffect(() => {
@@ -536,12 +598,14 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
           mapRef.current.fitBounds(L.latLngBounds(latLngs), { padding: [40, 40], animate: true, maxZoom: 5 })
         }
 
-        selectedRouteRef.current = L.polyline(latLngs, {
+        const selectedRouteLayer = L.layerGroup().addTo(mapRef.current)
+        L.polyline(latLngs, {
           color: selectedEnvioRouteMode === 'anterior' ? '#f97316' : '#facc15',
           weight: 3,
           opacity: 0.95,
           dashArray: selectedEnvioRouteMode === 'anterior' ? '8, 8' : undefined,
-        }).addTo(mapRef.current)
+        }).addTo(selectedRouteLayer)
+        selectedRouteRef.current = selectedRouteLayer
 
         const stopsLayer = L.layerGroup().addTo(mapRef.current)
         points.forEach((point, index) => {
@@ -575,13 +639,32 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
           mapRef.current.setView(pos, Math.min(mapRef.current.getZoom() + 1, 5), { animate: true })
         }
         const pts = bezierPoints(from, to, 40)
+        const splitIndex = Math.max(0, Math.min(pts.length - 1, Math.round((progress / 100) * (pts.length - 1))))
+        const traveledPts = pts.slice(0, splitIndex + 1)
+        const pendingPts = pts.slice(splitIndex)
+        const selectedRouteLayer = L.layerGroup().addTo(mapRef.current)
 
-        selectedRouteRef.current = L.polyline(pts, {
-          dashArray: '6, 8',
-          color: '#facc15',
-          weight: 2.5,
-          opacity: 0.9,
-        }).addTo(mapRef.current)
+        if (traveledPts.length >= 2) {
+          L.polyline(traveledPts, {
+            dashArray: '2, 8',
+            color: '#fde68a',
+            weight: 3,
+            opacity: 0.75,
+            lineCap: 'round',
+          }).addTo(selectedRouteLayer)
+        }
+
+        if (pendingPts.length >= 2) {
+          L.polyline(pendingPts, {
+            dashArray: '6, 8',
+            color: '#facc15',
+            weight: 3,
+            opacity: 0.95,
+            lineCap: 'round',
+          }).addTo(selectedRouteLayer)
+        }
+
+        selectedRouteRef.current = selectedRouteLayer
 
         const stopsLayer = L.layerGroup().addTo(mapRef.current)
         stopsLayer.addLayer(L.circleMarker(from, {
@@ -736,11 +819,13 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
   }, [vuelos, selectedVueloId, simulationMode, filteredFlightIds])
 
   useEffect(() => {
-    routeLinesRef.current.forEach((pair) => {
-      pair.pending.setStyle({ opacity: showRouteLines ? 0.25 : 0 })
-      if (pair.flown) pair.flown.setStyle({ opacity: showRouteLines ? 0.08 : 0 })
+    routeLinesRef.current.forEach((pair, id) => {
+      const vuelo = flightAnimsRef.current.get(id)?.vuelo
+      const visible = vuelo ? shouldDisplayRouteForFlight(vuelo) : false
+      pair.pending.setStyle({ opacity: visible ? 0.25 : 0 })
+      if (pair.flown) pair.flown.setStyle({ opacity: visible ? 0 : 0 })
     })
-  }, [showRouteLines])
+  }, [showRouteLines, routeDisplayMode, routeDirectionFilter, selectedRouteAirports])
 
   useEffect(() => {
     const animate = (frameNow: number) => {
@@ -785,9 +870,10 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
         if (!isZoomingRef.current && anim.pts) {
           const splitIndex = Math.round(tNorm * (anim.pts.length - 1))
           const pair = routeLinesRef.current.get(id)
+          const routeVisible = shouldDisplayRouteForFlight(anim.vuelo)
 
           if (!pair) {
-            if (showRouteLinesRef.current) {
+            if (routeVisible) {
               const pendingLine = L.polyline(anim.pts, {
                 dashArray: '4, 6',
                 color: '#6b7280',
@@ -815,6 +901,12 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
             return
           }
 
+          if (!routeVisible) {
+            pair.pending.setStyle({ opacity: 0 })
+            if (pair.flown) pair.flown.setStyle({ opacity: 0 })
+            return
+          }
+
           const routeIndexDelta = Math.abs(splitIndex - anim.lastRouteIndex)
           const routeUpdateElapsed = frameNow - anim.lastRouteUpdatedAt
           if (
@@ -832,19 +924,19 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
 
           if (splitIndex < anim.pts.length) {
             pair.pending.setLatLngs(anim.pts.slice(splitIndex))
-            pair.pending.setStyle({ opacity: showRouteLinesRef.current ? 0.25 : 0 })
+            pair.pending.setStyle({ opacity: 0.25 })
           }
           if (splitIndex > 0) {
             const flownPts = anim.pts.slice(0, splitIndex + 1)
             if (pair.flown) {
               pair.flown.setLatLngs(flownPts)
-              pair.flown.setStyle({ opacity: showRouteLinesRef.current ? 0 : 0 })
+              pair.flown.setStyle({ opacity: 0 })
             } else {
               const flownLine = L.polyline(flownPts, {
                 dashArray: '1, 8',
                 color: '#6b7280',
                 weight: 1.5,
-                opacity: showRouteLinesRef.current ? 0 : 0,
+                opacity: 0,
                 lineCap: 'round',
               })
               routeLayerRef.current?.addLayer(flownLine)
@@ -868,7 +960,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
 
   return (
     <div className="relative w-full h-full">
-      <div className="absolute top-2 right-2 z-[1000] bg-gray-800/90 rounded-lg border border-gray-600 p-2 space-y-2">
+      <div className="absolute top-2 right-2 z-[1000] bg-gray-800/90 rounded-lg border border-gray-600 p-2 space-y-2 w-[270px] max-w-[calc(100%-1rem)]">
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-300">Rutas</span>
           <button
@@ -877,7 +969,110 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
           >
             <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${showRouteLines ? 'translate-x-5' : ''}`} />
           </button>
+          <button
+            onClick={() => setShowRouteFilterPanel((prev) => !prev)}
+            className="ml-auto rounded border border-gray-600 px-2 py-0.5 text-[11px] text-gray-200 hover:bg-gray-700"
+          >
+            {showRouteFilterPanel ? 'Ocultar filtro' : 'Filtrar'}
+          </button>
         </div>
+        {showRouteLines && (
+          <div className="text-[11px] text-gray-400">
+            {selectedRouteAirportsLabel}
+          </div>
+        )}
+        {showRouteLines && showRouteFilterPanel && (
+          <div className="space-y-2 border-t border-gray-700 pt-2">
+            <div className="space-y-1">
+              <span className="text-[11px] text-gray-300">Aeropuertos</span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setRouteDisplayMode('all')}
+                  className={`rounded px-2 py-1 text-[11px] ${routeDisplayMode === 'all' ? 'bg-sky-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'}`}
+                >
+                  Todos
+                </button>
+                <button
+                  onClick={() => {
+                    setRouteDisplayMode('selected')
+                    setSelectedRouteAirports([])
+                  }}
+                  className={`rounded px-2 py-1 text-[11px] ${routeDisplayMode === 'selected' && selectedRouteAirports.length === 0 ? 'bg-sky-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'}`}
+                >
+                  Ninguno
+                </button>
+                <button
+                  onClick={() => setRouteDisplayMode('selected')}
+                  className={`rounded px-2 py-1 text-[11px] ${routeDisplayMode === 'selected' && selectedRouteAirports.length > 0 ? 'bg-sky-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'}`}
+                >
+                  Seleccion
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <span className="text-[11px] text-gray-300">Tipo</span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setRouteDirectionFilter('both')}
+                  className={`rounded px-2 py-1 text-[11px] ${routeDirectionFilter === 'both' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'}`}
+                >
+                  Ambas
+                </button>
+                <button
+                  onClick={() => setRouteDirectionFilter('outbound')}
+                  className={`rounded px-2 py-1 text-[11px] ${routeDirectionFilter === 'outbound' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'}`}
+                >
+                  Salen
+                </button>
+                <button
+                  onClick={() => setRouteDirectionFilter('inbound')}
+                  className={`rounded px-2 py-1 text-[11px] ${routeDirectionFilter === 'inbound' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'}`}
+                >
+                  Llegan
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <input
+                value={routeFilterQuery}
+                onChange={(e) => setRouteFilterQuery(e.target.value)}
+                placeholder="Buscar ciudad, pais o codigo"
+                className="w-full rounded border border-gray-600 bg-gray-700 px-2 py-1 text-[11px] text-white placeholder:text-gray-400 focus:outline-none focus:border-sky-500"
+              />
+              <div className="max-h-32 overflow-y-auto rounded border border-gray-700 bg-gray-900/70">
+                {filteredRouteAirportOptions.map((option) => {
+                  const checked = selectedRouteAirports.includes(option.code)
+                  return (
+                    <label key={option.code} className="flex cursor-pointer items-start gap-2 border-b border-gray-800 px-2 py-1.5 text-[11px] text-gray-200 last:border-b-0 hover:bg-gray-800/80">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          setRouteDisplayMode('selected')
+                          setSelectedRouteAirports((prev) => (
+                            prev.includes(option.code)
+                              ? prev.filter((code) => code !== option.code)
+                              : [...prev, option.code]
+                          ))
+                        }}
+                        className="mt-0.5"
+                      />
+                      <span className="min-w-0">
+                        <span className="block font-medium text-white">{option.city}</span>
+                        <span className="block text-gray-400">{option.country || option.code} · {option.code}</span>
+                      </span>
+                    </label>
+                  )
+                })}
+                {filteredRouteAirportOptions.length === 0 && (
+                  <div className="px-2 py-2 text-[11px] text-gray-400">
+                    No hay aeropuertos que coincidan.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-300">Zona horaria:</span>
           <select
