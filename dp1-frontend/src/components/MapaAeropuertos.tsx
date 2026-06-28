@@ -960,7 +960,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
 
   return (
     <div className="relative w-full h-full">
-      <div className="absolute top-2 right-2 z-[1000] bg-gray-800/90 rounded-lg border border-gray-600 p-2 space-y-2 w-[270px] max-w-[calc(100%-1rem)]">
+      <div className="absolute top-16 right-2 z-[1000] bg-gray-800/90 rounded-lg border border-gray-600 p-2 space-y-2 w-[270px] max-w-[calc(100%-1rem)]">
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-300">Rutas</span>
           <button

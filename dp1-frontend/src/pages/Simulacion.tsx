@@ -579,7 +579,7 @@ export default function Simulacion() {
           {panelCollapsed && (
             <button
               onClick={() => setPanelCollapsed(false)}
-              className="absolute top-4 right-4 z-[1000] bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white hover:bg-gray-700 transition-colors cursor-pointer"
+              className="absolute top-4 right-4 z-[1001] bg-gray-800/95 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white hover:bg-gray-700 transition-colors cursor-pointer shadow-lg"
             >
               ▶ Panel
             </button>

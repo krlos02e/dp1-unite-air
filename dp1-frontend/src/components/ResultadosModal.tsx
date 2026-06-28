@@ -1,6 +1,6 @@
 import { formatDateTime } from '../utils/dateFormat'
 import { getAirportCity } from '../data/airportsData'
-import type { EnvioEstado, MaletaEstado, SimulationState } from '../types'
+import type { EnvioEstado, SimulationState } from '../types'
 
 interface Props {
   state: SimulationState | null
@@ -13,19 +13,10 @@ function countEnvios(envios: EnvioEstado[], estado: EnvioEstado['estado']) {
   return envios.filter((envio) => envio.estado === estado).length
 }
 
-function countMaletas(maletas: MaletaEstado[], estado: MaletaEstado['estado']) {
-  return maletas.filter((maleta) => maleta.estado === estado).length
-}
-
 function sameRoute(actual?: string[] | null, anterior?: string[] | null) {
   if (!actual?.length || !anterior?.length) return false
   if (actual.length !== anterior.length) return false
   return actual.every((value, index) => value === anterior[index])
-}
-
-function getRutaLabel(ruta?: string[] | null) {
-  if (!ruta?.length) return 'Sin ruta'
-  return ruta.map((codigo) => getAirportCity(codigo) || codigo).join(' -> ')
 }
 
 export default function ResultadosModal({ state, isOpen, onClose, onNuevaSimulacion }: Props) {
@@ -40,11 +31,11 @@ export default function ResultadosModal({ state, isOpen, onClose, onNuevaSimulac
   const enviosEnVuelo = countEnvios(envios, 'EN_VUELO')
   const enviosEmbarcados = countEnvios(envios, 'EMBARCADO')
   const enviosEnEspera = countEnvios(envios, 'EN_ESPERA')
+  const enviosPendientesConRuta = envios.filter((envio) => envio.estado === 'EN_ESPERA' && envio.rutaAeropuertos?.length).length
 
-  const maletasEntregadas = countMaletas(maletas, 'ENTREGADO')
-  const maletasEnVuelo = countMaletas(maletas, 'EN_VUELO')
-  const maletasEmbarcadas = countMaletas(maletas, 'EMBARCADO')
-  const maletasEnEspera = countMaletas(maletas, 'EN_ESPERA')
+  const maletasEntregadas = state.maletasEntregadas
+  const maletasEnTransito = state.maletasEnTransito
+  const maletasEnEspera = Math.max(0, maletas.length - maletasEntregadas - maletasEnTransito)
 
   const vuelosProgramados = vuelos.filter((vuelo) => vuelo.estado === 'PROGRAMADO').length
   const vuelosActivos = vuelos.filter((vuelo) => vuelo.estado === 'ACTIVO').length
@@ -76,7 +67,7 @@ export default function ResultadosModal({ state, isOpen, onClose, onNuevaSimulac
             <div>
               <h2 className="text-2xl font-bold text-emerald-400">Reporte Final de Simulacion</h2>
               <p className="mt-1 text-sm text-gray-300">
-                Ultima planificacion estable mostrada en pantalla
+                Resumen del ultimo estado estable mostrado en pantalla
               </p>
               <p className="mt-1 text-xs text-gray-500">
                 Corte: {formatDateTime(state.simulationTime)}
@@ -151,40 +142,32 @@ export default function ResultadosModal({ state, isOpen, onClose, onNuevaSimulac
                   <p className="mt-1 text-lg font-semibold text-white">{enviosSinRuta.length}</p>
                 </div>
               </div>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-gray-800 bg-gray-950/60 p-3">
+                  <p className="text-xs text-gray-400">Pendientes con ruta</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{enviosPendientesConRuta}</p>
+                </div>
+                <div className="rounded-xl border border-gray-800 bg-gray-950/60 p-3">
+                  <p className="text-xs text-gray-400">Motivo de colapso</p>
+                  <p className="mt-1 text-sm font-medium text-white">{state.motivoColapso || 'Sin colapso'}</p>
+                </div>
+              </div>
             </div>
 
             <div className="rounded-2xl border border-gray-800 bg-gray-900/70 p-5">
               <h3 className="text-lg font-semibold text-gray-100">Resumen de maletas</h3>
-              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="rounded-xl bg-gray-800/70 p-3">
                   <p className="text-xs text-gray-400">Entregadas</p>
                   <p className="mt-1 text-xl font-bold text-emerald-400">{maletasEntregadas}</p>
                 </div>
                 <div className="rounded-xl bg-gray-800/70 p-3">
-                  <p className="text-xs text-gray-400">En vuelo</p>
-                  <p className="mt-1 text-xl font-bold text-sky-400">{maletasEnVuelo}</p>
-                </div>
-                <div className="rounded-xl bg-gray-800/70 p-3">
-                  <p className="text-xs text-gray-400">Embarcadas</p>
-                  <p className="mt-1 text-xl font-bold text-cyan-400">{maletasEmbarcadas}</p>
+                  <p className="text-xs text-gray-400">En transito</p>
+                  <p className="mt-1 text-xl font-bold text-sky-400">{maletasEnTransito}</p>
                 </div>
                 <div className="rounded-xl bg-gray-800/70 p-3">
                   <p className="text-xs text-gray-400">En espera</p>
                   <p className="mt-1 text-xl font-bold text-amber-400">{maletasEnEspera}</p>
-                </div>
-              </div>
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-gray-800 bg-gray-950/60 p-3">
-                  <p className="text-xs text-gray-400">Maletas entregadas</p>
-                  <p className="mt-1 text-lg font-semibold text-white">{state.maletasEntregadas}</p>
-                </div>
-                <div className="rounded-xl border border-gray-800 bg-gray-950/60 p-3">
-                  <p className="text-xs text-gray-400">Maletas en transito</p>
-                  <p className="mt-1 text-lg font-semibold text-white">{state.maletasEnTransito}</p>
-                </div>
-                <div className="rounded-xl border border-gray-800 bg-gray-950/60 p-3">
-                  <p className="text-xs text-gray-400">Motivo de colapso</p>
-                  <p className="mt-1 text-sm font-medium text-white">{state.motivoColapso || 'Sin colapso'}</p>
                 </div>
               </div>
             </div>
@@ -209,20 +192,6 @@ export default function ResultadosModal({ state, isOpen, onClose, onNuevaSimulac
                 <div className="rounded-xl bg-gray-800/70 p-3">
                   <p className="text-xs text-gray-400">Cancelados</p>
                   <p className="mt-1 text-xl font-bold text-rose-400">{vuelosCancelados}</p>
-                </div>
-              </div>
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-gray-800 bg-gray-950/60 p-3">
-                  <p className="text-xs text-gray-400">Vuelos en transito</p>
-                  <p className="mt-1 text-lg font-semibold text-white">{state.vuelosEnTransito}</p>
-                </div>
-                <div className="rounded-xl border border-gray-800 bg-gray-950/60 p-3">
-                  <p className="text-xs text-gray-400">Vuelos culminados</p>
-                  <p className="mt-1 text-lg font-semibold text-white">{state.vuelosCulminados}</p>
-                </div>
-                <div className="rounded-xl border border-gray-800 bg-gray-950/60 p-3">
-                  <p className="text-xs text-gray-400">Vuelos cancelados</p>
-                  <p className="mt-1 text-lg font-semibold text-white">{state.vuelosCancelados}</p>
                 </div>
               </div>
             </div>
@@ -276,51 +245,6 @@ export default function ResultadosModal({ state, isOpen, onClose, onNuevaSimulac
             </div>
           </section>
 
-          <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <div className="rounded-2xl border border-gray-800 bg-gray-900/70 p-5">
-              <h3 className="text-lg font-semibold text-gray-100">Envios reasignados</h3>
-              <div className="mt-3 space-y-3">
-                {enviosReasignados.slice(0, 8).map((envio) => (
-                  <div key={envio.id} className="rounded-xl border border-gray-800 bg-gray-950/60 p-3">
-                    <p className="text-sm font-semibold text-white">{envio.id}</p>
-                    <p className="mt-1 text-xs text-gray-400">{envio.origen} {'->'} {envio.destino}</p>
-                    <p className="mt-2 text-xs text-gray-500">Ruta anterior</p>
-                    <p className="text-sm text-gray-300">{getRutaLabel(envio.rutaAnteriorAeropuertos)}</p>
-                    <p className="mt-2 text-xs text-gray-500">Ruta estable final</p>
-                    <p className="text-sm text-gray-100">{getRutaLabel(envio.rutaAeropuertos)}</p>
-                  </div>
-                ))}
-                {enviosReasignados.length === 0 && (
-                  <p className="text-sm text-gray-500">No hubo envios reasignados en la ultima planificacion estable.</p>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-gray-800 bg-gray-900/70 p-5">
-              <h3 className="text-lg font-semibold text-gray-100">Envios sin ruta o pendientes</h3>
-              <div className="mt-3 space-y-3">
-                {[...enviosSinRuta, ...envios.filter((envio) => envio.estado === 'EN_ESPERA' && envio.rutaAeropuertos?.length)]
-                  .slice(0, 8)
-                  .map((envio) => (
-                    <div key={envio.id} className="rounded-xl border border-gray-800 bg-gray-950/60 p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-white">{envio.id}</p>
-                          <p className="mt-1 text-xs text-gray-400">{envio.origen} {'->'} {envio.destino}</p>
-                        </div>
-                        <span className="rounded-full bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-300">
-                          {envio.estado}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-sm text-gray-300">{getRutaLabel(envio.rutaAeropuertos)}</p>
-                    </div>
-                  ))}
-                {enviosSinRuta.length === 0 && enviosEnEspera === 0 && (
-                  <p className="text-sm text-gray-500">No hay envios pendientes ni sin ruta en el corte final estable.</p>
-                )}
-              </div>
-            </div>
-          </section>
         </div>
 
         <div className="sticky bottom-0 border-t border-gray-800 bg-gray-950/95 px-6 py-4 backdrop-blur">
