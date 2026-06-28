@@ -166,6 +166,7 @@ public class CargaArchivosController {
             return ResponseEntity.ok(List.of());
         }
         Set<String> vuelosCancelados = esSimulacion ? Set.of() : cargaArchivosService.obtenerVuelosCancelados();
+        boolean operacionSoloManual = contexto == AlmacenContexto.OPERACION && !cargaArchivosService.usaPaquetesBaseEnOperacion();
         LocalDateTime ahora = LocalDateTime.now(ZoneOffset.UTC);
         Map<String, Almacen> almacenMap = almacenService.getMapaAlmacenes(contexto);
         List<VueloDTO> vuelos = new ArrayList<>();
@@ -191,6 +192,11 @@ public class CargaArchivosController {
                 estado = "PROGRAMADO";
             }
 
+            boolean editable = v.getId() != null && v.getId().startsWith("USR-");
+            if (operacionSoloManual && carga <= 0 && !editable && !vuelosCancelados.contains(v.getId())) {
+                continue;
+            }
+
             vuelos.add(VueloDTO.builder()
                     .id(v.getId())
                     .origen(v.getOrigen().getCodigoOACI())
@@ -206,8 +212,8 @@ public class CargaArchivosController {
                     .progresoVuelo(0)
                     .estado(estado)
                     .programacionId(extraerProgramacionId(v.getId()))
-                    .editable(v.getId() != null && v.getId().startsWith("USR-"))
-                    .recurrente(v.getId() != null && v.getId().startsWith("USR-"))
+                    .editable(editable)
+                    .recurrente(editable)
                     .build());
         }
         return ResponseEntity.ok(vuelos);

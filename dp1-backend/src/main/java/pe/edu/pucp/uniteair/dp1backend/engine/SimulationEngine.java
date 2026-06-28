@@ -38,7 +38,7 @@ public class SimulationEngine {
 
 
     private static final long REALTIME_REPLAN_INTERVAL_MS = 300_000L;
-    private static final int ROLLING_LOOKAHEAD_MINUTES = 2405;
+    private static final int ROLLING_LOOKAHEAD_MINUTES = 1440;
     private static final int FLIGHT_WINDOW_LOOKBACK_HOURS = 24;
     private static final int FLIGHT_WINDOW_FORWARD_BUFFER_HOURS = 48;
 
@@ -61,6 +61,11 @@ public class SimulationEngine {
             int pendientes,
             int rutasNuevas,
             int rutasComprometidas,
+            int asignadosTrasReplan,
+            int nuevasAsignaciones,
+            int rutasReasignadas,
+            int rutasMantenidas,
+            int sinRuta,
             double duracionSeg,
             LocalDateTime simTime
     ) {}
@@ -225,6 +230,15 @@ public class SimulationEngine {
                 System.out.println("Asignados: " + rutas.size() + " | Sin asignar: " + noAsignados.size());
                 System.out.println("Colapso: " + (hayColapso ? "SI" : "NO"));
                 System.out.println("Costo total: " + (long) solucion.getCostoTotal());
+                System.out.printf("[METRICAS] Fase1 rutas=%.0fms | Fase2 asignacion=%.0fms | Fase3 evaluacion=%.0fms%n",
+                        solucion.getMetricas().getOrDefault("msFase1Rutas", -1.0),
+                        solucion.getMetricas().getOrDefault("msFase2Asignacion", -1.0),
+                        solucion.getMetricas().getOrDefault("msFase3Evaluacion", -1.0));
+                System.out.printf("[METRICAS] ALNS reheats=%.0f | paquetesConSplit=%.0f | noAsignados=%.0f | colapsos=%.0f%n",
+                        solucion.getMetricas().getOrDefault("reheats", -1.0),
+                        solucion.getMetricas().getOrDefault("paquetesConSplit", -1.0),
+                        solucion.getMetricas().getOrDefault("paquetesNoAsignados", -1.0),
+                        solucion.getMetricas().getOrDefault("eventosColapso", -1.0));
 
                 logs.add(LogEntry.builder()
                         .timestamp(fechaInicio)
@@ -305,9 +319,14 @@ public class SimulationEngine {
                                     .timestamp(resultado.simTime())
                                     .tipo("REPLAN")
                                     .mensaje(String.format(
-                                            "Planificacion ventana +%dmin: %d pendientes -> %d rutas nuevas; %d rutas comprometidas; algoritmo %.3fs",
+                                            "Planificacion ventana +%dmin: %d pendientes -> %d asignados, %d nuevas asignaciones, %d reasignadas, %d mantenidas, %d sin ruta; %d rutas nuevas; %d rutas comprometidas; algoritmo %.3fs",
                                             ROLLING_LOOKAHEAD_MINUTES,
                                             resultado.pendientes(),
+                                            resultado.asignadosTrasReplan(),
+                                            resultado.nuevasAsignaciones(),
+                                            resultado.rutasReasignadas(),
+                                            resultado.rutasMantenidas(),
+                                            resultado.sinRuta(),
                                             resultado.rutasNuevas(),
                                             resultado.rutasComprometidas(),
                                             resultado.duracionSeg()
@@ -490,6 +509,11 @@ public class SimulationEngine {
                     0,
                     0,
                     rutasComprometidas.size(),
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
                     0.0,
                     simTime
             );
@@ -510,10 +534,44 @@ public class SimulationEngine {
             }
         }
         splitsMerge.putAll(solParcial.getAsignacionesSplit());
+
+        int asignadosTrasReplan = 0;
+        int nuevasAsignaciones = 0;
+        int rutasReasignadas = 0;
+        int rutasMantenidas = 0;
+        int sinRuta = 0;
+        for (Paquete paquete : pendientes) {
+            String paqueteId = paquete.getId();
+            Ruta rutaAntes = rutasActuales.get(paqueteId);
+            Ruta rutaDespues = solParcial.getRutasAsignadas().get(paqueteId);
+
+            if (rutaDespues == null) {
+                sinRuta++;
+                continue;
+            }
+
+            asignadosTrasReplan++;
+            if (rutaAntes == null) {
+                nuevasAsignaciones++;
+                continue;
+            }
+
+            if (mismaRuta(rutaAntes, rutaDespues)) {
+                rutasMantenidas++;
+            } else {
+                rutasReasignadas++;
+            }
+        }
+
         System.out.println("[Simulacion] Re-plan real-time t=" + simTime
                 + " pendientes=" + pendientes.size()
                 + " nuevas=" + solParcial.getRutasAsignadas().size()
                 + " comprometidas=" + rutasComprometidas.size()
+                + " asignados=" + asignadosTrasReplan
+                + " nuevasAsignaciones=" + nuevasAsignaciones
+                + " reasignadas=" + rutasReasignadas
+                + " mantenidas=" + rutasMantenidas
+                + " sinRuta=" + sinRuta
                 + " algoritmo=" + String.format(Locale.ROOT, "%.3fs", duracionSeg));
 
         return new ReplanificacionResultado(
@@ -522,9 +580,22 @@ public class SimulationEngine {
                 pendientes.size(),
                 solParcial.getRutasAsignadas().size(),
                 rutasComprometidas.size(),
+                asignadosTrasReplan,
+                nuevasAsignaciones,
+                rutasReasignadas,
+                rutasMantenidas,
+                sinRuta,
                 duracionSeg,
                 simTime
         );
+    }
+
+    private boolean mismaRuta(Ruta actual, Ruta nueva) {
+        if (actual == null || nueva == null) {
+            return actual == nueva;
+        }
+        return actual.getVuelos().stream().map(Vuelo::getId).collect(Collectors.joining("|"))
+                .equals(nueva.getVuelos().stream().map(Vuelo::getId).collect(Collectors.joining("|")));
     }
 
     private Dataset construirDatasetPlanificacion(

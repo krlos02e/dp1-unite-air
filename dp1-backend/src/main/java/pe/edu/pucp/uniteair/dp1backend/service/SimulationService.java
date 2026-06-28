@@ -72,7 +72,9 @@ public class SimulationService {
                 + " algoritmo=" + algoritmo
                 + " iteracionesALNS=" + config.getIteracionesALNS()
                 + " maxRutas=" + config.getMaxRutasPorPaquete());
-        cargaArchivosService.cargarDatasetConFechas(fecha, duracionDias);
+        // Evita lanzar una segunda planificacion pesada de operacion mientras la simulacion
+        // ya esta calculando su propia planificacion inicial.
+        cargaArchivosService.cargarDatasetConFechas(fecha, duracionDias, false);
         Dataset ultimoDataset = cargaArchivosService.obtenerUltimoDataset();
         System.out.println("[SimulationService] ultimoDataset paquetes="
                 + (ultimoDataset != null ? ultimoDataset.getPaquetes().size() : -1)

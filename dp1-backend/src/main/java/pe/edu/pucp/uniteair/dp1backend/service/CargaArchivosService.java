@@ -52,6 +52,7 @@ public class CargaArchivosService {
     private volatile boolean planificando = false;
     private volatile Set<String> vuelosCancelados = new HashSet<>();
     private volatile List<Paquete> paquetesIncrementales = new ArrayList<>();
+    private volatile boolean usarPaquetesBaseEnOperacion = false;
     private int contadorPaquetesIncrementales = 0;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "planificador-bg");
@@ -85,6 +86,7 @@ public class CargaArchivosService {
             this.rutasAnteriores = new HashMap<>();
             this.asignacionesSplit = new HashMap<>();
             this.planificando = false;
+            this.usarPaquetesBaseEnOperacion = false;
             deleteTempDir(tempDir);
             System.out.println("[CargaArchivosService] Dataset por defecto cargado. Paquetes: " + dataset.getPaquetes().size());
             lanzarPlanificacionEnBackground(dataset);
@@ -94,6 +96,10 @@ public class CargaArchivosService {
     }
 
     public synchronized void cargarDatasetConFechas(LocalDate fechaInicio, int dias) {
+        cargarDatasetConFechas(fechaInicio, dias, true);
+    }
+
+    public synchronized void cargarDatasetConFechas(LocalDate fechaInicio, int dias, boolean lanzarPlanificacionOperacion) {
         try {
             Path tempDir = Files.createTempDirectory("simulacion_carga_");
             copiarRecursosACarpeta(tempDir);
@@ -109,8 +115,13 @@ public class CargaArchivosService {
             this.rutasAnteriores = new HashMap<>();
             this.asignacionesSplit = new HashMap<>();
             this.planificando = false;
+            this.usarPaquetesBaseEnOperacion = false;
             deleteTempDir(tempDir);
-            lanzarPlanificacionEnBackground(dataset);
+            if (lanzarPlanificacionOperacion) {
+                lanzarPlanificacionEnBackground(dataset);
+            } else {
+                System.out.println("[CargaArchivosService] Dataset de simulacion cargado sin planificacion de operacion en background.");
+            }
         } catch (Exception e) {
             System.err.println("No se pudo cargar dataset con fechas: " + e.getMessage());
             e.printStackTrace();
@@ -201,6 +212,9 @@ public class CargaArchivosService {
             this.rutasAnteriores = new HashMap<>();
             this.asignacionesSplit = new HashMap<>();
             this.planificando = false;
+            this.paquetesIncrementales = new ArrayList<>();
+            this.contadorPaquetesIncrementales = 0;
+            this.usarPaquetesBaseEnOperacion = true;
 
             lanzarPlanificacionEnBackground(dataset);
 
@@ -242,7 +256,7 @@ public class CargaArchivosService {
     }
 
     private void planificarDataset(Dataset dataset) {
-        List<Paquete> paquetes = combinarPaquetes(dataset != null ? dataset.getPaquetes() : List.of(), paquetesIncrementales);
+        List<Paquete> paquetes = combinarPaquetes(obtenerPaquetesBaseOperacion(), paquetesIncrementales);
         if (dataset == null || paquetes.isEmpty()) {
             this.estadoOperacional = new EstadoOperacional();
             this.cargaVueloCache = new HashMap<>();
@@ -404,9 +418,16 @@ public class CargaArchivosService {
 
     private List<Paquete> obtenerTodosLosPaquetes() {
         return combinarPaquetes(
-                lastDataset != null ? lastDataset.getPaquetes() : List.of(),
+                obtenerPaquetesBaseOperacion(),
                 paquetesIncrementales
         );
+    }
+
+    private List<Paquete> obtenerPaquetesBaseOperacion() {
+        if (!usarPaquetesBaseEnOperacion || lastDataset == null) {
+            return List.of();
+        }
+        return lastDataset.getPaquetes();
     }
 
     private List<Paquete> combinarPaquetes(List<Paquete> base, List<Paquete> adicionales) {
@@ -908,9 +929,8 @@ public class CargaArchivosService {
             }
         }
 
-        List<Paquete> listaActualizada = new ArrayList<>(paquetesIncrementales);
-        listaActualizada.addAll(nuevos);
-        this.paquetesIncrementales = listaActualizada;
+        this.paquetesIncrementales = new ArrayList<>(nuevos);
+        this.usarPaquetesBaseEnOperacion = false;
 
         System.out.println("[CargaArchivosService] Envios cargados desde archivo: " + nuevos.size()
                 + ". Total acumulados: " + paquetesIncrementales.size());
@@ -923,6 +943,10 @@ public class CargaArchivosService {
 
     public synchronized List<Paquete> obtenerPaquetesIncrementales() {
         return new ArrayList<>(paquetesIncrementales);
+    }
+
+    public synchronized boolean usaPaquetesBaseEnOperacion() {
+        return usarPaquetesBaseEnOperacion;
     }
 
     public synchronized Map<String, Object> buscarEnvio(String id) {

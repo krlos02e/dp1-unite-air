@@ -188,6 +188,12 @@ function animatedProgress(anim: FlightAnim, now: number): number {
   return anim.startProgress + (anim.targetProgress - anim.startProgress) * fraction
 }
 
+function shouldKeepFlightVisibleOnMap(vuelo: VueloDTO, simulationMode: boolean, selectedVueloId?: string | null): boolean {
+  if (vuelo.id === selectedVueloId) return true
+  if (simulationMode) return vuelo.estado === 'ACTIVO'
+  return Boolean(vuelo.editable) || shouldDisplayFlight(vuelo.id)
+}
+
 function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropuertoId, selectedEnvio = null, selectedEnvioRouteMode = 'actual', velocidad = 1, onAeropuertoClick, onVueloClick, mapTz, onMapTzChange, simulationMode = false, filteredFlightIds = null }: Props) {
   const mapRef = useRef<L.Map | null>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
@@ -291,7 +297,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       const isActive = simulationMode
         ? v.estado === 'ACTIVO'
         : progresoLocal > 0 && progresoLocal < 100
-      const isVisible = Boolean(v.editable) || shouldDisplayFlight(v.id) || v.id === selectedVueloId
+      const isVisible = shouldKeepFlightVisibleOnMap(v, simulationMode, selectedVueloId)
       if (!isActive || !isVisible) {
         persistentFlightsRef.current.delete(v.id)
         const mk = flightMarkersRef.current.get(v.id)

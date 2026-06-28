@@ -86,7 +86,7 @@ function CargaArchivosTab() {
     <div className="space-y-4">
       <FileInput label="Archivo de vuelos (planes_vuelo.txt — opcional)" onChange={setPlanesVuelo} />
       <FileInput label="Archivo de aeropuertos (aeropuertos.txt — opcional)" onChange={setAeropuertos} />
-      <FileInput label="Archivo de envíos (_envios_SKBO_.txt — obligatorio)" onChange={setEnvios} />
+      <FileInput label="Archivo de envíos (_envios_SKBO_.txt — obligatorio, reemplaza la fuente actual de operación diaria)" onChange={setEnvios} />
 
       <button
         onClick={handleUpload}
