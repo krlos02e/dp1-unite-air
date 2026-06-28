@@ -47,7 +47,8 @@ public class SimulationController {
                 "activa", true,
                 "sessionId", sessionId,
                 "status", state.getStatus(),
-                "progreso", state.getProgreso()
+                "progreso", state.getProgreso(),
+                "startedAt", state.getStartedAt()
         ));
     }
 
@@ -62,6 +63,7 @@ public class SimulationController {
             SimulationState errorState = SimulationState.builder()
                     .sessionId("error")
                     .status("ERROR")
+                    .startedAt(LocalDateTime.now())
                     .maletasEntregadas(0)
                     .maletasEnTransito(0)
                     .vuelosCulminados(0)

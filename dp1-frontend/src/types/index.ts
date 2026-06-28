@@ -65,6 +65,7 @@ export interface LogEntry {
 export interface SimulationState {
   sessionId: string;
   status?: string;
+  startedAt?: string;
   simulationTime: string;
   vuelos: VueloDTO[];
   aeropuertos: AeropuertoDTO[];

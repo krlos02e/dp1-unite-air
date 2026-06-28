@@ -15,6 +15,7 @@ import java.util.List;
 public class SimulationState {
     private String sessionId;
     private String status;
+    private LocalDateTime startedAt;
     private LocalDateTime simulationTime;
     private List<VueloDTO> vuelos;
     private List<AeropuertoDTO> aeropuertos;

@@ -67,9 +67,9 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
   }, [simulationState?.status])
 
   useEffect(() => {
-    startPolling(sessionId)
+    startPolling(sessionId, undefined, simulationState?.startedAt)
     return () => stopPolling()
-  }, [sessionId, startPolling, stopPolling])
+  }, [sessionId, startPolling, stopPolling, simulationState?.startedAt])
 
   useEffect(() => {
     if (simulationState?.sessionId !== sessionId) return

@@ -416,6 +416,7 @@ public class SimulationEngine {
                         SimulationState completed = SimulationState.builder()
                                 .sessionId(sessionId)
                                 .status("COMPLETADA")
+                                .startedAt(finalState.getStartedAt())
                                 .simulationTime(finalState.getSimulationTime())
                                 .vuelos(finalState.getVuelos())
                                 .aeropuertos(finalState.getAeropuertos())
@@ -999,10 +1000,12 @@ public class SimulationEngine {
         int prevHora = 0;
         int prevProgreso = 0;
         int prevEntregadas = 0;
+        LocalDateTime startedAt = null;
         if (prevState != null) {
             prevHora = (prevState.getProgreso() * totalHoras) / 100;
             prevProgreso = prevState.getProgreso();
             prevEntregadas = prevState.getMaletasEntregadas();
+            startedAt = prevState.getStartedAt();
         }
         int horaEfectiva = Math.max(hora, prevHora);
         int progresoSim = Math.min(100, totalHoras > 0 ? (horaEfectiva * 100) / totalHoras : 0);
@@ -1198,6 +1201,7 @@ public class SimulationEngine {
         SimulationState state = SimulationState.builder()
                 .sessionId(sessionId)
                 .status(status)
+                .startedAt(startedAt)
                 .simulationTime(simTime)
                 .vuelos(vuelosDTO)
                 .aeropuertos(aeropuertosDTO)
@@ -1243,6 +1247,7 @@ public class SimulationEngine {
         SimulationState updated = SimulationState.builder()
                 .sessionId(sessionId)
                 .status("COLAPSADA")
+                .startedAt(LocalDateTime.now())
                 .simulationTime(simTime)
                 .vuelos(new ArrayList<>())
                 .aeropuertos(new ArrayList<>())

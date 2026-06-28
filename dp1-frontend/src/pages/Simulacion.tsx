@@ -237,7 +237,7 @@ export default function Simulacion() {
       if (cancelled) return
       if (res.activa && res.sessionId) {
         setSessionId(res.sessionId)
-        startPolling(res.sessionId)
+        startPolling(res.sessionId, undefined, res.startedAt)
       }
     }).catch(() => {})
     return () => { cancelled = true }
@@ -323,7 +323,7 @@ export default function Simulacion() {
       hasShownResults.current = false
       setResultSnapshot(null)
       setSessionId(state.sessionId)
-      startPolling(state.sessionId, 15000)
+      startPolling(state.sessionId, 15000, state.startedAt)
     } catch (err: any) {
       const msg = err?.response?.data?.logs?.[0]?.mensaje
         || err?.response?.data?.message

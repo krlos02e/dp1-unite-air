@@ -13,7 +13,7 @@ interface SimulationContextType {
   setPollingInterval: (ms: number) => void
   setIsPaused: (paused: boolean) => void
   resetElapsedTimer: () => void
-  startPolling: (sessionId: string, interval?: number) => void
+  startPolling: (sessionId: string, interval?: number, startedAt?: string) => void
   stopPolling: () => void
   resetSimulation: () => void
 }
@@ -31,9 +31,11 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   const [isPaused, setIsPaused] = useState(false)
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const timerRunningRef = useRef(false)
+  const startedAtRef = useRef<number | null>(null)
 
   const resetElapsedTimer = useCallback(() => {
     setElapsedRealSeconds(0)
+    startedAtRef.current = null
   }, [])
 
   const stopPolling = useCallback(() => {
@@ -50,13 +52,15 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     setSimulationState(null)
     setIsPaused(false)
     setElapsedRealSeconds(0)
+    startedAtRef.current = null
   }, [stopPolling])
 
-  const startPolling = useCallback((sessionId: string, interval?: number) => {
+  const startPolling = useCallback((sessionId: string, interval?: number, startedAt?: string) => {
     stopPolling()
     setSimulationState(null)
     setIsRunning(true)
     setIsPaused(false)
+    startedAtRef.current = startedAt ? Date.parse(startedAt) : Date.now()
     setElapsedRealSeconds(0)
     pollingActiveRef.current = true
 
@@ -67,6 +71,9 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       try {
         const state = await simulationService.poll(sessionId)
         if (!pollingActiveRef.current) return
+        if (state.startedAt && !startedAtRef.current) {
+          startedAtRef.current = Date.parse(state.startedAt)
+        }
         setSimulationState(state)
         if (state.colapsada || state.status === 'COMPLETADA') {
           stopPolling()
@@ -89,7 +96,9 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     if (shouldRun && !timerRunningRef.current) {
       timerRunningRef.current = true
       timerIntervalRef.current = setInterval(() => {
-        setElapsedRealSeconds((prev) => prev + 1)
+        const startedAtMs = startedAtRef.current
+        if (!startedAtMs) return
+        setElapsedRealSeconds(Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)))
       }, 1000)
     } else if (!shouldRun && timerRunningRef.current) {
       timerRunningRef.current = false
