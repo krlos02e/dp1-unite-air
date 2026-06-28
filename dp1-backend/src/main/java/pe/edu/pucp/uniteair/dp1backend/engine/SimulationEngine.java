@@ -414,25 +414,31 @@ public class SimulationEngine {
                         session.setProgresoPorcentaje(100);
                         sessionRepository.save(session);
                     }
-                    SimulationState finalState = simulationCache.get(sessionId);
+                    SimulationState finalState = simulationCache.getStable(sessionId);
+                    if (finalState == null) {
+                        finalState = simulationCache.get(sessionId);
+                    }
                     if (finalState != null) {
-                    SimulationState completed = SimulationState.builder()
-                            .sessionId(sessionId)
-                            .status("COMPLETADA")
-                            .simulationTime(finalState.getSimulationTime())
-                            .vuelos(finalState.getVuelos())
-                            .aeropuertos(finalState.getAeropuertos())
-                            .maletasEntregadas(finalState.getMaletasEntregadas())
-                            .maletasEnTransito(finalState.getMaletasEnTransito())
-                            .vuelosCulminados(finalState.getVuelosCulminados())
-                            .vuelosEnTransito(finalState.getVuelosEnTransito())
-                            .vuelosCancelados(finalState.getVuelosCancelados())
-                            .progreso(100)
-                            .colapsada(false)
-                            .logs(finalState.getLogs())
-                            .envios(finalState.getEnvios())
-                            .build();
+                        SimulationState completed = SimulationState.builder()
+                                .sessionId(sessionId)
+                                .status("COMPLETADA")
+                                .simulationTime(finalState.getSimulationTime())
+                                .vuelos(finalState.getVuelos())
+                                .aeropuertos(finalState.getAeropuertos())
+                                .maletasEntregadas(finalState.getMaletasEntregadas())
+                                .maletasEnTransito(finalState.getMaletasEnTransito())
+                                .vuelosCulminados(finalState.getVuelosCulminados())
+                                .vuelosEnTransito(finalState.getVuelosEnTransito())
+                                .vuelosCancelados(finalState.getVuelosCancelados())
+                                .progreso(100)
+                                .colapsada(false)
+                                .motivoColapso(finalState.getMotivoColapso())
+                                .logs(finalState.getLogs())
+                                .envios(finalState.getEnvios())
+                                .maletas(finalState.getMaletas())
+                                .build();
                         simulationCache.put(sessionId, completed);
+                        simulationCache.putStable(sessionId, completed);
                     }
                 }
             } catch (InterruptedException e) {
@@ -1167,6 +1173,13 @@ public class SimulationEngine {
                 .build();
 
         simulationCache.put(sessionId, state);
+        if (esEstadoEstable(status)) {
+            simulationCache.putStable(sessionId, state);
+        }
+    }
+
+    private boolean esEstadoEstable(String status) {
+        return "EJECUTANDO".equals(status) || "COMPLETADA".equals(status);
     }
 
     private Long extraerProgramacionId(String vueloId) {

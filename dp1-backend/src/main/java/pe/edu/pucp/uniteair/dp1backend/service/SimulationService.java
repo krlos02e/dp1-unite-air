@@ -162,6 +162,9 @@ public class SimulationService {
     public SimulationState obtenerEstado(String sessionId) {
         SimulationState state = simulationCache.get(sessionId);
         if (state == null) {
+            state = simulationCache.getStable(sessionId);
+        }
+        if (state == null) {
             var session = sessionRepository.findById(sessionId).orElse(null);
             if (session != null) {
                 return SimulationState.builder()

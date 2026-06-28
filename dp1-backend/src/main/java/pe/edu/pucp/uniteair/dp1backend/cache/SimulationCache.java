@@ -14,11 +14,16 @@ import java.util.concurrent.TimeUnit;
 public class SimulationCache {
 
     private Cache<String, SimulationState> cache;
+    private Cache<String, SimulationState> stableCache;
     private String activeSessionId;
 
     @PostConstruct
     public void init() {
         cache = Caffeine.newBuilder()
+                .maximumSize(100)
+                .expireAfterWrite(30, TimeUnit.MINUTES)
+                .build();
+        stableCache = Caffeine.newBuilder()
                 .maximumSize(100)
                 .expireAfterWrite(30, TimeUnit.MINUTES)
                 .build();
@@ -35,8 +40,17 @@ public class SimulationCache {
         return cache.getIfPresent(sessionId);
     }
 
+    public void putStable(String sessionId, SimulationState state) {
+        stableCache.put(sessionId, state);
+    }
+
+    public SimulationState getStable(String sessionId) {
+        return stableCache.getIfPresent(sessionId);
+    }
+
     public void evict(String sessionId) {
         cache.invalidate(sessionId);
+        stableCache.invalidate(sessionId);
         if (sessionId.equals(this.activeSessionId)) {
             this.activeSessionId = null;
         }
