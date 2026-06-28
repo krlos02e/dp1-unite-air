@@ -46,6 +46,9 @@ const AIRPLANE_COLOR_RED = '#ef4444'
 const AIRPLANE_SELECTED = '#facc15'
 const BASE_ICON_SIZE = 29
 const AIRPORT_ICON_RATIO = 0.9
+const ROUTE_POINT_COUNT = 28
+const ROUTE_UPDATE_INTERVAL_MS = 220
+const ROUTE_MIN_INDEX_DELTA = 2
 
 function getAirplaneColor(cargaActual: number, capacidad: number): string {
   if (capacidad <= 0 || cargaActual <= 0) return '#38bdf8'
@@ -185,6 +188,7 @@ interface FlightAnim {
   transitionDurationMs: number
   snapshotAt: number
   lastRouteIndex: number
+  lastRouteUpdatedAt: number
 }
 
 interface SimClockSnapshot {
@@ -663,7 +667,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       const to: [number, number] = [v.latDestino, v.lonDestino]
       const isSelected = v.id === selectedVueloIdRef.current
       const tooltipText = tooltipForFlight(v, airportLookup)
-      const pts = bezierPoints(from, to, 40)
+      const pts = bezierPoints(from, to, ROUTE_POINT_COUNT)
       const progresoActual = simulationMode
         ? (simulationNow ? calcularProgresoEnSimulacion(v, simulationNow) : v.progresoVuelo)
         : calcularProgresoLocal(v, realNow)
@@ -696,6 +700,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
           transitionDurationMs: 1,
           snapshotAt: frameNow,
           lastRouteIndex: -1,
+          lastRouteUpdatedAt: 0,
         })
       }
 
@@ -806,11 +811,24 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
               routeLinesRef.current.set(id, newPair)
             }
             anim.lastRouteIndex = splitIndex
+            anim.lastRouteUpdatedAt = frameNow
             return
           }
 
-          if (splitIndex === anim.lastRouteIndex) return
+          const routeIndexDelta = Math.abs(splitIndex - anim.lastRouteIndex)
+          const routeUpdateElapsed = frameNow - anim.lastRouteUpdatedAt
+          if (
+            splitIndex === anim.lastRouteIndex
+            || (
+              routeIndexDelta < ROUTE_MIN_INDEX_DELTA
+              && routeUpdateElapsed < ROUTE_UPDATE_INTERVAL_MS
+            )
+          ) {
+            return
+          }
+
           anim.lastRouteIndex = splitIndex
+          anim.lastRouteUpdatedAt = frameNow
 
           if (splitIndex < anim.pts.length) {
             pair.pending.setLatLngs(anim.pts.slice(splitIndex))
