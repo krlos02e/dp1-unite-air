@@ -200,12 +200,9 @@ public class SimulationEngine {
                         ROLLING_LOOKAHEAD_MINUTES
                 );
                 boolean hayColapso = !noAsignados.isEmpty();
-                maletasEnTransito = 0;
-                for (Map.Entry<String, Ruta> entry : rutas.entrySet()) {
-                    Paquete paquete = dataset.getPaquetePorId(entry.getKey());
-                    int cantidad = paquete != null ? paquete.getCantidad() : 1;
-                    maletasEnTransito += cantidad;
-                }
+                MaletasResumen resumenInicial = calcularResumenMaletas(dataset, rutas, fechaInicio);
+                maletasEntregadas = resumenInicial.entregadas();
+                maletasEnTransito = resumenInicial.enTransito();
 
                 // Construir EstadoOperacional de referencia con las rutas asignadas
                 // Esto es la fuente de verdad para carga de vuelos y ocupacion de aeropuertos
@@ -272,22 +269,15 @@ public class SimulationEngine {
                 long ultimaReplanificacionRealMs = System.currentTimeMillis();
                 final CompletableFuture<ReplanificacionResultado>[] replanFutureRef = new CompletableFuture[]{null};
 
-                maletasEntregadas = 0;
-                maletasEnTransito = 0;
+                MaletasResumen resumenInicio = calcularResumenMaletas(dataset, rutas, simTimeActual);
+                maletasEntregadas = resumenInicio.entregadas();
+                maletasEnTransito = resumenInicio.enTransito();
                 for (Map.Entry<String, Ruta> entry : rutas.entrySet()) {
-                    Paquete paquete = dataset.getPaquetePorId(entry.getKey());
-                    int cantidad = paquete != null ? paquete.getCantidad() : 1;
                     Ruta ruta = entry.getValue();
-                    if (!ruta.getVuelos().isEmpty()) {
-                        Vuelo ultimo = ruta.getVuelos().get(ruta.getVuelos().size() - 1);
-                        if (simTimeActual.isAfter(ultimo.getLlegadaUtc())) {
-                            maletasEntregadas += cantidad;
-                            rutasEntregadas.add(entry.getKey());
-                        } else {
-                            maletasEnTransito += cantidad;
-                        }
-                    } else {
-                        maletasEnTransito += cantidad;
+                    if (ruta == null || ruta.getVuelos().isEmpty()) continue;
+                    Vuelo ultimo = ruta.getVuelos().get(ruta.getVuelos().size() - 1);
+                    if (simTimeActual.isAfter(ultimo.getLlegadaUtc().plusMinutes(15))) {
+                        rutasEntregadas.add(entry.getKey());
                     }
                 }
 
@@ -356,6 +346,10 @@ public class SimulationEngine {
                             }
                         }
                     }
+
+                    MaletasResumen resumenHora = calcularResumenMaletas(dataset, rutas, simTime);
+                    maletasEntregadas = resumenHora.entregadas();
+                    maletasEnTransito = resumenHora.enTransito();
 
                     // Re-planificacion cada 5 minutos reales con ventana rodante de 1.67 dias.
                     long ahoraRealMs = System.currentTimeMillis();
@@ -887,6 +881,56 @@ public class SimulationEngine {
         }
     }
 
+    private MaletasResumen calcularResumenMaletas(Dataset dataset, Map<String, Ruta> rutasAsignadas, LocalDateTime simTime) {
+        if (dataset == null || simTime == null) {
+            return new MaletasResumen(0, 0);
+        }
+
+        int entregadas = 0;
+        int enTransito = 0;
+        Map<String, Ruta> rutas = rutasAsignadas != null ? rutasAsignadas : Collections.emptyMap();
+
+        for (Paquete paquete : dataset.getPaquetes()) {
+            LocalDateTime creacionUtc = LocalDateTime.of(paquete.getFecha(), paquete.getHora());
+            if (creacionUtc.isAfter(simTime)) {
+                continue;
+            }
+
+            int cantidad = paquete.getCantidad();
+            Ruta ruta = rutas.get(paquete.getId());
+            if (ruta == null || ruta.getVuelos().isEmpty()) {
+                continue;
+            }
+
+            List<Vuelo> vuelosRuta = ruta.getVuelos();
+            Vuelo vueloEnCurso = null;
+            Vuelo proximoVuelo = null;
+            for (Vuelo v : vuelosRuta) {
+                if (!simTime.isBefore(v.getSalidaUtc()) && simTime.isBefore(v.getLlegadaUtc())) {
+                    vueloEnCurso = v;
+                    break;
+                }
+                if (simTime.isBefore(v.getSalidaUtc()) && proximoVuelo == null) {
+                    proximoVuelo = v;
+                }
+            }
+
+            if (vueloEnCurso != null || proximoVuelo != null) {
+                enTransito += cantidad;
+                continue;
+            }
+
+            Vuelo ultimo = vuelosRuta.get(vuelosRuta.size() - 1);
+            if (simTime.isAfter(ultimo.getLlegadaUtc())) {
+                entregadas += cantidad;
+            }
+        }
+
+        return new MaletasResumen(entregadas, enTransito);
+    }
+
+    private record MaletasResumen(int entregadas, int enTransito) {}
+
     private void precalcularCaches(String sessionId, Dataset dataset) {
         Map<String, Almacen> almacenMap = almacenService.getMapaAlmacenes(AlmacenContexto.SIMULACION);
         Map<String, List<String>> entrantesMap = new HashMap<>();
@@ -955,18 +999,16 @@ public class SimulationEngine {
         int prevHora = 0;
         int prevProgreso = 0;
         int prevEntregadas = 0;
-        int prevTransito = 0;
         if (prevState != null) {
             prevHora = (prevState.getProgreso() * totalHoras) / 100;
             prevProgreso = prevState.getProgreso();
             prevEntregadas = prevState.getMaletasEntregadas();
-            prevTransito = prevState.getMaletasEnTransito();
         }
         int horaEfectiva = Math.max(hora, prevHora);
         int progresoSim = Math.min(100, totalHoras > 0 ? (horaEfectiva * 100) / totalHoras : 0);
         progresoSim = Math.max(progresoSim, prevProgreso);
         maletasEntregadas = Math.max(maletasEntregadas, prevEntregadas);
-        maletasEnTransito = Math.max(maletasEnTransito, prevTransito);
+        maletasEnTransito = Math.max(0, maletasEnTransito);
 
         int vuelosCulminados = 0;
         int vuelosEnTransito = 0;
