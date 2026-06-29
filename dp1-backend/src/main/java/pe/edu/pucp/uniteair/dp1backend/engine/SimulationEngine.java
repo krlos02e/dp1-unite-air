@@ -153,6 +153,7 @@ public class SimulationEngine {
                             Collections.emptyMap(),
                             Collections.emptySet(),
                             fechaInicio,
+                            fechaInicio,
                             ROLLING_LOOKAHEAD_MINUTES
                     );
                     LocalDateTime finVentanaInicial = fechaInicio.plusMinutes(ROLLING_LOOKAHEAD_MINUTES);
@@ -197,10 +198,11 @@ public class SimulationEngine {
                         rutas,
                         fechaInicio,
                         Collections.emptySet(),
+                        fechaInicio,
                         ROLLING_LOOKAHEAD_MINUTES
                 );
                 boolean hayColapso = !noAsignados.isEmpty();
-                MaletasResumen resumenInicial = calcularResumenMaletas(dataset, rutas, fechaInicio);
+                MaletasResumen resumenInicial = calcularResumenMaletas(dataset, rutas, fechaInicio, fechaInicio);
                 maletasEntregadas = resumenInicial.entregadas();
                 maletasEnTransito = resumenInicial.enTransito();
 
@@ -269,7 +271,7 @@ public class SimulationEngine {
                 long ultimaReplanificacionRealMs = System.currentTimeMillis();
                 final CompletableFuture<ReplanificacionResultado>[] replanFutureRef = new CompletableFuture[]{null};
 
-                MaletasResumen resumenInicio = calcularResumenMaletas(dataset, rutas, simTimeActual);
+                MaletasResumen resumenInicio = calcularResumenMaletas(dataset, rutas, simTimeActual, fechaInicio);
                 maletasEntregadas = resumenInicio.entregadas();
                 maletasEnTransito = resumenInicio.enTransito();
                 for (Map.Entry<String, Ruta> entry : rutas.entrySet()) {
@@ -347,7 +349,7 @@ public class SimulationEngine {
                         }
                     }
 
-                    MaletasResumen resumenHora = calcularResumenMaletas(dataset, rutas, simTime);
+                    MaletasResumen resumenHora = calcularResumenMaletas(dataset, rutas, simTime, fechaInicio);
                     maletasEntregadas = resumenHora.entregadas();
                     maletasEnTransito = resumenHora.enTransito();
 
@@ -372,7 +374,8 @@ public class SimulationEngine {
                                         rutasSnapshot,
                                         rutasEntregadasSnapshot,
                                         splitsSnapshot,
-                                        simTimeReplan
+                                        simTimeReplan,
+                                        fechaInicio
                                 )
                         );
                         ultimaReplanificacionRealMs = ahoraRealMs;
@@ -472,13 +475,17 @@ public class SimulationEngine {
             Map<String, Ruta> rutasActuales,
             Set<String> rutasEntregadas,
             Map<String, AsignacionPaquete> asignacionesSplitActuales,
-            LocalDateTime simTime
+            LocalDateTime simTime,
+            LocalDateTime fechaInicio
     ) {
         LocalDateTime limitePlanificacion = simTime.plusMinutes(ROLLING_LOOKAHEAD_MINUTES);
         Map<String, Ruta> rutasComprometidas = new HashMap<>();
         List<Paquete> pendientes = new ArrayList<>();
 
         for (Paquete paquete : dataset.getPaquetes()) {
+            if (paqueteFueCreadoAntesDelInicio(paquete, fechaInicio)) {
+                continue;
+            }
             String paqueteId = paquete.getId();
             if (rutasEntregadas.contains(paqueteId)) {
                 continue;
@@ -780,7 +787,8 @@ public class SimulationEngine {
             Config_Simulacion config,
             Map<String, Ruta> rutasActuales,
             Set<String> rutasEntregadas,
-            LocalDateTime simTime
+            LocalDateTime simTime,
+            LocalDateTime fechaInicio
     ) {
         return filtrarPaquetesPendientesEnVentana(
                 dataset,
@@ -788,6 +796,7 @@ public class SimulationEngine {
                 rutasActuales,
                 rutasEntregadas,
                 simTime,
+                fechaInicio,
                 ROLLING_LOOKAHEAD_MINUTES
         );
     }
@@ -798,12 +807,16 @@ public class SimulationEngine {
             Map<String, Ruta> rutasActuales,
             Set<String> rutasEntregadas,
             LocalDateTime simTime,
+            LocalDateTime fechaInicio,
             int horizonteMinutos
     ) {
         LocalDateTime limitePlanificacion = simTime.plusMinutes(horizonteMinutos);
         List<Paquete> pendientes = new ArrayList<>();
 
         for (Paquete paquete : dataset.getPaquetes()) {
+            if (paqueteFueCreadoAntesDelInicio(paquete, fechaInicio)) {
+                continue;
+            }
             String paqueteId = paquete.getId();
             if (rutasEntregadas.contains(paqueteId)) {
                 continue;
@@ -831,7 +844,8 @@ public class SimulationEngine {
             Config_Simulacion config,
             Map<String, Ruta> rutas,
             LocalDateTime simTime,
-            Set<String> rutasEntregadas
+            Set<String> rutasEntregadas,
+            LocalDateTime fechaInicio
     ) {
         return calcularNoAsignadosEnVentana(
                 dataset,
@@ -839,6 +853,7 @@ public class SimulationEngine {
                 rutas,
                 simTime,
                 rutasEntregadas,
+                fechaInicio,
                 ROLLING_LOOKAHEAD_MINUTES
         );
     }
@@ -849,11 +864,15 @@ public class SimulationEngine {
             Map<String, Ruta> rutas,
             LocalDateTime simTime,
             Set<String> rutasEntregadas,
+            LocalDateTime fechaInicio,
             int horizonteMinutos
     ) {
         LocalDateTime limitePlanificacion = simTime.plusMinutes(horizonteMinutos);
         Set<String> noAsignados = new HashSet<>();
         for (Paquete paquete : dataset.getPaquetes()) {
+            if (paqueteFueCreadoAntesDelInicio(paquete, fechaInicio)) {
+                continue;
+            }
             if (rutasEntregadas.contains(paquete.getId())) {
                 continue;
             }
@@ -863,6 +882,14 @@ public class SimulationEngine {
             }
         }
         return noAsignados;
+    }
+
+    private boolean paqueteFueCreadoAntesDelInicio(Paquete paquete, LocalDateTime fechaInicio) {
+        if (paquete == null || fechaInicio == null) {
+            return false;
+        }
+        LocalDateTime creacionUtc = LocalDateTime.of(paquete.getFecha(), paquete.getHora());
+        return creacionUtc.isBefore(fechaInicio);
     }
 
     public void detenerSimulacion(String sessionId) {
@@ -889,7 +916,12 @@ public class SimulationEngine {
         }
     }
 
-    private MaletasResumen calcularResumenMaletas(Dataset dataset, Map<String, Ruta> rutasAsignadas, LocalDateTime simTime) {
+    private MaletasResumen calcularResumenMaletas(
+            Dataset dataset,
+            Map<String, Ruta> rutasAsignadas,
+            LocalDateTime simTime,
+            LocalDateTime fechaInicio
+    ) {
         if (dataset == null || simTime == null) {
             return new MaletasResumen(0, 0);
         }
@@ -899,6 +931,9 @@ public class SimulationEngine {
         Map<String, Ruta> rutas = rutasAsignadas != null ? rutasAsignadas : Collections.emptyMap();
 
         for (Paquete paquete : dataset.getPaquetes()) {
+            if (paqueteFueCreadoAntesDelInicio(paquete, fechaInicio)) {
+                continue;
+            }
             LocalDateTime creacionUtc = LocalDateTime.of(paquete.getFecha(), paquete.getHora());
             if (creacionUtc.isAfter(simTime)) {
                 continue;
@@ -1138,6 +1173,9 @@ public class SimulationEngine {
         if (simTime != null) {
             Map<String, Ruta> rutasVisibles = rutasAsignadas != null ? rutasAsignadas : Collections.emptyMap();
             for (Paquete paquete : dataset.getPaquetes()) {
+                if (paqueteFueCreadoAntesDelInicio(paquete, fechaInicio)) {
+                    continue;
+                }
                 LocalDateTime creacionUtc = LocalDateTime.of(paquete.getFecha(), paquete.getHora());
                 if (creacionUtc.isAfter(simTime)) {
                     continue;

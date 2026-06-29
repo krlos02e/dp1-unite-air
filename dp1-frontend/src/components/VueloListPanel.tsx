@@ -39,13 +39,6 @@ function formatTime(iso: string): string {
 }
 
 
-const estadoLabel: Record<string, string> = {
-  EN_ESPERA: 'En espera',
-  EMBARCADO: 'Embarcado',
-  EN_VUELO: 'En vuelo',
-  ENTREGADO: 'Entregado',
-}
-
 const estadoColor: Record<string, string> = {
   EN_ESPERA: 'text-amber-400 bg-amber-400/10',
   EMBARCADO: 'text-sky-400 bg-sky-400/10',
@@ -162,7 +155,6 @@ function VueloListPanel({
   onSelectedVueloClear,
 }: Props) {
   const [search, setSearch] = useState('')
-  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [filterEstado, setFilterEstado] = useState<string>('ACTIVO')
   const [searchScope, setSearchScope] = useState<SearchScope>('todos')
   const [originFilter, setOriginFilter] = useState('')
@@ -697,6 +689,9 @@ function VueloListPanel({
               vuelo={selectedVuelo}
               tzOffset={tzOffset}
               aeropuertos={aeropuertosDisponibles}
+              envios={envios}
+              onEnvioSelect={onEnvioSelect}
+              selectedEnvioId={selectedEnvioId}
               onClear={onSelectedVueloClear}
             />
           </div>
@@ -710,7 +705,6 @@ function VueloListPanel({
         )}
 
         {filtrados.map((v) => {
-          const isExpanded = expandedId === v.id
           const isFlightSelected = selectedVueloId === v.id
           const enviosEnEsteVuelo = enviosByFlight.get(v.id) ?? []
           const totalMaletas = enviosEnEsteVuelo.reduce((sum, e) => sum + e.cantidad, 0)
@@ -731,7 +725,6 @@ function VueloListPanel({
               {/* Main row */}
               <div
                 onClick={() => {
-                  setExpandedId(isExpanded ? null : v.id)
                   onVueloSelect?.(v)
                 }}
                 className={`px-3 py-2 cursor-pointer transition-colors ${
@@ -805,48 +798,6 @@ function VueloListPanel({
                   </div>
                 )}
               </div>
-
-              {/* Expanded: shipments and products on this transport unit */}
-              {isExpanded && envios && (
-                <div className="bg-gray-800/30 border-t border-gray-800/50">
-                  {enviosEnEsteVuelo.length === 0 ? (
-                    <p className="px-4 py-2 text-[10px] text-gray-500">Este vuelo no traslada envíos</p>
-                  ) : (
-                    <>
-                      <div className="px-4 py-1.5 text-[10px] text-gray-400 font-medium border-b border-gray-800/30">
-                        Envíos y productos transportados: {enviosEnEsteVuelo.length} envío{enviosEnEsteVuelo.length !== 1 ? 's' : ''} · {totalMaletas} maleta{totalMaletas !== 1 ? 's' : ''}
-                      </div>
-                      {enviosEnEsteVuelo.map((envio) => {
-                        const isSelected = envio.id === selectedEnvioId
-                        return (
-                          <button
-                            key={envio.id}
-                            onClick={() => onEnvioSelect?.(envio)}
-                            className={`w-full text-left px-4 py-1.5 border-b border-gray-800/30 transition-colors hover:bg-gray-700/30 cursor-pointer ${
-                              isSelected ? 'bg-sky-900/20 border-l-2 border-l-sky-500' : ''
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-1">
-                              <div className="min-w-0 flex-1">
-                                <div className="text-[9px] font-mono text-sky-400 truncate">Envío {envio.id}</div>
-                                <div className="text-[10px] text-gray-300 truncate">
-                                  <span className="font-medium">{getAirportCityResolved(envio.origen, airportLookup) || envio.origen}</span>
-                                  <span className="text-gray-600 mx-0.5">→</span>
-                                  <span className="font-medium">{getAirportCityResolved(envio.destino, airportLookup) || envio.destino}</span>
-                                </div>
-                                <div className="text-[9px] text-gray-500">{envio.cantidad} maleta{envio.cantidad !== 1 ? 's' : ''}</div>
-                              </div>
-                              <span className={`text-[9px] font-medium px-1 py-0.5 rounded-full whitespace-nowrap ${estadoColor[envio.estado] || 'text-gray-500'}`}>
-                                {estadoLabel[envio.estado] || envio.estado}
-                              </span>
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </>
-                  )}
-                </div>
-              )}
             </div>
           )
         })}
