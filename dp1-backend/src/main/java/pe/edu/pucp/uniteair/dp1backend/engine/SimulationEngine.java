@@ -687,11 +687,13 @@ public class SimulationEngine {
             Paquete paquete,
             LocalDateTime simTime,
             Map<String, Ruta> rutasAnteriores,
-            Map<String, AsignacionPaquete> asignacionesSplit
+            Map<String, AsignacionPaquete> asignacionesSplit,
+            Map<String, Ruta> rutasAsignadas
     ) {
         List<MaletaSimulacionDTO> maletas = new ArrayList<>();
         AsignacionPaquete asignacion = asignacionesSplit != null ? asignacionesSplit.get(paquete.getId()) : null;
         Ruta rutaAnterior = rutasAnteriores != null ? rutasAnteriores.get(paquete.getId()) : null;
+        Ruta rutaAsignada = rutasAsignadas != null ? rutasAsignadas.get(paquete.getId()) : null;
         int indiceGlobal = 1;
 
         if (asignacion != null && !asignacion.isEmpty()) {
@@ -705,7 +707,7 @@ public class SimulationEngine {
         }
 
         while (indiceGlobal <= paquete.getCantidad()) {
-            maletas.add(construirMaleta(paquete, indiceGlobal++, 1, null, rutaAnterior, simTime));
+            maletas.add(construirMaleta(paquete, indiceGlobal++, 1, rutaAsignada, rutaAnterior, simTime));
         }
 
         return maletas;
@@ -1199,7 +1201,7 @@ public class SimulationEngine {
                         .rutaAnteriorVuelos(rutaAnterior != null ? construirRutaVuelos(rutaAnterior) : null)
                         .cantidad(paquete.getCantidad())
                         .build());
-                maletasDTO.addAll(construirMaletasPaquete(paquete, simTime, rutasAnteriores, asignacionesSplit));
+                maletasDTO.addAll(construirMaletasPaquete(paquete, simTime, rutasAnteriores, asignacionesSplit, rutasVisibles));
             }
         }
 

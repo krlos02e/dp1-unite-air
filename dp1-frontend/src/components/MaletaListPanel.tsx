@@ -2,21 +2,36 @@ import { useEffect, useRef, useState } from 'react'
 import { cargaArchivosService } from '../services/CargaArchivosService'
 import { getAirportCity } from '../data/airportsData'
 import type { MaletaEstado } from '../types'
+import MaletaDetailCard from './MaletaDetailCard'
 
 type Tab = 'pendientes' | 'planificados' | 'envuelo' | 'entregados'
+type MainTab = 'almacen' | 'envuelo' | 'entregados'
 
 const TAB_CONFIG: { key: Tab; label: string; estados: string; horas?: number }[] = [
   { key: 'envuelo', label: 'En vuelo', estados: 'EN_VUELO' },
-  { key: 'planificados', label: 'Planificadas', estados: 'EMBARCADO' },
-  { key: 'pendientes', label: 'Pendientes', estados: 'EN_ESPERA' },
+  { key: 'planificados', label: 'Embarcado', estados: 'EMBARCADO' },
+  { key: 'pendientes', label: 'Pendiente', estados: 'EN_ESPERA' },
   { key: 'entregados', label: 'Entregadas', estados: 'ENTREGADO', horas: 4 },
+]
+
+const MAIN_TAB_CONFIG: { key: MainTab; label: string }[] = [
+  { key: 'almacen', label: 'En almacén' },
+  { key: 'envuelo', label: 'En vuelo' },
+  { key: 'entregados', label: 'Entregadas' },
 ]
 
 interface Props {
   onMaletaSelect: (maleta: MaletaEstado) => void
   selectedMaletaId?: string | null
+  selectedMaleta?: MaletaEstado | null
+  selectedMaletaRouteMode?: 'actual' | 'anterior'
+  onSelectedMaletaRouteModeChange?: (mode: 'actual' | 'anterior') => void
+  onClearSelectedMaleta?: () => void
   maletasExternas?: MaletaEstado[]
   currentTime?: string | null
+  filterEnvioId?: string | null
+  onClearEnvioFilter?: () => void
+  onIrAVuelo?: (vueloId: string) => void
 }
 
 const DEFAULT_LIMIT = 50
@@ -31,8 +46,20 @@ function estaDentroDeHoras(maleta: MaletaEstado, horas?: number, currentTime?: s
   return diffMs >= 0 && diffMs <= horas * 60 * 60 * 1000
 }
 
-export default function MaletaListPanel({ onMaletaSelect, selectedMaletaId, maletasExternas, currentTime }: Props) {
-  const [tab, setTab] = useState<Tab>('envuelo')
+export default function MaletaListPanel({
+  onMaletaSelect,
+  selectedMaletaId,
+  selectedMaleta,
+  selectedMaletaRouteMode = 'actual',
+  onSelectedMaletaRouteModeChange,
+  onClearSelectedMaleta,
+  maletasExternas,
+  currentTime,
+  filterEnvioId = null,
+  onClearEnvioFilter,
+  onIrAVuelo,
+}: Props) {
+  const [tab, setTab] = useState<Tab>('pendientes')
   const [search, setSearch] = useState('')
   const [maletas, setMaletas] = useState<MaletaEstado[]>([])
   const [loading, setLoading] = useState(false)
@@ -41,6 +68,11 @@ export default function MaletaListPanel({ onMaletaSelect, selectedMaletaId, male
   const mountedRef = useRef(true)
 
   const config = TAB_CONFIG.find((c) => c.key === tab)!
+  const currentMainTab: MainTab = tab === 'pendientes' || tab === 'planificados' ? 'almacen' : tab
+  const sourceMaletas = maletasExternas ?? maletas
+  const maletasFiltrables = filterEnvioId
+    ? sourceMaletas.filter((m) => m.envioId === filterEnvioId)
+    : sourceMaletas
 
   useEffect(() => {
     mountedRef.current = true
@@ -75,16 +107,47 @@ export default function MaletaListPanel({ onMaletaSelect, selectedMaletaId, male
 
   useEffect(() => { setShowAll(false) }, [tab])
 
-  const maletasVisibles = maletasExternas
-    ? maletasExternas.filter((m) => {
+  useEffect(() => {
+    const counts: Record<Tab, number> = {
+      pendientes: maletasFiltrables.filter((m) => m.estado === 'EN_ESPERA').length,
+      planificados: maletasFiltrables.filter((m) => m.estado === 'EMBARCADO').length,
+      envuelo: maletasFiltrables.filter((m) => m.estado === 'EN_VUELO').length,
+      entregados: maletasFiltrables.filter((m) =>
+        m.estado === 'ENTREGADO' && estaDentroDeHoras(m, 4, currentTime)
+      ).length,
+    }
+
+    if (counts[tab] > 0) return
+
+    if (counts.pendientes > 0) {
+      setTab('pendientes')
+    } else if (counts.planificados > 0) {
+      setTab('planificados')
+    } else if (counts.envuelo > 0) {
+      setTab('envuelo')
+    } else if (counts.entregados > 0) {
+      setTab('entregados')
+    }
+  }, [maletasFiltrables, currentTime, tab])
+
+  const maletasVisibles = maletasFiltrables.filter((m) => {
         if (m.estado !== config.estados) return false
         if (tab === 'entregados' && !showAll) {
           return estaDentroDeHoras(m, config.horas, currentTime)
         }
         return true
       })
-    : maletas
-
+  const tabCounts: Record<Tab, number> = {
+    pendientes: maletasFiltrables.filter((m) => m.estado === 'EN_ESPERA').length,
+    planificados: maletasFiltrables.filter((m) => m.estado === 'EMBARCADO').length,
+    envuelo: maletasFiltrables.filter((m) => m.estado === 'EN_VUELO').length,
+    entregados: maletasFiltrables.filter((m) => m.estado === 'ENTREGADO' && estaDentroDeHoras(m, 4, currentTime)).length,
+  }
+  const mainTabCounts: Record<MainTab, number> = {
+    almacen: tabCounts.pendientes + tabCounts.planificados,
+    envuelo: tabCounts.envuelo,
+    entregados: tabCounts.entregados,
+  }
   const term = search.toLowerCase().trim()
   const filtradasBase = term
     ? maletasVisibles.filter((m) => (
@@ -102,30 +165,89 @@ export default function MaletaListPanel({ onMaletaSelect, selectedMaletaId, male
     <div className="w-96 flex-1 min-h-0 bg-gray-900 border border-gray-800 rounded-xl flex flex-col overflow-hidden">
       <div className="p-3 border-b border-gray-800">
         <h3 className="text-sm font-semibold text-gray-200 mb-2">Maletas</h3>
+        {filterEnvioId && (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-2 py-1.5">
+            <span className="truncate text-[10px] text-sky-300">Filtrando por envio {filterEnvioId}</span>
+            <button
+              type="button"
+              onClick={onClearEnvioFilter}
+              className="shrink-0 text-[10px] text-sky-400 hover:text-sky-300"
+            >
+              Limpiar
+            </button>
+          </div>
+        )}
         <input
           type="text"
-          placeholder="Buscar por ID de maleta o envío..."
+          placeholder={filterEnvioId ? 'Buscar por ID de maleta...' : 'Buscar por ID de maleta o envío...'}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-sky-500"
         />
       </div>
 
-      <div className="flex border-b border-gray-800">
-        {TAB_CONFIG.map((c) => (
-          <button
-            key={c.key}
-            onClick={() => setTab(c.key)}
-            className={`flex-1 py-2 text-xs font-medium transition-colors ${
-              tab === c.key ? 'text-sky-400 border-b-2 border-sky-400 bg-sky-400/5' : 'text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            {c.label}
-          </button>
-        ))}
+      <div className="border-b border-gray-800">
+        <div className="flex">
+          {MAIN_TAB_CONFIG.map((main) => (
+            <button
+              key={main.key}
+              onClick={() => {
+                if (main.key === 'almacen') {
+                  setTab((current) => (
+                    current === 'pendientes' || current === 'planificados'
+                      ? current
+                      : (tabCounts.pendientes > 0 ? 'pendientes' : 'planificados')
+                  ))
+                  return
+                }
+                setTab(main.key)
+              }}
+              className={`flex-1 py-2 text-xs font-medium transition-colors ${
+                currentMainTab === main.key
+                  ? 'text-sky-400 border-b-2 border-sky-400 bg-sky-400/5'
+                  : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'
+              }`}
+            >
+              {main.label}
+              <span className="ml-1 text-[10px] text-gray-500">({mainTabCounts[main.key]})</span>
+            </button>
+          ))}
+        </div>
+        {currentMainTab === 'almacen' && (
+          <div className="flex gap-1 px-3 py-2 bg-gray-900/70">
+            {(['pendientes', 'planificados'] as const).map((subtab) => {
+              const isActive = tab === subtab
+              const label = TAB_CONFIG.find((entry) => entry.key === subtab)?.label || subtab
+              return (
+                <button
+                  key={subtab}
+                  onClick={() => setTab(subtab)}
+                  className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
+                    isActive
+                      ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40'
+                      : 'bg-gray-800 text-gray-500 border border-gray-700 hover:text-gray-300'
+                  }`}
+                >
+                  {label}
+                  <span className="ml-1">({tabCounts[subtab]})</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto">
+        {selectedMaleta && (
+          <MaletaDetailCard
+            maleta={selectedMaleta}
+            routeMode={selectedMaletaRouteMode}
+            onRouteModeChange={onSelectedMaletaRouteModeChange}
+            onClose={onClearSelectedMaleta}
+            onIrAVuelo={onIrAVuelo}
+          />
+        )}
+
         {loading && maletas.length === 0 && (
           <div className="flex items-center justify-center py-8">
             <div className="w-5 h-5 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
@@ -134,7 +256,7 @@ export default function MaletaListPanel({ onMaletaSelect, selectedMaletaId, male
 
         {!loading && filtradas.length === 0 && (
           <p className="text-center text-xs text-gray-500 py-8">
-            {term ? 'No se encontraron maletas' : 'No hay maletas en esta categoría'}
+            {term ? 'No se encontraron maletas' : filterEnvioId ? 'No hay maletas para este envio en esta categoria' : 'No hay maletas en esta categoría'}
           </p>
         )}
 

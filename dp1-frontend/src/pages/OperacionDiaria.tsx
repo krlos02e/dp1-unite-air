@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { cargaArchivosService } from '../services/CargaArchivosService'
 import MapaAeropuertos from '../components/MapaAeropuertos'
-import EnvioModal from '../components/EnvioModal'
 import EnvioListPanel from '../components/EnvioListPanel'
 import MaletaListPanel from '../components/MaletaListPanel'
-import MaletaModal from '../components/MaletaModal'
 import AlmacenListPanel from '../components/AlmacenListPanel'
 import VueloListPanel from '../components/VueloListPanel'
 import { AIRPORTS_DATA } from '../data/airportsData'
@@ -87,10 +85,12 @@ export default function OperacionDiaria() {
   const [selectedMaletaRouteMode, setSelectedMaletaRouteMode] = useState<'actual' | 'anterior'>('actual')
   const [mapTz, setMapTz] = useState(0)
   const [panelMode, setPanelMode] = useState<'envios' | 'maletas' | 'almacenes' | 'aviones'>('aviones')
+  const [maletaEnvioFilterId, setMaletaEnvioFilterId] = useState<string | null>(null)
   const [panelCollapsed, setPanelCollapsed] = useState(true)
   const [panelRendered, setPanelRendered] = useState(false)
   const [panelShown, setPanelShown] = useState(false)
   const [todosEnvios, setTodosEnvios] = useState<EnvioEstado[]>([])
+  const [todasMaletas, setTodasMaletas] = useState<MaletaEstado[]>([])
   const [filteredFlightIds, setFilteredFlightIds] = useState<Set<string> | null>(null)
   const [filteredAirportIds, setFilteredAirportIds] = useState<Set<string> | null>(null)
   const filteredFlightSignatureRef = useRef('')
@@ -128,6 +128,7 @@ export default function OperacionDiaria() {
     setSelectedAeropuerto(null)
     setSelectedEnvio(null)
     setSelectedMaleta(null)
+    setMaletaEnvioFilterId(null)
     setSelectedEnvioRouteMode('actual')
     setSelectedMaletaRouteMode('actual')
     setPanelMode('aviones')
@@ -139,6 +140,7 @@ export default function OperacionDiaria() {
     setSelectedVuelo(null)
     setSelectedEnvio(null)
     setSelectedMaleta(null)
+    setMaletaEnvioFilterId(null)
     setSelectedEnvioRouteMode('actual')
     setSelectedMaletaRouteMode('actual')
     setPanelMode('almacenes')
@@ -151,10 +153,14 @@ export default function OperacionDiaria() {
         setSelectedVuelo(null)
         setSelectedAeropuerto(null)
         setSelectedMaleta(null)
+        setMaletaEnvioFilterId(null)
         setSelectedEnvioRouteMode('actual')
         return null
       }
 
+      setPanelMode('envios')
+      setPanelCollapsed(false)
+      setMaletaEnvioFilterId(null)
       setSelectedEnvioRouteMode('actual')
       setSelectedMaleta(null)
       setSelectedMaletaRouteMode('actual')
@@ -177,10 +183,14 @@ export default function OperacionDiaria() {
       if (prev?.id === maleta.id) {
         setSelectedVuelo(null)
         setSelectedAeropuerto(null)
+        setPanelMode('maletas')
+        setPanelCollapsed(false)
         setSelectedMaletaRouteMode('actual')
         return null
       }
 
+      setPanelMode('maletas')
+      setPanelCollapsed(false)
       setSelectedEnvio(null)
       setSelectedEnvioRouteMode('actual')
       setSelectedMaletaRouteMode('actual')
@@ -197,6 +207,36 @@ export default function OperacionDiaria() {
       return maleta
     })
   }, [aeropuertosEstaticos, vuelos])
+
+  const handleViewMaletasForEnvio = useCallback((envioId: string) => {
+    setMaletaEnvioFilterId(envioId)
+    setPanelMode('maletas')
+    setPanelCollapsed(false)
+  }, [])
+
+  const handleMaletaSelectFromEnvio = useCallback((maleta: MaletaEstado) => {
+    setMaletaEnvioFilterId(maleta.envioId)
+    setPanelMode('maletas')
+    setPanelCollapsed(false)
+    handleMaletaSelect(maleta)
+  }, [handleMaletaSelect])
+
+  const clearSelectedEnvio = useCallback(() => {
+    setSelectedEnvio(null)
+    setSelectedMaleta(null)
+    setSelectedVuelo(null)
+    setSelectedAeropuerto(null)
+    setMaletaEnvioFilterId(null)
+    setSelectedEnvioRouteMode('actual')
+    setSelectedMaletaRouteMode('actual')
+  }, [])
+
+  const clearSelectedMaleta = useCallback(() => {
+    setSelectedMaleta(null)
+    setSelectedVuelo(null)
+    setSelectedAeropuerto(null)
+    setSelectedMaletaRouteMode('actual')
+  }, [])
 
   const handleIrAVueloDesdeEnvio = useCallback((vueloId: string) => {
     const vuelo = vuelos.find((v) => v.id === vueloId)
@@ -337,11 +377,22 @@ export default function OperacionDiaria() {
       }
     }
 
+    const pollMaletas = async () => {
+      try {
+        const res = await cargaArchivosService.listarMaletas(undefined, undefined, undefined)
+        setTodasMaletas(res.maletas)
+      } catch {
+        // ignore
+      }
+    }
+
     pollVuelos()
     pollEnvios()
+    pollMaletas()
     const interval = setInterval(() => {
       pollVuelos()
       pollEnvios()
+      pollMaletas()
     }, 15000)
     return () => clearInterval(interval)
   }, [dataLoaded])
@@ -404,45 +455,13 @@ export default function OperacionDiaria() {
             filteredFlightIds={panelMode === 'aviones' && !panelCollapsed ? filteredFlightIds : null}
             filteredAirportIds={panelMode === 'almacenes' && !panelCollapsed ? filteredAirportIds : null}
           />
-          {panelCollapsed && (
-            <button
-              onClick={() => setPanelCollapsed(false)}
-              className="absolute top-4 right-4 z-[1001] bg-gray-800/95 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white hover:bg-gray-700 transition-colors cursor-pointer shadow-lg"
-            >
-              ▶ Panel
-            </button>
-          )}
-
-          <EnvioModal
-            envio={selectedEnvio}
-            isOpen={!!selectedEnvio && !selectedMaleta}
-            onClose={() => {
-              setSelectedEnvio(null)
-              setSelectedVuelo(null)
-              setSelectedAeropuerto(null)
-              setSelectedEnvioRouteMode('actual')
-            }}
-            onIrAVuelo={handleIrAVueloDesdeEnvio}
-            vuelos={vuelos}
-            dentroDelMapa
-            routeMode={selectedEnvioRouteMode}
-            onRouteModeChange={setSelectedEnvioRouteMode}
-          />
-          <MaletaModal
-            maleta={selectedMaleta}
-            isOpen={!!selectedMaleta}
-            onClose={() => {
-              setSelectedMaleta(null)
-              setSelectedVuelo(null)
-              setSelectedAeropuerto(null)
-              setSelectedMaletaRouteMode('actual')
-            }}
-            onIrAVuelo={handleIrAVueloDesdeEnvio}
-            vuelos={vuelos}
-            dentroDelMapa
-            routeMode={selectedMaletaRouteMode}
-            onRouteModeChange={setSelectedMaletaRouteMode}
-          />
+          <button
+            onClick={() => setPanelCollapsed((current) => !current)}
+            className="absolute top-4 right-4 z-[1001] bg-gray-800/95 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white hover:bg-gray-700 transition-colors cursor-pointer shadow-lg"
+            title={panelCollapsed ? 'Abrir panel' : 'Contraer panel'}
+          >
+            {panelCollapsed ? '▶ Panel' : '◀ Panel'}
+          </button>
 
           <div className="absolute bottom-4 left-4 z-[999] flex flex-col gap-2">
             <div className="bg-gray-900/40 border border-gray-700/40 rounded-xl p-3 backdrop-blur-[2px]">
@@ -536,13 +555,6 @@ export default function OperacionDiaria() {
             >
               ✈️ Aviones
             </button>
-            <button
-              onClick={() => setPanelCollapsed(true)}
-              className="px-2 py-1.5 text-xs text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 transition-colors cursor-pointer"
-              title="Contraer panel"
-            >
-              ◀
-            </button>
           </div>
           {panelMode === 'almacenes' ? (
             <AlmacenListPanel
@@ -584,12 +596,29 @@ export default function OperacionDiaria() {
             <MaletaListPanel
               onMaletaSelect={handleMaletaSelect}
               selectedMaletaId={selectedMaleta?.id}
+              selectedMaleta={selectedMaleta}
+              selectedMaletaRouteMode={selectedMaletaRouteMode}
+              onSelectedMaletaRouteModeChange={setSelectedMaletaRouteMode}
+              onClearSelectedMaleta={clearSelectedMaleta}
+              maletasExternas={todasMaletas}
+              filterEnvioId={maletaEnvioFilterId}
+              onClearEnvioFilter={() => setMaletaEnvioFilterId(null)}
+              onIrAVuelo={handleIrAVueloDesdeEnvio}
             />
           ) : (
             <EnvioListPanel
               onEnvioSelect={handleEnvioSelect}
               selectedEnvioId={selectedEnvio?.id}
+              selectedEnvio={selectedEnvio}
+              selectedEnvioRouteMode={selectedEnvioRouteMode}
+              onSelectedEnvioRouteModeChange={setSelectedEnvioRouteMode}
+              onClearSelectedEnvio={clearSelectedEnvio}
               enviosExternos={todosEnvios}
+              onViewMaletasForEnvio={handleViewMaletasForEnvio}
+              onIrAVuelo={handleIrAVueloDesdeEnvio}
+              maletasExternas={todasMaletas}
+              selectedMaletaId={selectedMaleta?.id}
+              onMaletaSelect={handleMaletaSelectFromEnvio}
             />
           )}
         </div>

@@ -1,29 +1,42 @@
 import { useState, useEffect, useRef } from 'react'
 import { cargaArchivosService } from '../services/CargaArchivosService'
 import { getAirportCity, getAirportCountry } from '../data/airportsData'
-import type { EnvioEstado } from '../types'
+import type { EnvioEstado, MaletaEstado } from '../types'
+import EnvioDetailCard from './EnvioDetailCard'
 
 type Tab = 'pendientes' | 'planificados' | 'envuelo' | 'entregados'
+type MainTab = 'almacen' | 'envuelo' | 'entregados'
 type SearchScope = 'todos' | 'id' | 'origen' | 'destino'
 type FilterScope = 'directo' | 'ruta'
 type FilterMatchBy = 'codigo' | 'ciudad' | 'pais'
 
 const TAB_CONFIG: { key: Tab; label: string; estados: string; horas?: number }[] = [
   { key: 'envuelo', label: 'En vuelo', estados: 'EN_VUELO' },
-  { key: 'planificados', label: 'Planificados', estados: 'EMBARCADO' },
-  { key: 'pendientes', label: 'Pendientes', estados: 'EN_ESPERA' },
+  { key: 'planificados', label: 'Embarcado', estados: 'EMBARCADO' },
+  { key: 'pendientes', label: 'Pendiente', estados: 'EN_ESPERA' },
   { key: 'entregados', label: 'Entregados', estados: 'ENTREGADO', horas: 4 },
 ]
 
-function countByEstado(envios: EnvioEstado[], estado: string): number {
-  return envios.filter(e => e.estado === estado).length
-}
+const MAIN_TAB_CONFIG: { key: MainTab; label: string }[] = [
+  { key: 'almacen', label: 'En almacén' },
+  { key: 'envuelo', label: 'En vuelo' },
+  { key: 'entregados', label: 'Entregados' },
+]
 
 interface Props {
   onEnvioSelect: (envio: EnvioEstado) => void
   selectedEnvioId?: string | null
+  selectedEnvio?: EnvioEstado | null
+  selectedEnvioRouteMode?: 'actual' | 'anterior'
+  onSelectedEnvioRouteModeChange?: (mode: 'actual' | 'anterior') => void
+  onClearSelectedEnvio?: () => void
   enviosExternos?: EnvioEstado[]
   currentTime?: string | null
+  onViewMaletasForEnvio?: (envioId: string) => void
+  onIrAVuelo?: (vueloId: string) => void
+  maletasExternas?: MaletaEstado[]
+  selectedMaletaId?: string | null
+  onMaletaSelect?: (maleta: MaletaEstado) => void
 }
 
 const DEFAULT_LIMIT = 50
@@ -65,7 +78,43 @@ function estaDentroDeHoras(envio: EnvioEstado, horas?: number, currentTime?: str
   return diffMs >= 0 && diffMs <= horas * 60 * 60 * 1000
 }
 
-export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosExternos, currentTime }: Props) {
+function matchesPersistentFilters(
+  envio: EnvioEstado,
+  originFilter: string,
+  destinationFilter: string,
+  filterScope: FilterScope,
+  filterMatchBy: FilterMatchBy,
+): boolean {
+  const originMatches = !originFilter || (
+    filterScope === 'directo'
+      ? airportMatches(envio.origen, originFilter, filterMatchBy)
+      : routeMatches(envio.rutaAeropuertos, originFilter, filterMatchBy)
+  )
+  if (!originMatches) return false
+
+  const destinationMatches = !destinationFilter || (
+    filterScope === 'directo'
+      ? airportMatches(envio.destino, destinationFilter, filterMatchBy)
+      : routeMatches(envio.rutaAeropuertos, destinationFilter, filterMatchBy)
+  )
+  return destinationMatches
+}
+
+export default function EnvioListPanel({
+  onEnvioSelect,
+  selectedEnvioId,
+  selectedEnvio,
+  selectedEnvioRouteMode = 'actual',
+  onSelectedEnvioRouteModeChange,
+  onClearSelectedEnvio,
+  enviosExternos,
+  currentTime,
+  onViewMaletasForEnvio,
+  onIrAVuelo,
+  maletasExternas = [],
+  selectedMaletaId,
+  onMaletaSelect,
+}: Props) {
   const [tab, setTab] = useState<Tab>('pendientes')
   const [search, setSearch] = useState('')
   const [searchScope, setSearchScope] = useState<SearchScope>('todos')
@@ -80,6 +129,17 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosE
   const mountedRef = useRef(true)
 
   const config = TAB_CONFIG.find((c) => c.key === tab)!
+  const currentMainTab: MainTab = tab === 'pendientes' || tab === 'planificados' ? 'almacen' : tab
+  const enviosBase = enviosExternos ?? envios
+  const enviosConFiltrosPersistentes = enviosBase.filter((envio) => (
+    matchesPersistentFilters(envio, originFilter, destinationFilter, filterScope, filterMatchBy)
+  ))
+  const countsByTab: Record<Tab, number> = {
+    pendientes: enviosConFiltrosPersistentes.filter((e) => e.estado === 'EN_ESPERA').length,
+    planificados: enviosConFiltrosPersistentes.filter((e) => e.estado === 'EMBARCADO').length,
+    envuelo: enviosConFiltrosPersistentes.filter((e) => e.estado === 'EN_VUELO').length,
+    entregados: enviosConFiltrosPersistentes.filter((e) => e.estado === 'ENTREGADO' && estaDentroDeHoras(e, 4, currentTime)).length,
+  }
 
   useEffect(() => {
     mountedRef.current = true
@@ -115,59 +175,36 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosE
   useEffect(() => { setShowAll(false) }, [tab])
 
   useEffect(() => {
-    if (!enviosExternos) return
+    if (countsByTab[tab] > 0) return
 
-    const counts: Record<Tab, number> = {
-      pendientes: countByEstado(enviosExternos, 'EN_ESPERA'),
-      planificados: countByEstado(enviosExternos, 'EMBARCADO'),
-      envuelo: countByEstado(enviosExternos, 'EN_VUELO'),
-      entregados: enviosExternos.filter((e) =>
-        e.estado === 'ENTREGADO' && estaDentroDeHoras(e, 4, currentTime)
-      ).length,
-    }
-
-    if (counts[tab] > 0) return
-
-    if (counts.pendientes > 0) {
+    if (countsByTab.pendientes > 0) {
       setTab('pendientes')
-    } else if (counts.planificados > 0) {
+    } else if (countsByTab.planificados > 0) {
       setTab('planificados')
-    } else if (counts.envuelo > 0) {
+    } else if (countsByTab.envuelo > 0) {
       setTab('envuelo')
-    } else if (counts.entregados > 0) {
+    } else if (countsByTab.entregados > 0) {
       setTab('entregados')
     }
-  }, [enviosExternos, currentTime, tab])
+  }, [countsByTab.pendientes, countsByTab.planificados, countsByTab.envuelo, countsByTab.entregados, tab])
 
-  const enviosVisibles = enviosExternos
-    ? enviosExternos.filter((e) => {
-        if (e.estado !== config.estados) return false
-        if (tab === 'entregados' && !showAll) {
-          return estaDentroDeHoras(e, config.horas, currentTime)
-        }
-        return true
-      })
-    : envios
+  const enviosVisibles = enviosConFiltrosPersistentes.filter((e) => {
+    if (e.estado !== config.estados) return false
+    if (tab === 'entregados' && !showAll) {
+      return estaDentroDeHoras(e, config.horas, currentTime)
+    }
+    return true
+  })
+  const tabCounts: Record<Tab, number> = countsByTab
+  const mainTabCounts: Record<MainTab, number> = {
+    almacen: tabCounts.pendientes + tabCounts.planificados,
+    envuelo: tabCounts.envuelo,
+    entregados: tabCounts.entregados,
+  }
   const term = normalizeSearch(search)
   const hasFilters = Boolean(originFilter || destinationFilter)
-  const filtradosPorFiltro = enviosVisibles.filter((envio) => {
-    const originMatches = !originFilter || (
-      filterScope === 'directo'
-        ? airportMatches(envio.origen, originFilter, filterMatchBy)
-        : routeMatches(envio.rutaAeropuertos, originFilter, filterMatchBy)
-    )
-    if (!originMatches) return false
-
-    const destinationMatches = !destinationFilter || (
-      filterScope === 'directo'
-        ? airportMatches(envio.destino, destinationFilter, filterMatchBy)
-        : routeMatches(envio.rutaAeropuertos, destinationFilter, filterMatchBy)
-    )
-    return destinationMatches
-  })
-
   const filtradosSinLimite = term
-    ? filtradosPorFiltro.filter((envio) => {
+    ? enviosVisibles.filter((envio) => {
         const idMatch = normalizeSearch(envio.id).includes(term)
         const originMatch = airportMatches(envio.origen, term, 'codigo') || airportMatches(envio.origen, term, 'ciudad') || airportMatches(envio.origen, term, 'pais')
         const destinationMatch = airportMatches(envio.destino, term, 'codigo') || airportMatches(envio.destino, term, 'ciudad') || airportMatches(envio.destino, term, 'pais')
@@ -177,7 +214,7 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosE
         if (searchScope === 'destino') return destinationMatch
         return idMatch || originMatch || destinationMatch
       })
-    : filtradosPorFiltro
+    : enviosVisibles
   const filtrados = showAll || term ? filtradosSinLimite : filtradosSinLimite.slice(0, DEFAULT_LIMIT)
 
   const estadoLabel: Record<string, string> = {
@@ -281,32 +318,72 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosE
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-800">
-        {TAB_CONFIG.map((c) => {
-          const tabCount = enviosExternos
-            ? countByEstado(enviosExternos, c.estados)
-            : envios.length
-          return (
+      <div className="border-b border-gray-800">
+        <div className="flex">
+          {MAIN_TAB_CONFIG.map((main) => (
             <button
-              key={c.key}
-              onClick={() => setTab(c.key)}
+              key={main.key}
+              onClick={() => {
+                if (main.key === 'almacen') {
+                  setTab((current) => (
+                    current === 'pendientes' || current === 'planificados'
+                      ? current
+                      : (tabCounts.pendientes > 0 ? 'pendientes' : 'planificados')
+                  ))
+                  return
+                }
+                setTab(main.key)
+              }}
               className={`flex-1 py-2 text-xs font-medium transition-colors ${
-                tab === c.key
+                currentMainTab === main.key
                   ? 'text-sky-400 border-b-2 border-sky-400 bg-sky-400/5'
                   : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'
               }`}
             >
-              {c.label}
-              {tab === c.key && (
-                <span className="ml-1 text-[10px] text-gray-500">({tabCount})</span>
-              )}
+              {main.label}
+              <span className="ml-1 text-[10px] text-gray-500">({mainTabCounts[main.key]})</span>
             </button>
-          )
-        })}
+          ))}
+        </div>
+        {currentMainTab === 'almacen' && (
+          <div className="flex gap-1 px-3 py-2 bg-gray-900/70">
+            {(['pendientes', 'planificados'] as const).map((subtab) => {
+              const isActive = tab === subtab
+              const label = TAB_CONFIG.find((entry) => entry.key === subtab)?.label || subtab
+              return (
+                <button
+                  key={subtab}
+                  onClick={() => setTab(subtab)}
+                  className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
+                    isActive
+                      ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40'
+                      : 'bg-gray-800 text-gray-500 border border-gray-700 hover:text-gray-300'
+                  }`}
+                >
+                  {label}
+                  <span className="ml-1">({tabCounts[subtab]})</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
+        {selectedEnvio && (
+          <EnvioDetailCard
+            envio={selectedEnvio}
+            routeMode={selectedEnvioRouteMode}
+            onRouteModeChange={onSelectedEnvioRouteModeChange}
+            onClose={onClearSelectedEnvio}
+            onIrAVuelo={onIrAVuelo}
+            maletas={maletasExternas}
+            selectedMaletaId={selectedMaletaId}
+            onMaletaSelect={onMaletaSelect}
+          />
+        )}
+
         {loading && envios.length === 0 && (
           <div className="flex items-center justify-center py-8">
             <div className="w-5 h-5 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
@@ -323,34 +400,44 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosE
           const isSelected = envio.id === selectedEnvioId
           const ut = envio.vueloActual || envio.vueloEsperado || envio.ultimoVuelo
           return (
-            <button
-              key={envio.id}
-              onClick={() => onEnvioSelect(envio)}
-              className={`w-full text-left px-3 py-2 border-b border-gray-800/50 transition-colors hover:bg-gray-800/50 ${
-                isSelected ? 'bg-sky-900/20 border-l-2 border-l-sky-500' : ''
-              }`}
-            >
-              <div className="flex items-start justify-between gap-1">
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs text-gray-200 truncate">
-                    <span className="font-medium">{getAirportCity(envio.origen) || envio.origen}</span>
-                    <span className="text-gray-600 mx-1">→</span>
-                    <span className="font-medium">{getAirportCity(envio.destino) || envio.destino}</span>
-                  </div>
-                  {ut && (
-                    <div className="text-[10px] text-gray-500 mt-0.5 truncate">
-                      UT: {ut}
+            <div key={envio.id} className="border-b border-gray-800/50">
+              <button
+                onClick={() => onEnvioSelect(envio)}
+                className={`w-full text-left px-3 py-2 transition-colors hover:bg-gray-800/50 ${
+                  isSelected ? 'bg-sky-900/20 border-l-2 border-l-sky-500' : ''
+                }`}
+              >
+                <div className="flex items-start justify-between gap-1">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs text-gray-200 truncate">
+                      <span className="font-medium">{getAirportCity(envio.origen) || envio.origen}</span>
+                      <span className="text-gray-600 mx-1">→</span>
+                      <span className="font-medium">{getAirportCity(envio.destino) || envio.destino}</span>
                     </div>
-                  )}
-                  <div className="text-[10px] text-gray-500">
-                    {envio.cantidad} maleta{envio.cantidad !== 1 ? 's' : ''}
+                    {ut && (
+                      <div className="text-[10px] text-gray-500 mt-0.5 truncate">
+                        UT: {ut}
+                      </div>
+                    )}
+                    <div className="text-[10px] text-gray-500">
+                      {envio.cantidad} maleta{envio.cantidad !== 1 ? 's' : ''}
+                    </div>
                   </div>
+                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${estadoColor[envio.estado] || 'text-gray-500'}`}>
+                    {estadoLabel[envio.estado] || envio.estado}
+                  </span>
                 </div>
-                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${estadoColor[envio.estado] || 'text-gray-500'}`}>
-                  {estadoLabel[envio.estado] || envio.estado}
-                </span>
+              </button>
+              <div className="px-3 pb-2">
+                <button
+                  type="button"
+                  onClick={() => onViewMaletasForEnvio?.(envio.id)}
+                  className="text-[10px] text-sky-400 hover:text-sky-300"
+                >
+                  Ver maletas del envio ({envio.cantidad})
+                </button>
               </div>
-            </button>
+            </div>
           )
         })}
       </div>

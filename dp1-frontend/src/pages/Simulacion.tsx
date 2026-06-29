@@ -3,10 +3,8 @@ import { useSimulation } from '../context/SimulationContext'
 import { simulationService } from '../services/SimulationService'
 import { cargaArchivosService } from '../services/CargaArchivosService'
 import MapaAeropuertos from '../components/MapaAeropuertos'
-import EnvioModal from '../components/EnvioModal'
 import EnvioListPanel from '../components/EnvioListPanel'
 import MaletaListPanel from '../components/MaletaListPanel'
-import MaletaModal from '../components/MaletaModal'
 import AlmacenListPanel from '../components/AlmacenListPanel'
 import VueloListPanel from '../components/VueloListPanel'
 import ResultadosModal from '../components/ResultadosModal'
@@ -63,6 +61,7 @@ export default function Simulacion() {
   const [showStopConfirm, setShowStopConfirm] = useState(false)
   const [mapTz, setMapTz] = useState(0)
   const [panelMode, setPanelMode] = useState<'envios' | 'maletas' | 'almacenes' | 'aviones'>('aviones')
+  const [maletaEnvioFilterId, setMaletaEnvioFilterId] = useState<string | null>(null)
   const [panelCollapsed, setPanelCollapsed] = useState(true)
   const [panelRendered, setPanelRendered] = useState(false)
   const [panelShown, setPanelShown] = useState(false)
@@ -76,6 +75,7 @@ export default function Simulacion() {
     setSelectedAeropuerto(null)
     setSelectedEnvio(null)
     setSelectedMaleta(null)
+    setMaletaEnvioFilterId(null)
     setSelectedEnvioRouteMode('actual')
     setSelectedMaletaRouteMode('actual')
     setPanelMode('aviones')
@@ -87,6 +87,7 @@ export default function Simulacion() {
     setSelectedVuelo(null)
     setSelectedEnvio(null)
     setSelectedMaleta(null)
+    setMaletaEnvioFilterId(null)
     setSelectedEnvioRouteMode('actual')
     setSelectedMaletaRouteMode('actual')
     setPanelMode('almacenes')
@@ -99,10 +100,14 @@ export default function Simulacion() {
         setSelectedVuelo(null)
         setSelectedAeropuerto(null)
         setSelectedMaleta(null)
+        setMaletaEnvioFilterId(null)
         setSelectedEnvioRouteMode('actual')
         return null
       }
 
+      setPanelMode('envios')
+      setPanelCollapsed(false)
+      setMaletaEnvioFilterId(null)
       setSelectedEnvioRouteMode('actual')
       setSelectedMaleta(null)
       setSelectedMaletaRouteMode('actual')
@@ -126,10 +131,14 @@ export default function Simulacion() {
       if (prev?.id === maleta.id) {
         setSelectedVuelo(null)
         setSelectedAeropuerto(null)
+        setPanelMode('maletas')
+        setPanelCollapsed(false)
         setSelectedMaletaRouteMode('actual')
         return null
       }
 
+      setPanelMode('maletas')
+      setPanelCollapsed(false)
       setSelectedEnvio(null)
       setSelectedEnvioRouteMode('actual')
       setSelectedMaletaRouteMode('actual')
@@ -147,6 +156,36 @@ export default function Simulacion() {
       return maleta
     })
   }, [aeropuertosEstaticos, simulationState?.aeropuertos, simulationState?.vuelos])
+
+  const handleViewMaletasForEnvio = useCallback((envioId: string) => {
+    setMaletaEnvioFilterId(envioId)
+    setPanelMode('maletas')
+    setPanelCollapsed(false)
+  }, [])
+
+  const handleMaletaSelectFromEnvio = useCallback((maleta: MaletaEstado) => {
+    setMaletaEnvioFilterId(maleta.envioId)
+    setPanelMode('maletas')
+    setPanelCollapsed(false)
+    handleMaletaSelect(maleta)
+  }, [handleMaletaSelect])
+
+  const clearSelectedEnvio = useCallback(() => {
+    setSelectedEnvio(null)
+    setSelectedMaleta(null)
+    setSelectedVuelo(null)
+    setSelectedAeropuerto(null)
+    setMaletaEnvioFilterId(null)
+    setSelectedEnvioRouteMode('actual')
+    setSelectedMaletaRouteMode('actual')
+  }, [])
+
+  const clearSelectedMaleta = useCallback(() => {
+    setSelectedMaleta(null)
+    setSelectedVuelo(null)
+    setSelectedAeropuerto(null)
+    setSelectedMaletaRouteMode('actual')
+  }, [])
 
   const handleIrAVueloDesdeEnvio = useCallback((vueloId: string) => {
     const vuelo = simulationState?.vuelos.find((v) => v.id === vueloId)
@@ -235,6 +274,7 @@ export default function Simulacion() {
   const isCompleted = simulationState?.status === 'COMPLETADA' || (simulationState && simulationState.progreso >= 100)
   const isColapsada = simulationState?.status === 'COLAPSADA'
   const isError = simulationState?.status === 'ERROR'
+  const hasSimulationStarted = Boolean(sessionId || simulationState)
 
   // Restore config from sessionStorage on mount
   useEffect(() => {
@@ -411,7 +451,11 @@ export default function Simulacion() {
     return () => window.clearTimeout(timeoutId)
   }, [panelCollapsed])
 
-  const vuelos = simulationState?.vuelos?.length ? simulationState.vuelos : vuelosEstaticos || EMPTY_FLIGHTS
+  const vuelos = hasSimulationStarted
+    ? (simulationState?.vuelos?.length ? simulationState.vuelos : vuelosEstaticos || EMPTY_FLIGHTS)
+    : EMPTY_FLIGHTS
+  const enviosActivos = hasSimulationStarted ? (simulationState?.envios || []) : []
+  const maletasActivas = hasSimulationStarted ? (simulationState?.maletas || []) : []
 
   const flightStats = useMemo(() => vuelos.reduce((stats, vuelo) => {
     const visibleInSample = Boolean(vuelo.editable) || shouldDisplayFlight(vuelo.id) || vuelo.id === selectedVuelo?.id
@@ -559,7 +603,7 @@ export default function Simulacion() {
             onMapTzChange={setMapTz}
             simulationMode={true}
             simulationTime={simulationState?.simulationTime ?? null}
-            filteredFlightIds={panelMode === 'aviones' && !panelCollapsed ? filteredFlightIds : null}
+            filteredFlightIds={hasSimulationStarted && panelMode === 'aviones' && !panelCollapsed ? filteredFlightIds : null}
             filteredAirportIds={panelMode === 'almacenes' && !panelCollapsed ? filteredAirportIds : null}
           />
 
@@ -597,12 +641,8 @@ export default function Simulacion() {
             <div className="bg-gray-900/40 border border-gray-700/40 rounded-xl p-3 backdrop-blur-[2px] transition-all duration-300 group-hover:bg-gray-900/95 group-hover:border-gray-700 group-hover:backdrop-blur-sm group-hover:shadow-2xl">
               <h4 className="text-xs font-semibold text-gray-300 mb-2 pb-1 border-b border-gray-700/50">Estado de Vuelos</h4>
               <div className="flex flex-col gap-1.5">
-                <div className="flex items-center gap-1.5 bg-violet-900/20 border border-violet-700/40 rounded-lg px-2 py-1">
-                  <span className="text-[10px] text-violet-300 font-medium">Culminados</span>
-                  <span className="text-xs font-bold text-violet-200 bg-violet-700/40 px-1.5 py-0.5 rounded">{vuelosCulminados}</span>
-                </div>
                 <div className="flex items-center gap-1.5 bg-violet-900/35 border border-violet-700/55 rounded-lg px-2 py-1">
-                  <span className="text-[10px] text-violet-400 font-medium">En Tránsito</span>
+                  <span className="text-[10px] text-violet-400 font-medium">En Vuelo</span>
                   <span className="text-xs font-bold text-violet-300 bg-violet-800/55 px-1.5 py-0.5 rounded">{vuelosEnTransitoCount}</span>
                 </div>
                 <div className="flex items-center gap-1.5 bg-sky-950/55 border border-sky-800/70 rounded-lg px-2 py-1">
@@ -611,6 +651,10 @@ export default function Simulacion() {
                     {vuelosVaciosEnTransito}/{vuelosEnTransitoCount}
                   </span>
                   <span className="text-[10px] text-sky-400 font-medium">({vuelosVaciosEnTransitoPct}%)</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-violet-900/20 border border-violet-700/40 rounded-lg px-2 py-1">
+                  <span className="text-[10px] text-violet-300 font-medium">Culminados</span>
+                  <span className="text-xs font-bold text-violet-200 bg-violet-700/40 px-1.5 py-0.5 rounded">{vuelosCulminados}</span>
                 </div>
                 <div className="flex items-center gap-1.5 bg-violet-950/55 border border-violet-800/70 rounded-lg px-2 py-1">
                   <span className="text-[10px] text-violet-500 font-medium">Cancelados</span>
@@ -629,36 +673,6 @@ export default function Simulacion() {
             </button>
           )}
 
-          <EnvioModal
-            envio={selectedEnvio}
-            isOpen={!!selectedEnvio && !selectedMaleta}
-            onClose={() => {
-              setSelectedEnvio(null)
-              setSelectedVuelo(null)
-              setSelectedAeropuerto(null)
-              setSelectedEnvioRouteMode('actual')
-            }}
-            onIrAVuelo={handleIrAVueloDesdeEnvio}
-            vuelos={vuelos}
-            dentroDelMapa
-            routeMode={selectedEnvioRouteMode}
-            onRouteModeChange={setSelectedEnvioRouteMode}
-          />
-          <MaletaModal
-            maleta={selectedMaleta}
-            isOpen={!!selectedMaleta}
-            onClose={() => {
-              setSelectedMaleta(null)
-              setSelectedVuelo(null)
-              setSelectedAeropuerto(null)
-              setSelectedMaletaRouteMode('actual')
-            }}
-            onIrAVuelo={handleIrAVueloDesdeEnvio}
-            vuelos={vuelos}
-            dentroDelMapa
-            routeMode={selectedMaletaRouteMode}
-            onRouteModeChange={setSelectedMaletaRouteMode}
-          />
         </div>
 
         {panelRendered && (
@@ -720,7 +734,7 @@ export default function Simulacion() {
             <AlmacenListPanel
               aeropuertos={aeropuertos}
               vuelos={vuelos}
-              envios={simulationState?.envios || []}
+              envios={enviosActivos}
               onEnvioSelect={handleEnvioSelect}
               selectedEnvioId={selectedEnvio?.id}
               onAlmacenSelect={handleAeropuertoClick}
@@ -738,7 +752,7 @@ export default function Simulacion() {
               vuelos={vuelos}
               contexto="SIMULACION"
               aeropuertosDisponibles={aeropuertos}
-              envios={simulationState?.envios || []}
+              envios={enviosActivos}
               onEnvioSelect={handleEnvioSelect}
               selectedEnvioId={selectedEnvio?.id}
               onVueloSelect={handleVueloClick}
@@ -757,15 +771,31 @@ export default function Simulacion() {
             <MaletaListPanel
               onMaletaSelect={handleMaletaSelect}
               selectedMaletaId={selectedMaleta?.id}
-              maletasExternas={simulationState?.maletas || []}
+              selectedMaleta={selectedMaleta}
+              selectedMaletaRouteMode={selectedMaletaRouteMode}
+              onSelectedMaletaRouteModeChange={setSelectedMaletaRouteMode}
+              onClearSelectedMaleta={clearSelectedMaleta}
+              maletasExternas={maletasActivas}
               currentTime={simulationState?.simulationTime}
+              filterEnvioId={maletaEnvioFilterId}
+              onClearEnvioFilter={() => setMaletaEnvioFilterId(null)}
+              onIrAVuelo={handleIrAVueloDesdeEnvio}
             />
           ) : (
             <EnvioListPanel
               onEnvioSelect={handleEnvioSelect}
               selectedEnvioId={selectedEnvio?.id}
-              enviosExternos={simulationState?.envios || []}
+              selectedEnvio={selectedEnvio}
+              selectedEnvioRouteMode={selectedEnvioRouteMode}
+              onSelectedEnvioRouteModeChange={setSelectedEnvioRouteMode}
+              onClearSelectedEnvio={clearSelectedEnvio}
+              enviosExternos={enviosActivos}
               currentTime={simulationState?.simulationTime}
+              onViewMaletasForEnvio={handleViewMaletasForEnvio}
+              onIrAVuelo={handleIrAVueloDesdeEnvio}
+              maletasExternas={maletasActivas}
+              selectedMaletaId={selectedMaleta?.id}
+              onMaletaSelect={handleMaletaSelectFromEnvio}
             />
           )}
         </div>
