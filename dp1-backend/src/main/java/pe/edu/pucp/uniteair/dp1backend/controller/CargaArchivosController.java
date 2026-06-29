@@ -99,7 +99,7 @@ public class CargaArchivosController {
             return ResponseEntity.ok(List.of());
         }
         LocalDateTime ahora = LocalDateTime.now(ZoneOffset.UTC);
-        Set<String> vuelosCancelados = cargaArchivosService.obtenerVuelosCancelados();
+        Set<String> vuelosCancelados = cargaArchivosService.obtenerVuelosCancelados(contexto);
 
         Map<String, List<String>> entrantesMap = new HashMap<>();
         Map<String, List<String>> salientesMap = new HashMap<>();
@@ -165,7 +165,7 @@ public class CargaArchivosController {
         if (dataset == null) {
             return ResponseEntity.ok(List.of());
         }
-        Set<String> vuelosCancelados = esSimulacion ? Set.of() : cargaArchivosService.obtenerVuelosCancelados();
+        Set<String> vuelosCancelados = cargaArchivosService.obtenerVuelosCancelados(contexto);
         boolean operacionSoloManual = contexto == AlmacenContexto.OPERACION && !cargaArchivosService.usaPaquetesBaseEnOperacion();
         LocalDateTime ahora = LocalDateTime.now(ZoneOffset.UTC);
         Map<String, Almacen> almacenMap = almacenService.getMapaAlmacenes(contexto);

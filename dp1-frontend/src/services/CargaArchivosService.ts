@@ -4,6 +4,7 @@ import type {
   AeropuertoDTO,
   VueloDTO,
   CancelarVueloResult,
+  DescancelarVueloResult,
   EnvioEntrada,
   AgregarEnviosResult,
   EnviosIncrementalesResponse,
@@ -42,13 +43,18 @@ class CargaArchivosService extends HttpClient {
     return this.get<VueloDTO[]>('/carga/vuelos', { contexto })
   }
 
-  cancelarVuelo(origen: string, destino: string, horaSalidaLocal: string): Promise<CancelarVueloResult> {
-    return this.instance.post('/vuelos/cancelar', { origen, destino, horaSalidaLocal })
+  cancelarVuelo(origen: string, destino: string, horaSalidaLocal: string, contexto: AlmacenContexto = 'OPERACION', sessionId?: string): Promise<CancelarVueloResult> {
+    return this.instance.post('/vuelos/cancelar', { origen, destino, horaSalidaLocal, contexto, sessionId })
       .then((r) => r.data as CancelarVueloResult)
   }
 
-  obtenerVuelosCancelados(): Promise<string[]> {
-    return this.get<string[]>('/vuelos/cancelados')
+  descancelarVuelo(vueloId: string, contexto: AlmacenContexto = 'OPERACION'): Promise<DescancelarVueloResult> {
+    return this.instance.post('/vuelos/descancelar', { vueloId, contexto })
+      .then((r) => r.data as DescancelarVueloResult)
+  }
+
+  obtenerVuelosCancelados(contexto: AlmacenContexto = 'OPERACION'): Promise<string[]> {
+    return this.get<string[]>('/vuelos/cancelados', { contexto })
   }
 
   obtenerProgramacionesVuelo(contexto: AlmacenContexto = 'OPERACION'): Promise<ProgramacionVueloDTO[]> {

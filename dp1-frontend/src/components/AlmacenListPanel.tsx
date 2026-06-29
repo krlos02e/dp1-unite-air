@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { cargaArchivosService } from '../services/CargaArchivosService'
 import { getAirportCity, getAirportCountry } from '../data/airportsData'
 import AlmacenFormModal from './AlmacenFormModal'
-import type { AeropuertoDTO, EnvioEstado, AlmacenDTO, AlmacenContexto } from '../types'
+import AeropuertoDetailCard from './AeropuertoDetailCard'
+import type { AeropuertoDTO, EnvioEstado, AlmacenDTO, AlmacenContexto, VueloDTO } from '../types'
 
 interface Props {
   aeropuertos: AeropuertoDTO[]
@@ -11,11 +12,96 @@ interface Props {
   selectedEnvioId?: string | null
   onAlmacenSelect?: (almacen: AeropuertoDTO) => void
   selectedAlmacenId?: string | null
+  selectedAlmacen?: AeropuertoDTO | null
+  vuelos?: VueloDTO[]
+  onVueloSelect?: (vuelo: VueloDTO) => void
   contexto: AlmacenContexto
   onDataChanged?: (aeropuertos: AeropuertoDTO[]) => void | Promise<void>
+  onVisibleAirportsChange?: (airportCodes: string[] | null) => void
+  tzOffset?: number
+  onSelectedAlmacenClear?: () => void
 }
 
 const DEFAULT_LIMIT = 50
+type SearchScope = 'todos' | 'codigo' | 'ciudad' | 'pais'
+type OccupationFilter = 'todos' | 'vacio' | 'normal' | 'alerta' | 'critico'
+
+interface CombinedWarehouse extends AeropuertoDTO {
+  continente?: string
+}
+
+const COUNTRY_TO_CONTINENT: Record<string, string> = {
+  colombia: 'AMERICA',
+  ecuador: 'AMERICA',
+  venezuela: 'AMERICA',
+  brasil: 'AMERICA',
+  peru: 'AMERICA',
+  bolivia: 'AMERICA',
+  chile: 'AMERICA',
+  argentina: 'AMERICA',
+  paraguay: 'AMERICA',
+  uruguay: 'AMERICA',
+  albania: 'EUROPA',
+  alemania: 'EUROPA',
+  austria: 'EUROPA',
+  belgica: 'EUROPA',
+  bielorrusia: 'EUROPA',
+  bulgaria: 'EUROPA',
+  checa: 'EUROPA',
+  croacia: 'EUROPA',
+  dinamarca: 'EUROPA',
+  holanda: 'EUROPA',
+  india: 'ASIA',
+  siria: 'ASIA',
+  'arabia saudita': 'ASIA',
+  afganistan: 'ASIA',
+  oman: 'ASIA',
+  yemen: 'ASIA',
+  azerbaiyan: 'ASIA',
+  jordania: 'ASIA',
+  'emiratos arabes unidos': 'ASIA',
+  pakistan: 'ASIA',
+}
+
+function normalizeSearch(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+function createCodePatternMatcher(rawPattern: string): (code: string) => boolean {
+  const pattern = normalizeSearch(rawPattern)
+  if (!pattern) return () => true
+
+  if (!pattern.includes('*') && !pattern.includes('?')) {
+    return (code) => code.includes(pattern)
+  }
+
+  const expression = Array.from(pattern).map((character) => {
+    if (character === '*') return '.*'
+    if (character === '?') return '.'
+    return /[a-z0-9_-]/.test(character) ? character : `\\${character}`
+  }).join('')
+
+  const regex = new RegExp(`^${expression}$`)
+  return (code) => regex.test(code)
+}
+
+function inferContinent(almacen?: AlmacenDTO, airport?: AeropuertoDTO): string {
+  if (almacen?.continente) return almacen.continente
+  const country = normalizeSearch(almacen?.pais || airport?.pais || getAirportCountry(airport?.codigoOACI || '') || '')
+  return COUNTRY_TO_CONTINENT[country] || 'OTRO'
+}
+
+function occupationCategory(ocupacionActual: number, capacidadMaxima: number): OccupationFilter {
+  if (capacidadMaxima <= 0 || ocupacionActual <= 0) return 'vacio'
+  const ratio = ocupacionActual / capacidadMaxima
+  if (ratio > 0.9) return 'critico'
+  if (ratio > 0.7) return 'alerta'
+  return 'normal'
+}
 
 export default function AlmacenListPanel({
   aeropuertos,
@@ -24,10 +110,20 @@ export default function AlmacenListPanel({
   selectedEnvioId,
   onAlmacenSelect,
   selectedAlmacenId,
+  selectedAlmacen,
+  vuelos = [],
+  onVueloSelect,
   contexto,
   onDataChanged,
+  onVisibleAirportsChange,
+  tzOffset = 0,
+  onSelectedAlmacenClear,
 }: Props) {
   const [search, setSearch] = useState('')
+  const [searchScope, setSearchScope] = useState<SearchScope>('todos')
+  const [codePatternFilter, setCodePatternFilter] = useState('')
+  const [continentFilter, setContinentFilter] = useState('todos')
+  const [occupationFilter, setOccupationFilter] = useState<OccupationFilter>('todos')
   const [expandedOACI, setExpandedOACI] = useState<string | null>(null)
   const [almacenesDB, setAlmacenesDB] = useState<AlmacenDTO[]>([])
   const [showForm, setShowForm] = useState(false)
@@ -44,6 +140,8 @@ export default function AlmacenListPanel({
       .catch(() => {})
   }, [contexto])
 
+  const deferredSearch = useDeferredValue(search)
+
   const almacenMap = useMemo(() => {
     const map = new Map<string, AlmacenDTO>()
     almacenesDB.forEach(a => map.set(a.codigoOACI, a))
@@ -51,10 +149,13 @@ export default function AlmacenListPanel({
   }, [almacenesDB])
 
   const aeropuertosCombinados = useMemo(() => {
-    const map = new Map<string, AeropuertoDTO>()
+    const map = new Map<string, CombinedWarehouse>()
 
     aeropuertos.forEach((a) => {
-      map.set(a.codigoOACI, a)
+      map.set(a.codigoOACI, {
+        ...a,
+        continente: inferContinent(undefined, a),
+      })
     })
 
     almacenesDB.forEach((almacen) => {
@@ -71,20 +172,61 @@ export default function AlmacenListPanel({
         vuelosSalientes: actual?.vuelosSalientes || [],
         vuelosCanceladosSalientes: actual?.vuelosCanceladosSalientes || [],
         editable: almacen.editable,
+        continente: inferContinent(almacen, actual),
       })
     })
 
     return Array.from(map.values())
   }, [aeropuertos, almacenesDB])
 
-  const term = search.toLowerCase().trim()
-  const filtradosSinLimite = aeropuertosCombinados.filter(a => {
-    if (!term) return true
-    const ciudad = (a.ciudad || getAirportCity(a.codigoOACI) || '').toLowerCase()
-    const codigo = a.codigoOACI.toLowerCase()
-    return ciudad.includes(term) || codigo.includes(term)
-  })
+  const term = normalizeSearch(deferredSearch)
+  const searchCodeMatcher = useMemo(() => createCodePatternMatcher(deferredSearch), [deferredSearch])
+  const continentOptions = useMemo(
+    () => Array.from(new Set(aeropuertosCombinados.map((a) => a.continente || 'OTRO'))).sort(),
+    [aeropuertosCombinados],
+  )
+  const hasFilters = Boolean(codePatternFilter || continentFilter !== 'todos' || occupationFilter !== 'todos')
+
+  const filtradosPorFiltro = useMemo(() => {
+    const codePatternMatcher = createCodePatternMatcher(codePatternFilter)
+    return aeropuertosCombinados.filter((a) => {
+      if (codePatternFilter && !codePatternMatcher(normalizeSearch(a.codigoOACI))) return false
+      if (continentFilter !== 'todos' && (a.continente || 'OTRO') !== continentFilter) return false
+      if (occupationFilter !== 'todos' && occupationCategory(a.ocupacionActual, a.capacidadMaxima) !== occupationFilter) return false
+      return true
+    })
+  }, [aeropuertosCombinados, codePatternFilter, continentFilter, occupationFilter])
+
+  const filtradosSinLimite = useMemo(() => {
+    return term
+      ? filtradosPorFiltro.filter((a) => {
+          const codigo = normalizeSearch(a.codigoOACI)
+          const ciudad = normalizeSearch(a.ciudad || getAirportCity(a.codigoOACI) || '')
+          const pais = normalizeSearch(a.pais || getAirportCountry(a.codigoOACI) || '')
+
+          if (searchScope === 'codigo') return searchCodeMatcher(codigo)
+          if (searchScope === 'ciudad') return ciudad.includes(term)
+          if (searchScope === 'pais') return pais.includes(term)
+          return searchCodeMatcher(codigo) || ciudad.includes(term) || pais.includes(term)
+        })
+      : filtradosPorFiltro
+  }, [filtradosPorFiltro, term, searchScope, searchCodeMatcher])
+
   const filtrados = showAll || term ? filtradosSinLimite : filtradosSinLimite.slice(0, DEFAULT_LIMIT)
+
+  useEffect(() => {
+    if (!onVisibleAirportsChange) return
+    if (!hasFilters) {
+      onVisibleAirportsChange(null)
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      onVisibleAirportsChange(filtradosPorFiltro.map((airport) => airport.codigoOACI))
+    }, 120)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [filtradosPorFiltro, hasFilters, onVisibleAirportsChange])
 
   const enviosEnAlmacen = (codigo: string): EnvioEstado[] => {
     if (!envios) return []
@@ -161,13 +303,78 @@ export default function AlmacenListPanel({
             + Nuevo
           </button>
         </div>
-        <input
-          type="text"
-          placeholder="Buscar..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-sky-500"
-        />
+        <div className="space-y-1.5">
+          <div>
+            <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-gray-500">Búsqueda temporal</p>
+            <div className="flex gap-1.5">
+              <select
+                value={searchScope}
+                onChange={(e) => setSearchScope(e.target.value as SearchScope)}
+                className="w-[88px] bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
+              >
+                <option value="todos">Todo</option>
+                <option value="codigo">Código</option>
+                <option value="ciudad">Ciudad</option>
+                <option value="pais">País</option>
+              </select>
+              <input
+                type="text"
+                placeholder="Buscar temporalmente..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="min-w-0 flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-sky-500"
+              />
+            </div>
+          </div>
+          <div className="pt-2 border-t border-gray-800/80">
+            <div className="mb-1.5 flex items-center justify-between">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500">Filtros persistentes</p>
+              {hasFilters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCodePatternFilter('')
+                    setContinentFilter('todos')
+                    setOccupationFilter('todos')
+                  }}
+                  className="text-[9px] text-sky-400 hover:text-sky-300"
+                >
+                  Limpiar filtros
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <input
+                type="text"
+                value={codePatternFilter}
+                onChange={(e) => setCodePatternFilter(e.target.value)}
+                placeholder="Filtro código/patrón"
+                className="col-span-2 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-[10px] text-gray-200 placeholder-gray-500 focus:outline-none focus:border-sky-500"
+              />
+              <select
+                value={continentFilter}
+                onChange={(e) => setContinentFilter(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
+              >
+                <option value="todos">Todos los continentes</option>
+                {continentOptions.map((continent) => (
+                  <option key={continent} value={continent}>{continent}</option>
+                ))}
+              </select>
+              <select
+                value={occupationFilter}
+                onChange={(e) => setOccupationFilter(e.target.value as OccupationFilter)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
+              >
+                <option value="todos">Todos los semáforos</option>
+                <option value="vacio">Vacío</option>
+                <option value="normal">Normal</option>
+                <option value="alerta">Alerta</option>
+                <option value="critico">Crítico</option>
+              </select>
+            </div>
+          </div>
+        </div>
         {deleteError && (
           <div className="mt-2 rounded-lg border border-red-700 bg-red-900/40 px-3 py-2 text-xs text-red-300">
             {deleteError}
@@ -177,9 +384,22 @@ export default function AlmacenListPanel({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
+        {selectedAlmacen && (
+          <div className="border-b border-gray-800 p-3">
+            <AeropuertoDetailCard
+              aeropuerto={selectedAlmacen}
+              vuelos={vuelos}
+              envios={envios}
+              tzOffset={tzOffset}
+              onVueloSelect={onVueloSelect}
+              onClear={onSelectedAlmacenClear}
+              aeropuertos={aeropuertosCombinados}
+            />
+          </div>
+        )}
         {filtrados.length === 0 && (
           <p className="text-center text-xs text-gray-500 py-8">
-            {term ? 'No se encontraron almacenes' : 'No hay almacenes disponibles'}
+            {term || hasFilters ? 'No se encontraron almacenes' : 'No hay almacenes disponibles'}
           </p>
         )}
 
@@ -346,8 +566,8 @@ export default function AlmacenListPanel({
 
       {/* Footer */}
       <div className="px-3 py-1.5 border-t border-gray-800 text-[10px] text-gray-600 flex justify-between items-center">
-        <span>{filtrados.length} de {aeropuertosCombinados.length} almacenes</span>
-        {!showAll && !term && aeropuertosCombinados.length > DEFAULT_LIMIT && (
+        <span>{filtrados.length} de {filtradosSinLimite.length} · base {aeropuertosCombinados.length}</span>
+        {!showAll && !term && filtradosSinLimite.length > DEFAULT_LIMIT && (
           <button onClick={() => setShowAll(true)} className="text-sky-400 hover:text-sky-300 font-medium cursor-pointer">
             Mostrar todos
           </button>

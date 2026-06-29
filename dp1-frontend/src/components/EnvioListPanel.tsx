@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { cargaArchivosService } from '../services/CargaArchivosService'
-import { getAirportCity } from '../data/airportsData'
+import { getAirportCity, getAirportCountry } from '../data/airportsData'
 import type { EnvioEstado } from '../types'
 
 type Tab = 'pendientes' | 'planificados' | 'envuelo' | 'entregados'
+type SearchScope = 'todos' | 'id' | 'origen' | 'destino'
+type FilterScope = 'directo' | 'ruta'
+type FilterMatchBy = 'codigo' | 'ciudad' | 'pais'
 
 const TAB_CONFIG: { key: Tab; label: string; estados: string; horas?: number }[] = [
   { key: 'envuelo', label: 'En vuelo', estados: 'EN_VUELO' },
@@ -25,6 +28,29 @@ interface Props {
 
 const DEFAULT_LIMIT = 50
 
+function normalizeSearch(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+function airportFieldValue(code: string, matchBy: FilterMatchBy): string {
+  if (matchBy === 'codigo') return code
+  if (matchBy === 'pais') return getAirportCountry(code) || ''
+  return getAirportCity(code) || ''
+}
+
+function airportMatches(code: string, term: string, matchBy: FilterMatchBy): boolean {
+  return normalizeSearch(airportFieldValue(code, matchBy)).includes(normalizeSearch(term))
+}
+
+function routeMatches(route: string[] | undefined, term: string, matchBy: FilterMatchBy): boolean {
+  if (!route?.length) return false
+  return route.some((code) => airportMatches(code, term, matchBy))
+}
+
 function estaDentroDeHoras(envio: EnvioEstado, horas?: number, currentTime?: string | null): boolean {
   if (!horas || envio.estado !== 'ENTREGADO') return true
   if (!envio.ultimaLlegadaUtc) return false
@@ -42,9 +68,11 @@ function estaDentroDeHoras(envio: EnvioEstado, horas?: number, currentTime?: str
 export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosExternos, currentTime }: Props) {
   const [tab, setTab] = useState<Tab>('pendientes')
   const [search, setSearch] = useState('')
-  const [filtroId, setFiltroId] = useState(true)
-  const [filtroOrigen, setFiltroOrigen] = useState(true)
-  const [filtroDestino, setFiltroDestino] = useState(true)
+  const [searchScope, setSearchScope] = useState<SearchScope>('todos')
+  const [filterScope, setFilterScope] = useState<FilterScope>('directo')
+  const [filterMatchBy, setFilterMatchBy] = useState<FilterMatchBy>('ciudad')
+  const [originFilter, setOriginFilter] = useState('')
+  const [destinationFilter, setDestinationFilter] = useState('')
   const [envios, setEnvios] = useState<EnvioEstado[]>([])
   const [loading, setLoading] = useState(false)
   const [showAll, setShowAll] = useState(false)
@@ -120,15 +148,36 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosE
         return true
       })
     : envios
-  const term = search.toLowerCase().trim()
+  const term = normalizeSearch(search)
+  const hasFilters = Boolean(originFilter || destinationFilter)
+  const filtradosPorFiltro = enviosVisibles.filter((envio) => {
+    const originMatches = !originFilter || (
+      filterScope === 'directo'
+        ? airportMatches(envio.origen, originFilter, filterMatchBy)
+        : routeMatches(envio.rutaAeropuertos, originFilter, filterMatchBy)
+    )
+    if (!originMatches) return false
+
+    const destinationMatches = !destinationFilter || (
+      filterScope === 'directo'
+        ? airportMatches(envio.destino, destinationFilter, filterMatchBy)
+        : routeMatches(envio.rutaAeropuertos, destinationFilter, filterMatchBy)
+    )
+    return destinationMatches
+  })
+
   const filtradosSinLimite = term
-    ? enviosVisibles.filter((e) => {
-        if (filtroId && e.id.toLowerCase().includes(term)) return true
-        if (filtroOrigen && (e.origen.toLowerCase().includes(term) || (getAirportCity(e.origen) || '').toLowerCase().includes(term))) return true
-        if (filtroDestino && (e.destino.toLowerCase().includes(term) || (getAirportCity(e.destino) || '').toLowerCase().includes(term))) return true
-        return false
+    ? filtradosPorFiltro.filter((envio) => {
+        const idMatch = normalizeSearch(envio.id).includes(term)
+        const originMatch = airportMatches(envio.origen, term, 'codigo') || airportMatches(envio.origen, term, 'ciudad') || airportMatches(envio.origen, term, 'pais')
+        const destinationMatch = airportMatches(envio.destino, term, 'codigo') || airportMatches(envio.destino, term, 'ciudad') || airportMatches(envio.destino, term, 'pais')
+
+        if (searchScope === 'id') return idMatch
+        if (searchScope === 'origen') return originMatch
+        if (searchScope === 'destino') return destinationMatch
+        return idMatch || originMatch || destinationMatch
       })
-    : enviosVisibles
+    : filtradosPorFiltro
   const filtrados = showAll || term ? filtradosSinLimite : filtradosSinLimite.slice(0, DEFAULT_LIMIT)
 
   const estadoLabel: Record<string, string> = {
@@ -151,32 +200,82 @@ export default function EnvioListPanel({ onEnvioSelect, selectedEnvioId, enviosE
       <div className="p-3 border-b border-gray-800">
         <h3 className="text-sm font-semibold text-gray-200 mb-2">Envíos</h3>
         <div className="space-y-1.5">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Buscar..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-sky-500"
-            />
-            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <div className="flex gap-1.5">
-            {([['ID', filtroId, setFiltroId], ['Origen', filtroOrigen, setFiltroOrigen], ['Destino', filtroDestino, setFiltroDestino]] as const).map(([label, active, setter]) => (
-              <button
-                key={label}
-                onClick={() => setter(!active)}
-                className={`text-[10px] px-2 py-0.5 rounded-full font-medium transition-colors ${
-                  active
-                    ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40'
-                    : 'bg-gray-800 text-gray-500 border border-gray-700 hover:text-gray-300'
-                }`}
+          <div>
+            <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-gray-500">Búsqueda temporal</p>
+            <div className="flex gap-1.5">
+              <select
+                value={searchScope}
+                onChange={(e) => setSearchScope(e.target.value as SearchScope)}
+                className="w-[88px] bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
               >
-                {label}
-              </button>
-            ))}
+                <option value="todos">Todo</option>
+                <option value="id">ID</option>
+                <option value="origen">Origen</option>
+                <option value="destino">Destino</option>
+              </select>
+              <div className="relative min-w-0 flex-1">
+                <input
+                  type="text"
+                  placeholder="Buscar temporalmente..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-sky-500"
+                />
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div className="pt-2 border-t border-gray-800/80">
+            <div className="mb-1.5 flex items-center justify-between">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500">Filtros persistentes</p>
+              {hasFilters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOriginFilter('')
+                    setDestinationFilter('')
+                  }}
+                  className="text-[9px] text-sky-400 hover:text-sky-300"
+                >
+                  Limpiar filtros
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <select
+                value={filterScope}
+                onChange={(e) => setFilterScope(e.target.value as FilterScope)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
+              >
+                <option value="directo">Directo</option>
+                <option value="ruta">Ruta</option>
+              </select>
+              <select
+                value={filterMatchBy}
+                onChange={(e) => setFilterMatchBy(e.target.value as FilterMatchBy)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
+              >
+                <option value="codigo">Código</option>
+                <option value="ciudad">Ciudad</option>
+                <option value="pais">País</option>
+              </select>
+              <input
+                type="text"
+                value={originFilter}
+                onChange={(e) => setOriginFilter(e.target.value)}
+                placeholder="Filtrar origen"
+                className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-[10px] text-gray-200 placeholder-gray-500 focus:outline-none focus:border-sky-500"
+              />
+              <input
+                type="text"
+                value={destinationFilter}
+                onChange={(e) => setDestinationFilter(e.target.value)}
+                placeholder="Filtrar destino"
+                className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-[10px] text-gray-200 placeholder-gray-500 focus:outline-none focus:border-sky-500"
+              />
+            </div>
           </div>
         </div>
       </div>

@@ -156,7 +156,7 @@ public class SimulationEngine {
                             ROLLING_LOOKAHEAD_MINUTES
                     );
                     LocalDateTime finVentanaInicial = fechaInicio.plusMinutes(ROLLING_LOOKAHEAD_MINUTES);
-                    Dataset datasetInicial = construirDatasetPlanificacion(dataset, paquetesIniciales, fechaInicio);
+                    Dataset datasetInicial = construirDatasetPlanificacion(sessionId, dataset, paquetesIniciales, fechaInicio);
                     System.out.println("[VENTANA] Inicio=" + fechaInicio
                             + " fin=" + finVentanaInicial
                             + " paquetesEnVentana=" + paquetesIniciales.size()
@@ -365,6 +365,7 @@ public class SimulationEngine {
                                 + " ventana=+" + ROLLING_LOOKAHEAD_MINUTES + "min");
                         replanFutureRef[0] = CompletableFuture.supplyAsync(() ->
                                 replanificarVentanaRodante(
+                                        sessionId,
                                         orchestrator,
                                         dataset,
                                         config,
@@ -464,6 +465,7 @@ public class SimulationEngine {
     }
 
     private ReplanificacionResultado replanificarVentanaRodante(
+            String sessionId,
             TwoPhaseOrchestrator orchestrator,
             Dataset dataset,
             Config_Simulacion config,
@@ -521,7 +523,7 @@ public class SimulationEngine {
         }
 
         PlanificacionUtils.limpiarCacheGlobal();
-        Dataset datasetPendientes = construirDatasetPlanificacion(dataset, pendientes, simTime);
+        Dataset datasetPendientes = construirDatasetPlanificacion(sessionId, dataset, pendientes, simTime);
         long tPlanStart = System.nanoTime();
         Solucion solParcial = orchestrator.ejecutarFlujoCompleto(datasetPendientes, config);
         long duracionMs = (System.nanoTime() - tPlanStart) / 1_000_000;
@@ -600,6 +602,7 @@ public class SimulationEngine {
     }
 
     private Dataset construirDatasetPlanificacion(
+            String sessionId,
             Dataset datasetBase,
             List<Paquete> paquetesPlanificacion,
             LocalDateTime simTime
@@ -608,8 +611,10 @@ public class SimulationEngine {
         LocalDateTime finVuelos = simTime
                 .plusMinutes(ROLLING_LOOKAHEAD_MINUTES)
                 .plusHours(FLIGHT_WINDOW_FORWARD_BUFFER_HOURS);
+        Set<String> vuelosCancelados = cargaArchivosService.obtenerVuelosCancelados(AlmacenContexto.SIMULACION);
 
         List<Vuelo> vuelosFiltrados = datasetBase.getVuelos().stream()
+                .filter(vuelo -> !vuelosCancelados.contains(vuelo.getId()))
                 .filter(vuelo -> !vuelo.getSalidaUtc().isBefore(inicioVuelos)
                         && !vuelo.getSalidaUtc().isAfter(finVuelos))
                 .toList();
@@ -1017,7 +1022,7 @@ public class SimulationEngine {
         int vuelosEnTransito = 0;
         int vuelosCancelados = 0;
 
-        Set<String> vuelosCanceladosSet = cargaArchivosService.obtenerVuelosCancelados();
+        Set<String> vuelosCanceladosSet = cargaArchivosService.obtenerVuelosCancelados(AlmacenContexto.SIMULACION);
 
         List<VueloDTO> vuelosDTO = new ArrayList<>();
         Map<String, double[]> flightCoords = flightCoordCache.get(sessionId);

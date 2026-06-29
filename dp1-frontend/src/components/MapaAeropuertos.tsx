@@ -27,6 +27,7 @@ interface Props {
   simulationMode?: boolean
   simulationTime?: string | null
   filteredFlightIds?: Set<string> | null
+  filteredAirportIds?: Set<string> | null
 }
 
 const INITIAL_CENTER: [number, number] = [17, 0]
@@ -43,7 +44,8 @@ function aeropuertoColor(ocu: number, max: number): string {
 const AIRPLANE_COLOR_GREEN = '#22c55e'
 const AIRPLANE_COLOR_YELLOW = '#eab308'
 const AIRPLANE_COLOR_RED = '#ef4444'
-const AIRPLANE_SELECTED = '#facc15'
+const MAP_SELECTION_COLOR = '#8b5cf6'
+const MAP_SELECTION_SOFT = '#c4b5fd'
 const BASE_ICON_SIZE = 29
 const AIRPORT_ICON_RATIO = 0.9
 const ROUTE_POINT_COUNT = 28
@@ -62,10 +64,10 @@ function getAirplaneColor(cargaActual: number, capacidad: number): string {
 }
 
 function getAirplaneIcon(selected: boolean, cargaActual: number, capacidad: number): L.DivIcon {
-  const color = selected ? AIRPLANE_SELECTED : getAirplaneColor(cargaActual, capacidad)
+  const color = selected ? MAP_SELECTION_COLOR : getAirplaneColor(cargaActual, capacidad)
   const size = BASE_ICON_SIZE
   const glowFilter = selected
-    ? 'filter:drop-shadow(0 0 5px #facc15) drop-shadow(0 0 10px #facc15);'
+    ? 'filter:drop-shadow(0 0 5px #8b5cf6) drop-shadow(0 0 10px #8b5cf6);'
     : 'filter:drop-shadow(0 1px 3px rgba(0,0,0,0.5));'
   return L.divIcon({
     className: '',
@@ -89,9 +91,9 @@ function airportIcon(color: string, label: string, selected = false): L.DivIcon 
   const circleSize = Math.round(34 * r)
   const svgSize = Math.round(22 * r)
   const borderWidth = Math.max(1, Math.round(2 * r))
-  const markerColor = selected ? AIRPLANE_SELECTED : color
+  const markerColor = selected ? MAP_SELECTION_COLOR : color
   const glow = selected
-    ? 'box-shadow:0 0 6px #facc15,0 0 14px #facc15,0 0 24px rgba(250,204,21,0.65);'
+    ? 'box-shadow:0 0 6px #8b5cf6,0 0 14px #8b5cf6,0 0 24px rgba(139,92,246,0.65);'
     : 'box-shadow:0 2px 6px rgba(0,0,0,0.5);'
   return L.divIcon({
     className: '',
@@ -220,7 +222,7 @@ function shouldKeepFlightVisibleOnMap(vuelo: VueloDTO, simulationMode: boolean, 
   return Boolean(vuelo.editable) || shouldDisplayFlight(vuelo.id)
 }
 
-function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropuertoId, selectedEnvio = null, selectedEnvioRouteMode = 'actual', velocidad = 1, onAeropuertoClick, onVueloClick, mapTz, onMapTzChange, simulationMode = false, simulationTime = null, filteredFlightIds = null }: Props) {
+function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropuertoId, selectedEnvio = null, selectedEnvioRouteMode = 'actual', velocidad = 1, onAeropuertoClick, onVueloClick, mapTz, onMapTzChange, simulationMode = false, simulationTime = null, filteredFlightIds = null, filteredAirportIds = null }: Props) {
   const mapRef = useRef<L.Map | null>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const circleLayerRef = useRef<L.LayerGroup | null>(null)
@@ -526,6 +528,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       const color = aeropuertoColor(a.ocupacionActual, a.capacidadMaxima)
       const cityName = getAirportCityResolved(a.codigoOACI, airportLookup) || a.codigoOACI
       const label = cityName
+      const passesPanelFilter = !filteredAirportIds || filteredAirportIds.has(a.codigoOACI) || a.codigoOACI === selectedAeropuertoIdRef.current
 
       const staticData = AIRPORTS_DATA[a.codigoOACI]
       const lat = (a.latitud && a.latitud !== 0) ? a.latitud : (staticData?.latitud ?? 0)
@@ -540,6 +543,9 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
         existing.setIcon(airportIcon(color, label, a.codigoOACI === selectedAeropuertoIdRef.current))
         existing.setLatLng([lat, lon])
         existing.setTooltipContent(airportTooltip())
+        existing.setOpacity(passesPanelFilter ? 1 : 0)
+        const element = existing.getElement()
+        if (element) element.style.pointerEvents = passesPanelFilter ? 'auto' : 'none'
       } else {
         const code = a.codigoOACI
         const mk = L.marker([lat, lon], { icon: airportIcon(color, label, code === selectedAeropuertoIdRef.current) })
@@ -548,11 +554,12 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
           const current = airportDataRef.current.get(code)
           if (current) onAeropuertoClickRef.current?.(current)
         })
+        mk.setOpacity(passesPanelFilter ? 1 : 0)
         circleLayerRef.current?.addLayer(mk)
         airportMarkersRef.current.set(code, mk)
       }
     })
-  }, [aeropuertos])
+  }, [aeropuertos, filteredAirportIds])
 
   useEffect(() => {
     if (!mapRef.current) return
@@ -600,7 +607,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
 
         const selectedRouteLayer = L.layerGroup().addTo(mapRef.current)
         L.polyline(latLngs, {
-          color: selectedEnvioRouteMode === 'anterior' ? '#f97316' : '#facc15',
+          color: selectedEnvioRouteMode === 'anterior' ? '#f97316' : MAP_SELECTION_COLOR,
           weight: 3,
           opacity: 0.95,
           dashArray: selectedEnvioRouteMode === 'anterior' ? '8, 8' : undefined,
@@ -647,7 +654,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
         if (traveledPts.length >= 2) {
           L.polyline(traveledPts, {
             dashArray: '2, 8',
-            color: '#fde68a',
+            color: MAP_SELECTION_SOFT,
             weight: 3,
             opacity: 0.75,
             lineCap: 'round',
@@ -657,7 +664,7 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
         if (pendingPts.length >= 2) {
           L.polyline(pendingPts, {
             dashArray: '6, 8',
-            color: '#facc15',
+            color: MAP_SELECTION_COLOR,
             weight: 3,
             opacity: 0.95,
             lineCap: 'round',
@@ -714,8 +721,12 @@ function MapaAeropuertos({ aeropuertos, vuelos, selectedVueloId, selectedAeropue
       const cityName = getAirportCityResolved(code, airportLookup) || code
       const color = aeropuertoColor(airport.ocupacionActual, airport.capacidadMaxima)
       mk.setIcon(airportIcon(color, cityName, code === selectedAeropuertoId))
+      const passesPanelFilter = !filteredAirportIds || filteredAirportIds.has(code) || code === selectedAeropuertoId
+      mk.setOpacity(passesPanelFilter ? 1 : 0)
+      const element = mk.getElement()
+      if (element) element.style.pointerEvents = passesPanelFilter ? 'auto' : 'none'
     })
-  }, [selectedEnvio, selectedEnvioRouteMode, selectedVueloId, selectedAeropuertoId, vuelos, aeropuertos, airportLookup])
+  }, [selectedEnvio, selectedEnvioRouteMode, selectedVueloId, selectedAeropuertoId, vuelos, aeropuertos, airportLookup, filteredAirportIds])
 
   useEffect(() => {
     if (!markerLayerRef.current) return

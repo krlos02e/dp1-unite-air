@@ -3,8 +3,6 @@ import { useSimulation } from '../context/SimulationContext'
 import { simulationService } from '../services/SimulationService'
 import { cargaArchivosService } from '../services/CargaArchivosService'
 import MapaAeropuertos from '../components/MapaAeropuertos'
-import VueloModal from '../components/VueloModal'
-import AeropuertoModal from '../components/AeropuertoModal'
 import EnvioModal from '../components/EnvioModal'
 import EnvioListPanel from '../components/EnvioListPanel'
 import MaletaListPanel from '../components/MaletaListPanel'
@@ -41,6 +39,7 @@ export default function Simulacion() {
     resetSimulation,
     elapsedRealSeconds,
     setIsPaused,
+    setSimulationState,
     resetElapsedTimer,
   } = useSimulation()
   const [sessionId, setSessionId] = useState<string>('')
@@ -68,7 +67,9 @@ export default function Simulacion() {
   const [panelRendered, setPanelRendered] = useState(false)
   const [panelShown, setPanelShown] = useState(false)
   const [filteredFlightIds, setFilteredFlightIds] = useState<Set<string> | null>(null)
+  const [filteredAirportIds, setFilteredAirportIds] = useState<Set<string> | null>(null)
   const filteredFlightSignatureRef = useRef('')
+  const filteredAirportSignatureRef = useRef('')
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
@@ -88,6 +89,8 @@ export default function Simulacion() {
     setSelectedMaleta(null)
     setSelectedEnvioRouteMode('actual')
     setSelectedMaletaRouteMode('actual')
+    setPanelMode('almacenes')
+    setPanelCollapsed(false)
   }, [])
 
   const handleEnvioSelect = useCallback((envio: EnvioEstado) => {
@@ -169,9 +172,37 @@ export default function Simulacion() {
     setFilteredFlightIds(new Set(ids))
   }, [])
 
+  const handleVisibleAirportsChange = useCallback((codes: string[] | null) => {
+    if (!codes) {
+      if (filteredAirportSignatureRef.current === '') return
+      filteredAirportSignatureRef.current = ''
+      setFilteredAirportIds(null)
+      return
+    }
+    const signature = codes.join('|')
+    if (signature === filteredAirportSignatureRef.current) return
+    filteredAirportSignatureRef.current = signature
+    setFilteredAirportIds(new Set(codes))
+  }, [])
+
   const handleAeropuertosContextoChanged = useCallback((aeropuertos: AeropuertoDTO[]) => {
     setAeropuertosEstaticos(aeropuertos.length > 0 ? aeropuertos : aeropuertosFallback)
   }, [])
+
+  const handleFlightStatusChanged = useCallback((flightId: string, estado: 'CANCELADO' | 'PROGRAMADO') => {
+    setSimulationState((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        vuelos: current.vuelos.map((flight) => (
+          flight.id === flightId ? { ...flight, estado } : flight
+        )),
+      }
+    })
+    setSelectedVuelo((current) => (
+      current?.id === flightId ? { ...current, estado } : current
+    ))
+  }, [setSimulationState])
 
   const refreshSimulacionContextData = useCallback(async () => {
     const [aeropuertosData, vuelosData] = await Promise.all([
@@ -387,12 +418,17 @@ export default function Simulacion() {
     if (vuelo.estado === 'CULMINADO' && visibleInSample) stats.culminados++
     else if (vuelo.estado === 'ACTIVO' && visibleInSample) stats.enTransito++
     else if (vuelo.estado === 'CANCELADO') stats.cancelados++
+    if (vuelo.estado === 'ACTIVO' && visibleInSample && vuelo.cargaActual <= 0) stats.vaciosEnTransito++
     return stats
-  }, { culminados: 0, enTransito: 0, cancelados: 0 }), [vuelos, selectedVuelo?.id])
+  }, { culminados: 0, enTransito: 0, cancelados: 0, vaciosEnTransito: 0 }), [vuelos, selectedVuelo?.id])
 
   const vuelosCulminados = flightStats.culminados
   const vuelosEnTransitoCount = flightStats.enTransito
   const vuelosCancelados = flightStats.cancelados
+  const vuelosVaciosEnTransito = flightStats.vaciosEnTransito
+  const vuelosVaciosEnTransitoPct = vuelosEnTransitoCount > 0
+    ? Math.round((vuelosVaciosEnTransito / vuelosEnTransitoCount) * 100)
+    : 0
 
   const occupancy = useMemo(() => {
     const flota = vuelos.reduce((acc, v) => ({
@@ -524,6 +560,7 @@ export default function Simulacion() {
             simulationMode={true}
             simulationTime={simulationState?.simulationTime ?? null}
             filteredFlightIds={panelMode === 'aviones' && !panelCollapsed ? filteredFlightIds : null}
+            filteredAirportIds={panelMode === 'almacenes' && !panelCollapsed ? filteredAirportIds : null}
           />
 
           {/* Indicadores flotantes - inferior izquierda */}
@@ -568,6 +605,13 @@ export default function Simulacion() {
                   <span className="text-[10px] text-violet-400 font-medium">En Tránsito</span>
                   <span className="text-xs font-bold text-violet-300 bg-violet-800/55 px-1.5 py-0.5 rounded">{vuelosEnTransitoCount}</span>
                 </div>
+                <div className="flex items-center gap-1.5 bg-sky-950/55 border border-sky-800/70 rounded-lg px-2 py-1">
+                  <span className="text-[10px] text-sky-300 font-medium">Vacíos en vuelo</span>
+                  <span className="text-xs font-bold text-sky-200 bg-sky-900/70 px-1.5 py-0.5 rounded">
+                    {vuelosVaciosEnTransito}/{vuelosEnTransitoCount}
+                  </span>
+                  <span className="text-[10px] text-sky-400 font-medium">({vuelosVaciosEnTransitoPct}%)</span>
+                </div>
                 <div className="flex items-center gap-1.5 bg-violet-950/55 border border-violet-800/70 rounded-lg px-2 py-1">
                   <span className="text-[10px] text-violet-500 font-medium">Cancelados</span>
                   <span className="text-xs font-bold text-violet-400 bg-violet-950/80 px-1.5 py-0.5 rounded">{vuelosCancelados}</span>
@@ -585,23 +629,6 @@ export default function Simulacion() {
             </button>
           )}
 
-          <VueloModal
-            vuelo={selectedVuelo}
-            isOpen={!!selectedVuelo && !selectedEnvio && !selectedMaleta}
-            onClose={() => setSelectedVuelo(null)}
-            tzOffset={mapTz}
-            aeropuertos={aeropuertos}
-          />
-          <AeropuertoModal
-            aeropuerto={selectedAeropuerto}
-            isOpen={!!selectedAeropuerto && !selectedEnvio && !selectedMaleta}
-            onClose={() => setSelectedAeropuerto(null)}
-            vuelos={vuelos}
-            envios={simulationState?.envios || []}
-            tzOffset={mapTz}
-            onVueloSelect={handleVueloClick}
-            aeropuertos={aeropuertos}
-          />
           <EnvioModal
             envio={selectedEnvio}
             isOpen={!!selectedEnvio && !selectedMaleta}
@@ -692,13 +719,19 @@ export default function Simulacion() {
           {panelMode === 'almacenes' ? (
             <AlmacenListPanel
               aeropuertos={aeropuertos}
+              vuelos={vuelos}
               envios={simulationState?.envios || []}
               onEnvioSelect={handleEnvioSelect}
               selectedEnvioId={selectedEnvio?.id}
               onAlmacenSelect={handleAeropuertoClick}
               selectedAlmacenId={selectedAeropuerto?.codigoOACI}
+              selectedAlmacen={selectedAeropuerto}
+              onVueloSelect={handleVueloClick}
               contexto="SIMULACION"
               onDataChanged={handleAeropuertosContextoChanged}
+              onVisibleAirportsChange={handleVisibleAirportsChange}
+              tzOffset={mapTz}
+              onSelectedAlmacenClear={() => setSelectedAeropuerto(null)}
             />
           ) : panelMode === 'aviones' ? (
             <VueloListPanel
@@ -710,9 +743,15 @@ export default function Simulacion() {
               selectedEnvioId={selectedEnvio?.id}
               onVueloSelect={handleVueloClick}
               selectedVueloId={selectedVuelo?.id}
+              selectedVuelo={selectedVuelo}
               includeCompleted
+              includeProgrammed
               onVisibleFlightsChange={handleVisibleFlightsChange}
               onDataChanged={refreshSimulacionContextData}
+              onFlightStatusChanged={handleFlightStatusChanged}
+              simulationSessionId={sessionId || null}
+              tzOffset={mapTz}
+              onSelectedVueloClear={() => setSelectedVuelo(null)}
             />
           ) : panelMode === 'maletas' ? (
             <MaletaListPanel

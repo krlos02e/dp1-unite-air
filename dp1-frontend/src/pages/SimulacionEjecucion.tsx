@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useSimulation } from '../context/SimulationContext'
 import { simulationService } from '../services/SimulationService'
 import MapaAeropuertos from '../components/MapaAeropuertos'
-import VueloModal from '../components/VueloModal'
-import AeropuertoModal from '../components/AeropuertoModal'
+import VueloDetailCard from '../components/VueloDetailCard'
+import AeropuertoDetailCard from '../components/AeropuertoDetailCard'
 import EnvioModal from '../components/EnvioModal'
 import ResultadosModal from '../components/ResultadosModal'
 import { formatDateTime } from '../utils/dateFormat'
@@ -208,6 +208,29 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
         </div>
 
         <div className="space-y-2">
+          {(selectedVuelo || selectedAeropuerto) && (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+              {selectedVuelo ? (
+                <VueloDetailCard
+                  vuelo={selectedVuelo}
+                  tzOffset={mapTz}
+                  aeropuertos={simulationState.aeropuertos}
+                  onClear={() => setSelectedVuelo(null)}
+                />
+              ) : selectedAeropuerto ? (
+                <AeropuertoDetailCard
+                  aeropuerto={selectedAeropuerto}
+                  vuelos={simulationState?.vuelos}
+                  envios={simulationState?.envios || []}
+                  tzOffset={mapTz}
+                  aeropuertos={simulationState.aeropuertos}
+                  onVueloSelect={handleVueloClick}
+                  onClear={() => setSelectedAeropuerto(null)}
+                />
+              ) : null}
+            </div>
+          )}
+
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
             <p className="text-gray-400 text-sm">Tiempo de simulación</p>
             <p className="text-2xl font-mono font-bold text-sky-400">{formatDateTime(simulationState.simulationTime)}</p>
@@ -235,8 +258,6 @@ export default function SimulacionEjecucion({ sessionId, onColapso, onBack }: Pr
         </div>
       </div>
 
-      <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} tzOffset={mapTz} />
-      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={simulationState?.vuelos} envios={simulationState?.envios || []} tzOffset={mapTz} />
       <EnvioModal envio={selectedEnvio} isOpen={!!selectedEnvio} onClose={() => setSelectedEnvio(null)} onIrAVuelo={handleIrAVueloDesdeEnvio} vuelos={simulationState?.vuelos} />
       <ResultadosModal
         state={simulationState}

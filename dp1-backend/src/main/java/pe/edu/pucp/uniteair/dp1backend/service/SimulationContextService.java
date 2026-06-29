@@ -10,11 +10,14 @@ public class SimulationContextService {
 
     private final AlmacenService almacenService;
     private final ProgramacionVueloService programacionVueloService;
+    private final CargaArchivosService cargaArchivosService;
 
     public SimulationContextService(AlmacenService almacenService,
-                                    ProgramacionVueloService programacionVueloService) {
+                                    ProgramacionVueloService programacionVueloService,
+                                    CargaArchivosService cargaArchivosService) {
         this.almacenService = almacenService;
         this.programacionVueloService = programacionVueloService;
+        this.cargaArchivosService = cargaArchivosService;
     }
 
     @PostConstruct
@@ -26,5 +29,6 @@ public class SimulationContextService {
     public void reiniciarContextoSimulacion() {
         programacionVueloService.limpiarContexto(AlmacenContexto.SIMULACION);
         almacenService.limpiarContexto(AlmacenContexto.SIMULACION);
+        cargaArchivosService.limpiarVuelosCancelados(AlmacenContexto.SIMULACION);
     }
 }

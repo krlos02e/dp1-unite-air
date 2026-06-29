@@ -7,6 +7,7 @@ import {
 } from '../data/airportsData'
 import { cargaArchivosService } from '../services/CargaArchivosService'
 import VueloProgramacionModal from './VueloProgramacionModal'
+import VueloDetailCard from './VueloDetailCard'
 import type { VueloDTO, EnvioEstado, AeropuertoDTO, AlmacenContexto, ProgramacionVueloDTO } from '../types'
 import { shouldDisplayFlight } from '../utils/flightVisibility'
 
@@ -19,10 +20,16 @@ interface Props {
   selectedEnvioId?: string | null
   onVueloSelect?: (vuelo: VueloDTO) => void
   selectedVueloId?: string | null
+  selectedVuelo?: VueloDTO | null
   includeCompleted?: boolean
+  includeProgrammed?: boolean
   showStatusFilters?: boolean
   onVisibleFlightsChange?: (flightIds: string[] | null) => void
   onDataChanged?: () => void | Promise<void>
+  onFlightStatusChanged?: (flightId: string, estado: 'CANCELADO' | 'PROGRAMADO') => void
+  simulationSessionId?: string | null
+  tzOffset?: number
+  onSelectedVueloClear?: () => void
 }
 
 function formatTime(iso: string): string {
@@ -44,6 +51,10 @@ const estadoColor: Record<string, string> = {
   EMBARCADO: 'text-sky-400 bg-sky-400/10',
   EN_VUELO: 'text-emerald-400 bg-emerald-400/10',
   ENTREGADO: 'text-gray-400 bg-gray-400/10',
+  PROGRAMADO: 'text-sky-300 bg-sky-400/10',
+  ACTIVO: 'text-emerald-300 bg-emerald-400/10',
+  CULMINADO: 'text-gray-300 bg-gray-400/10',
+  CANCELADO: 'text-red-300 bg-red-400/10',
 }
 
 const DEFAULT_LIMIT = 50
@@ -52,6 +63,8 @@ type SearchScope = 'todos' | 'codigo' | 'tramo' | 'origen' | 'destino'
 type SortField = 'ocupacion' | 'salida' | 'llegada' | 'origen' | 'destino'
 type SortDirection = 'asc' | 'desc'
 type OccupationFilter = 'todos' | 'vacio' | 'normal' | 'alerta' | 'critico'
+type FilterMatchBy = 'codigo' | 'ciudad' | 'pais'
+type RouteFilterMode = 'tramo' | 'ruta'
 
 function normalizeSearch(value: string): string {
   return value
@@ -67,6 +80,21 @@ function locationTerms(code: string, airportLookup: Map<string, AirportLookupDat
     getAirportCityResolved(code, airportLookup),
     getAirportCountryResolved(code, airportLookup),
   ].filter(Boolean).join(' '))
+}
+
+function locationFieldValue(code: string, airportLookup: Map<string, AirportLookupData>, matchBy: FilterMatchBy): string {
+  if (matchBy === 'codigo') return code
+  if (matchBy === 'pais') return getAirportCountryResolved(code, airportLookup) || ''
+  return getAirportCityResolved(code, airportLookup) || ''
+}
+
+function locationMatches(code: string, term: string, airportLookup: Map<string, AirportLookupData>, matchBy: FilterMatchBy): boolean {
+  return normalizeSearch(locationFieldValue(code, airportLookup, matchBy)).includes(normalizeSearch(term))
+}
+
+function routeAirportMatches(route: string[] | undefined, term: string, airportLookup: Map<string, AirportLookupData>, matchBy: FilterMatchBy): boolean {
+  if (!route?.length) return false
+  return route.some((code) => locationMatches(code, term, airportLookup, matchBy))
 }
 
 function createCodePatternMatcher(rawPattern: string): (code: string) => boolean {
@@ -85,11 +113,6 @@ function createCodePatternMatcher(rawPattern: string): (code: string) => boolean
 
   const regex = new RegExp(`^${expression}$`)
   return (code) => regex.test(code)
-}
-
-function locationLabel(code: string, airportLookup: Map<string, AirportLookupData>): string {
-  const city = getAirportCityResolved(code, airportLookup)
-  return city ? `${code} · ${city}` : code
 }
 
 function timeOfDay(iso: string): number {
@@ -127,10 +150,16 @@ function VueloListPanel({
   selectedEnvioId,
   onVueloSelect,
   selectedVueloId,
+  selectedVuelo,
   includeCompleted = false,
+  includeProgrammed = false,
   showStatusFilters = true,
   onVisibleFlightsChange,
   onDataChanged,
+  onFlightStatusChanged,
+  simulationSessionId,
+  tzOffset = 0,
+  onSelectedVueloClear,
 }: Props) {
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -138,6 +167,8 @@ function VueloListPanel({
   const [searchScope, setSearchScope] = useState<SearchScope>('todos')
   const [originFilter, setOriginFilter] = useState('')
   const [destinationFilter, setDestinationFilter] = useState('')
+  const [filterMatchBy, setFilterMatchBy] = useState<FilterMatchBy>('ciudad')
+  const [routeFilterMode, setRouteFilterMode] = useState<RouteFilterMode>('tramo')
   const [occupationFilter, setOccupationFilter] = useState<OccupationFilter>('todos')
   const [sortField, setSortField] = useState<SortField>('ocupacion')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
@@ -145,7 +176,10 @@ function VueloListPanel({
   const [showProgramacionForm, setShowProgramacionForm] = useState(false)
   const [editingProgramacion, setEditingProgramacion] = useState<ProgramacionVueloDTO | null>(null)
   const [deletingProgramacionId, setDeletingProgramacionId] = useState<number | null>(null)
+  const [cancellingFlightId, setCancellingFlightId] = useState<string | null>(null)
+  const [flightMessage, setFlightMessage] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null)
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
+  const contentRef = useRef<HTMLDivElement | null>(null)
   const airportLookup = useMemo(() => buildAirportLookup(aeropuertosDisponibles), [aeropuertosDisponibles])
 
   const deferredSearch = useDeferredValue(search)
@@ -153,6 +187,7 @@ function VueloListPanel({
   const hasListFilters = Boolean(originFilter || destinationFilter || occupationFilter !== 'todos')
   const hasMapFilters = Boolean(term || originFilter || destinationFilter || occupationFilter !== 'todos' || filterEstado !== 'ACTIVO')
   const canManageTransportUnits = Boolean(contexto)
+  const canCancelFlights = Boolean(contexto)
 
   useEffect(() => {
     if (!contexto) return
@@ -178,6 +213,8 @@ function VueloListPanel({
   const visibleFlights = useMemo(
     () => vuelos.filter((flight) => (
       (
+        (includeProgrammed && flight.estado === 'PROGRAMADO')
+        || 
         flight.estado === 'ACTIVO'
         || (includeCompleted && flight.estado === 'CULMINADO')
         || (includeCompleted && flight.estado === 'CANCELADO')
@@ -189,7 +226,7 @@ function VueloListPanel({
         || flight.id === selectedVueloId
       )
     )),
-    [vuelos, selectedVueloId, includeCompleted, showStatusFilters],
+    [vuelos, selectedVueloId, includeCompleted, includeProgrammed, showStatusFilters],
   )
 
   const indexedFlights = useMemo(() => visibleFlights.map((flight) => {
@@ -222,8 +259,18 @@ function VueloListPanel({
   const filtradosSinLimite = useMemo(() => {
     return indexedFlights.filter(({ flight: v, codigo, origen, destino, tramo }) => {
       if (showStatusFilters && v.estado !== filterEstado) return false
-      if (originFilter && v.origen !== originFilter) return false
-      if (destinationFilter && v.destino !== destinationFilter) return false
+      if (originFilter) {
+        const originVisible = routeFilterMode === 'tramo'
+          ? locationMatches(v.origen, originFilter, airportLookup, filterMatchBy)
+          : enviosByFlight.get(v.id)?.some((envio) => routeAirportMatches(envio.rutaAeropuertos, originFilter, airportLookup, filterMatchBy))
+        if (!originVisible) return false
+      }
+      if (destinationFilter) {
+        const destinationVisible = routeFilterMode === 'tramo'
+          ? locationMatches(v.destino, destinationFilter, airportLookup, filterMatchBy)
+          : enviosByFlight.get(v.id)?.some((envio) => routeAirportMatches(envio.rutaAeropuertos, destinationFilter, airportLookup, filterMatchBy))
+        if (!destinationVisible) return false
+      }
       if (occupationFilter !== 'todos' && occupationCategory(v.cargaActual, v.capacidad > 0 ? Math.round((v.cargaActual / v.capacidad) * 100) : 0) !== occupationFilter) return false
       if (!term) return true
 
@@ -243,13 +290,13 @@ function VueloListPanel({
       if (comparison === 0) comparison = a.codigo.localeCompare(b.codigo)
       return sortDirection === 'asc' ? comparison : -comparison
     }).map(({ flight }) => flight)
-  }, [indexedFlights, term, filterEstado, searchScope, searchCodeMatcher, originFilter, destinationFilter, occupationFilter, sortField, sortDirection, showStatusFilters])
+  }, [indexedFlights, term, filterEstado, searchScope, searchCodeMatcher, originFilter, destinationFilter, occupationFilter, sortField, sortDirection, showStatusFilters, routeFilterMode, filterMatchBy, enviosByFlight, airportLookup])
 
   const estadosDisponibles = useMemo(() => {
-    const states = ['ACTIVO']
+    const states = includeProgrammed ? ['PROGRAMADO', 'ACTIVO'] : ['ACTIVO']
     if (includeCompleted) states.push('CULMINADO', 'CANCELADO')
     return states
-  }, [includeCompleted])
+  }, [includeCompleted, includeProgrammed])
 
   useEffect(() => {
     if (!onVisibleFlightsChange) return
@@ -279,19 +326,23 @@ function VueloListPanel({
     if (!visible) return
 
     window.setTimeout(() => {
+      if (selectedVuelo?.id === selectedVueloId) {
+        contentRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+        return
+      }
       rowRefs.current.get(selectedVueloId)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
     }, 0)
-  }, [selectedVueloId, vuelos, estadosDisponibles, filterEstado, filtradosSinLimite])
+  }, [selectedVueloId, selectedVuelo?.id, vuelos, estadosDisponibles, filterEstado, filtradosSinLimite])
 
-  const resultKey = `${term}|${originFilter}|${destinationFilter}|${occupationFilter}|${filterEstado}|${searchScope}|${sortField}|${sortDirection}`
+  const resultKey = `${term}|${originFilter}|${destinationFilter}|${occupationFilter}|${filterEstado}|${searchScope}|${sortField}|${sortDirection}|${routeFilterMode}|${filterMatchBy}`
   const [page, setPage] = useState({ key: '', limit: DEFAULT_LIMIT })
   const visibleLimit = page.key === resultKey ? page.limit : DEFAULT_LIMIT
   const filtrados = filtradosSinLimite.slice(0, visibleLimit)
 
   const programacionesFiltradas = useMemo(() => {
     return programaciones.filter((programacion) => {
-      if (originFilter && programacion.origenOACI !== originFilter) return false
-      if (destinationFilter && programacion.destinoOACI !== destinationFilter) return false
+      if (originFilter && !locationMatches(programacion.origenOACI, originFilter, airportLookup, filterMatchBy)) return false
+      if (destinationFilter && !locationMatches(programacion.destinoOACI, destinationFilter, airportLookup, filterMatchBy)) return false
       if (!term) return true
 
       const codigoProgramacion = normalizeSearch(
@@ -307,21 +358,7 @@ function VueloListPanel({
       if (searchScope === 'destino') return destino.includes(term)
       return searchCodeMatcher(codigoProgramacion) || tramo.includes(term)
     })
-  }, [programaciones, originFilter, destinationFilter, term, searchScope, searchCodeMatcher, airportLookup])
-
-  const origins = useMemo(() => (
-    Array.from(new Set([
-      ...vuelos.map((v) => v.origen),
-      ...programaciones.map((p) => p.origenOACI),
-    ])).sort()
-  ), [vuelos, programaciones])
-
-  const destinations = useMemo(() => (
-    Array.from(new Set([
-      ...vuelos.map((v) => v.destino),
-      ...programaciones.map((p) => p.destinoOACI),
-    ])).sort()
-  ), [vuelos, programaciones])
+  }, [programaciones, originFilter, destinationFilter, term, searchScope, searchCodeMatcher, airportLookup, filterMatchBy])
 
   const estadoVueloLabel: Record<string, string> = {
     ACTIVO: 'Activos',
@@ -356,6 +393,59 @@ function VueloListPanel({
     setDeletingProgramacionId(null)
   }
 
+  const handleCancelFlight = async (flight: VueloDTO) => {
+    if (!contexto || flight.estado !== 'PROGRAMADO') return
+    setCancellingFlightId(flight.id)
+    setFlightMessage(null)
+    try {
+      const horaSalidaLocal = flight.salidaUtc.slice(11, 16)
+      const result = await cargaArchivosService.cancelarVuelo(
+        flight.origen,
+        flight.destino,
+        horaSalidaLocal,
+        contexto,
+        simulationSessionId || undefined,
+      )
+      if (result.success && result.vueloId) {
+        setFlightMessage({ tipo: 'success', texto: `Vuelo ${result.vueloId} cancelado correctamente` })
+        onFlightStatusChanged?.(result.vueloId, 'CANCELADO')
+        await onDataChanged?.()
+      } else {
+        setFlightMessage({ tipo: 'error', texto: result.message || 'No se pudo cancelar el vuelo' })
+      }
+    } catch (error: any) {
+      setFlightMessage({
+        tipo: 'error',
+        texto: error?.response?.data?.message || error?.message || 'No se pudo cancelar el vuelo',
+      })
+    } finally {
+      setCancellingFlightId(null)
+    }
+  }
+
+  const handleUncancelFlight = async (flight: VueloDTO) => {
+    if (!contexto || flight.estado !== 'CANCELADO') return
+    setCancellingFlightId(flight.id)
+    setFlightMessage(null)
+    try {
+      const result = await cargaArchivosService.descancelarVuelo(flight.id, contexto)
+      if (result.success && result.vueloId) {
+        setFlightMessage({ tipo: 'success', texto: `Vuelo ${result.vueloId} descancelado correctamente` })
+        onFlightStatusChanged?.(result.vueloId, 'PROGRAMADO')
+        await onDataChanged?.()
+      } else {
+        setFlightMessage({ tipo: 'error', texto: result.message || 'No se pudo descancelar el vuelo' })
+      }
+    } catch (error: any) {
+      setFlightMessage({
+        tipo: 'error',
+        texto: error?.response?.data?.message || error?.message || 'No se pudo descancelar el vuelo',
+      })
+    } finally {
+      setCancellingFlightId(null)
+    }
+  }
+
   return (
     <div className="w-96 flex-1 min-h-0 bg-gray-900 border border-gray-800 rounded-xl flex flex-col overflow-hidden">
       {/* Header */}
@@ -375,6 +465,15 @@ function VueloListPanel({
             </button>
           )}
         </div>
+        {flightMessage && (
+          <div className={`mb-2 rounded-lg border px-2.5 py-2 text-[10px] ${
+            flightMessage.tipo === 'success'
+              ? 'border-emerald-700 bg-emerald-900/30 text-emerald-300'
+              : 'border-red-700 bg-red-900/30 text-red-300'
+          }`}>
+            {flightMessage.texto}
+          </div>
+        )}
         {canManageTransportUnits && (
           <div className="mb-3 rounded-lg border border-gray-800 bg-gray-950/70 p-2">
             <div className="flex items-center justify-between gap-2">
@@ -480,7 +579,7 @@ function VueloListPanel({
         </div>
         <div className="mt-2 pt-2 border-t border-gray-800/80">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] font-medium text-gray-400">Filtros de ubicación</span>
+            <span className="text-[10px] font-medium text-gray-400">Filtros persistentes</span>
             {hasListFilters && (
               <button
                 type="button"
@@ -497,23 +596,38 @@ function VueloListPanel({
           </div>
           <div className="grid grid-cols-2 gap-1.5">
             <select
+              value={routeFilterMode}
+              onChange={(e) => setRouteFilterMode(e.target.value as RouteFilterMode)}
+              className="min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
+            >
+              <option value="tramo">En el tramo</option>
+              <option value="ruta">En la ruta</option>
+            </select>
+            <select
+              value={filterMatchBy}
+              onChange={(e) => setFilterMatchBy(e.target.value as FilterMatchBy)}
+              className="min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
+            >
+              <option value="codigo">Código</option>
+              <option value="ciudad">Ciudad</option>
+              <option value="pais">País</option>
+            </select>
+            <input
+              type="text"
               value={originFilter}
               onChange={(e) => setOriginFilter(e.target.value)}
               aria-label="Filtrar unidades de transporte por origen"
-              className="min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
-            >
-              <option value="">Todos los orígenes</option>
-                  {origins.map((code) => <option key={code} value={code}>{locationLabel(code, airportLookup)}</option>)}
-            </select>
-            <select
+              placeholder="Filtrar origen"
+              className="min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-[10px] text-gray-300 placeholder-gray-500 focus:outline-none focus:border-sky-500"
+            />
+            <input
+              type="text"
               value={destinationFilter}
               onChange={(e) => setDestinationFilter(e.target.value)}
               aria-label="Filtrar unidades de transporte por destino"
-              className="min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-1.5 py-1.5 text-[10px] text-gray-300 focus:outline-none focus:border-sky-500"
-            >
-              <option value="">Todos los destinos</option>
-                  {destinations.map((code) => <option key={code} value={code}>{locationLabel(code, airportLookup)}</option>)}
-            </select>
+              placeholder="Filtrar destino"
+              className="min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-[10px] text-gray-300 placeholder-gray-500 focus:outline-none focus:border-sky-500"
+            />
           </div>
           <select
             value={occupationFilter}
@@ -576,7 +690,17 @@ function VueloListPanel({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={contentRef} className="flex-1 overflow-y-auto">
+        {selectedVuelo && (
+          <div className="border-b border-gray-800 p-3">
+            <VueloDetailCard
+              vuelo={selectedVuelo}
+              tzOffset={tzOffset}
+              aeropuertos={aeropuertosDisponibles}
+              onClear={onSelectedVueloClear}
+            />
+          </div>
+        )}
         {filtrados.length === 0 && (
           <p className="text-center text-xs text-gray-500 py-8">
             {programacionesFiltradas.length > 0
@@ -633,6 +757,29 @@ function VueloListPanel({
                       </span>
                     )}
                   </div>
+                  {canCancelFlights && (v.estado === 'PROGRAMADO' || v.estado === 'CANCELADO') && (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        if (v.estado === 'CANCELADO') {
+                          handleUncancelFlight(v)
+                        } else {
+                          handleCancelFlight(v)
+                        }
+                      }}
+                      disabled={cancellingFlightId === v.id}
+                      className={`shrink-0 rounded-md px-2 py-1 text-[10px] font-medium text-white disabled:cursor-not-allowed ${
+                        v.estado === 'CANCELADO'
+                          ? 'bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800'
+                          : 'bg-red-600 hover:bg-red-500 disabled:bg-red-800'
+                      }`}
+                    >
+                      {cancellingFlightId === v.id
+                        ? (v.estado === 'CANCELADO' ? 'Descancelando...' : 'Cancelando...')
+                        : (v.estado === 'CANCELADO' ? 'Descancelar' : 'Cancelar')}
+                    </button>
+                  )}
                 </div>
 
                 {/* Occupation bar */}

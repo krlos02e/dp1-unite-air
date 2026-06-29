@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { dashboardService } from '../services/DashboardService'
 import MapaAeropuertos from '../components/MapaAeropuertos'
-import VueloModal from '../components/VueloModal'
-import AeropuertoModal from '../components/AeropuertoModal'
+import VueloDetailCard from '../components/VueloDetailCard'
+import AeropuertoDetailCard from '../components/AeropuertoDetailCard'
 import EnvioModal from '../components/EnvioModal'
 import type { DashboardData, VueloDTO, AeropuertoDTO, EnvioEstado } from '../types'
 
@@ -80,8 +80,28 @@ export default function Dashboard({ sessionId }: Props) {
         />
       </div>
 
-      <VueloModal vuelo={selectedVuelo} isOpen={!!selectedVuelo} onClose={() => setSelectedVuelo(null)} tzOffset={mapTz} />
-      <AeropuertoModal aeropuerto={selectedAeropuerto} isOpen={!!selectedAeropuerto} onClose={() => setSelectedAeropuerto(null)} vuelos={data.vuelosActivos} tzOffset={mapTz} />
+      {(selectedVuelo || selectedAeropuerto) && (
+        <div className="mb-6 rounded-xl border border-gray-800 bg-gray-900 p-3">
+          {selectedVuelo ? (
+            <VueloDetailCard
+              vuelo={selectedVuelo}
+              tzOffset={mapTz}
+              aeropuertos={data.aeropuertos}
+              onClear={() => setSelectedVuelo(null)}
+            />
+          ) : selectedAeropuerto ? (
+            <AeropuertoDetailCard
+              aeropuerto={selectedAeropuerto}
+              vuelos={data.vuelosActivos}
+              tzOffset={mapTz}
+              aeropuertos={data.aeropuertos}
+              onVueloSelect={handleVueloClick}
+              onClear={() => setSelectedAeropuerto(null)}
+            />
+          ) : null}
+        </div>
+      )}
+
       <EnvioModal envio={selectedEnvio} isOpen={!!selectedEnvio} onClose={() => setSelectedEnvio(null)} onIrAVuelo={handleIrAVueloDesdeEnvio} vuelos={data.vuelosActivos} />
     </div>
   )

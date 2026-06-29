@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef, useState, useCallback, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useRef, useState, useCallback, useEffect, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import { simulationService } from '../services/SimulationService'
 import type { SimulationState } from '../types'
 
@@ -8,7 +8,7 @@ interface SimulationContextType {
   pollingInterval: number
   elapsedRealSeconds: number
   isPaused: boolean
-  setSimulationState: (state: SimulationState | null) => void
+  setSimulationState: Dispatch<SetStateAction<SimulationState | null>>
   setIsRunning: (running: boolean) => void
   setPollingInterval: (ms: number) => void
   setIsPaused: (paused: boolean) => void

@@ -121,6 +121,12 @@ export interface CancelarVueloResult {
   vueloId?: string;
 }
 
+export interface DescancelarVueloResult {
+  success: boolean;
+  message: string;
+  vueloId?: string;
+}
+
 export interface AgregarEnviosResult {
   success: boolean;
   message: string;

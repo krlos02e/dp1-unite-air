@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { cargaArchivosService } from '../services/CargaArchivosService'
 import MapaAeropuertos from '../components/MapaAeropuertos'
-import VueloModal from '../components/VueloModal'
-import AeropuertoModal from '../components/AeropuertoModal'
 import EnvioModal from '../components/EnvioModal'
 import EnvioListPanel from '../components/EnvioListPanel'
 import MaletaListPanel from '../components/MaletaListPanel'
@@ -94,7 +92,36 @@ export default function OperacionDiaria() {
   const [panelShown, setPanelShown] = useState(false)
   const [todosEnvios, setTodosEnvios] = useState<EnvioEstado[]>([])
   const [filteredFlightIds, setFilteredFlightIds] = useState<Set<string> | null>(null)
+  const [filteredAirportIds, setFilteredAirportIds] = useState<Set<string> | null>(null)
   const filteredFlightSignatureRef = useRef('')
+  const filteredAirportSignatureRef = useRef('')
+
+  const flightStats = vuelos.reduce((stats, vuelo) => {
+    const enVuelo = vuelo.estado !== 'CANCELADO' && vuelo.progresoVuelo > 0 && vuelo.progresoVuelo < 100
+    if (enVuelo) {
+      stats.enVuelo++
+      if (vuelo.cargaActual <= 0) stats.vaciosEnVuelo++
+    }
+    if (vuelo.estado === 'CULMINADO') stats.culminados++
+    else if (vuelo.estado === 'CANCELADO') stats.cancelados++
+    return stats
+  }, { enVuelo: 0, vaciosEnVuelo: 0, culminados: 0, cancelados: 0 })
+
+  const occupancy = vuelos.reduce((acc, v) => ({
+    carga: acc.carga + v.cargaActual,
+    capacidad: acc.capacidad + v.capacidad,
+  }), { carga: 0, capacidad: 0 })
+
+  const vuelosVaciosEnVueloPct = flightStats.enVuelo > 0
+    ? Math.round((flightStats.vaciosEnVuelo / flightStats.enVuelo) * 100)
+    : 0
+
+  function ocupColor(ratio: number): string {
+    if (ratio <= 0) return 'bg-sky-500'
+    if (ratio <= 0.7) return 'bg-emerald-500'
+    if (ratio <= 0.9) return 'bg-amber-500'
+    return 'bg-red-500'
+  }
 
   const handleVueloClick = useCallback((v: VueloDTO) => {
     setSelectedVuelo((prev) => (prev?.id === v.id ? null : v))
@@ -114,6 +141,8 @@ export default function OperacionDiaria() {
     setSelectedMaleta(null)
     setSelectedEnvioRouteMode('actual')
     setSelectedMaletaRouteMode('actual')
+    setPanelMode('almacenes')
+    setPanelCollapsed(false)
   }, [])
 
   const handleEnvioSelect = useCallback((envio: EnvioEstado) => {
@@ -193,8 +222,33 @@ export default function OperacionDiaria() {
     setFilteredFlightIds(new Set(ids))
   }, [])
 
+  const handleVisibleAirportsChange = useCallback((codes: string[] | null) => {
+    if (!codes) {
+      if (filteredAirportSignatureRef.current === '') return
+      filteredAirportSignatureRef.current = ''
+      setFilteredAirportIds(null)
+      return
+    }
+    const signature = codes.join('|')
+    if (signature === filteredAirportSignatureRef.current) return
+    filteredAirportSignatureRef.current = signature
+    setFilteredAirportIds(new Set(codes))
+  }, [])
+
   const handleAeropuertosContextoChanged = useCallback((aeropuertos: AeropuertoDTO[]) => {
     setAeropuertosEstaticos(aeropuertos.length > 0 ? aeropuertos : aeropuertosFallback)
+  }, [])
+
+  const handleFlightStatusChanged = useCallback((flightId: string, estado: 'CANCELADO' | 'PROGRAMADO') => {
+    setVuelosOriginales((current) => current.map((flight) => (
+      flight.id === flightId ? { ...flight, estado } : flight
+    )))
+    setVuelos((current) => current.map((flight) => (
+      flight.id === flightId ? { ...flight, estado } : flight
+    )))
+    setSelectedVuelo((current) => (
+      current?.id === flightId ? { ...current, estado } : current
+    ))
   }, [])
 
   const refreshOperacionContextData = useCallback(async () => {
@@ -348,6 +402,7 @@ export default function OperacionDiaria() {
             mapTz={mapTz}
             onMapTzChange={setMapTz}
             filteredFlightIds={panelMode === 'aviones' && !panelCollapsed ? filteredFlightIds : null}
+            filteredAirportIds={panelMode === 'almacenes' && !panelCollapsed ? filteredAirportIds : null}
           />
           {panelCollapsed && (
             <button
@@ -358,23 +413,6 @@ export default function OperacionDiaria() {
             </button>
           )}
 
-          <VueloModal
-            vuelo={selectedVuelo}
-            isOpen={!!selectedVuelo && !selectedEnvio && !selectedMaleta}
-            onClose={() => setSelectedVuelo(null)}
-            tzOffset={mapTz}
-            aeropuertos={aeropuertosEstaticos}
-          />
-          <AeropuertoModal
-            aeropuerto={selectedAeropuerto}
-            isOpen={!!selectedAeropuerto && !selectedEnvio && !selectedMaleta}
-            onClose={() => setSelectedAeropuerto(null)}
-            vuelos={vuelos}
-            envios={todosEnvios}
-            tzOffset={mapTz}
-            onVueloSelect={handleVueloClick}
-            aeropuertos={aeropuertosEstaticos}
-          />
           <EnvioModal
             envio={selectedEnvio}
             isOpen={!!selectedEnvio && !selectedMaleta}
@@ -405,6 +443,51 @@ export default function OperacionDiaria() {
             routeMode={selectedMaletaRouteMode}
             onRouteModeChange={setSelectedMaletaRouteMode}
           />
+
+          <div className="absolute bottom-4 left-4 z-[999] flex flex-col gap-2">
+            <div className="bg-gray-900/40 border border-gray-700/40 rounded-xl p-3 backdrop-blur-[2px]">
+              <h4 className="text-xs font-semibold text-gray-300 mb-2 pb-1 border-b border-gray-700/50">Ocupación Global</h4>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between text-[10px] text-gray-400 mb-0.5">
+                    <span className="truncate">Flota: {occupancy.carga}/{occupancy.capacidad}</span>
+                    <span className="shrink-0 ml-1">{occupancy.capacidad > 0 ? Math.round(occupancy.carga / occupancy.capacidad * 100) : 0}%</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-gray-800 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${ocupColor(occupancy.capacidad > 0 ? occupancy.carga / occupancy.capacidad : 0)}`}
+                      style={{ width: `${Math.min(occupancy.capacidad > 0 ? occupancy.carga / occupancy.capacidad * 100 : 0, 100)}%` }}
+                    />
+                  </div>
+                </div>
+                <span className={`w-2 h-2 rounded-full shrink-0 ${ocupColor(occupancy.capacidad > 0 ? occupancy.carga / occupancy.capacidad : 0)}`} />
+              </div>
+            </div>
+            <div className="bg-gray-900/40 border border-gray-700/40 rounded-xl p-3 backdrop-blur-[2px]">
+              <h4 className="text-xs font-semibold text-gray-300 mb-2 pb-1 border-b border-gray-700/50">Estado de Vuelos</h4>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-1.5 bg-violet-900/35 border border-violet-700/55 rounded-lg px-2 py-1">
+                  <span className="text-[10px] text-violet-400 font-medium">En Vuelo</span>
+                  <span className="text-xs font-bold text-violet-300 bg-violet-800/55 px-1.5 py-0.5 rounded">{flightStats.enVuelo}</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-sky-950/55 border border-sky-800/70 rounded-lg px-2 py-1">
+                  <span className="text-[10px] text-sky-300 font-medium">Vacíos en vuelo</span>
+                  <span className="text-xs font-bold text-sky-200 bg-sky-900/70 px-1.5 py-0.5 rounded">
+                    {flightStats.vaciosEnVuelo}/{flightStats.enVuelo}
+                  </span>
+                  <span className="text-[10px] text-sky-400 font-medium">({vuelosVaciosEnVueloPct}%)</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-violet-900/20 border border-violet-700/40 rounded-lg px-2 py-1">
+                  <span className="text-[10px] text-violet-300 font-medium">Culminados</span>
+                  <span className="text-xs font-bold text-violet-200 bg-violet-700/40 px-1.5 py-0.5 rounded">{flightStats.culminados}</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-violet-950/55 border border-violet-800/70 rounded-lg px-2 py-1">
+                  <span className="text-[10px] text-violet-500 font-medium">Cancelados</span>
+                  <span className="text-xs font-bold text-violet-400 bg-violet-950/80 px-1.5 py-0.5 rounded">{flightStats.cancelados}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         {panelRendered && (
         <div
@@ -464,13 +547,19 @@ export default function OperacionDiaria() {
           {panelMode === 'almacenes' ? (
             <AlmacenListPanel
               aeropuertos={aeropuertosEstaticos}
+              vuelos={vuelos}
               envios={todosEnvios}
               onEnvioSelect={handleEnvioSelect}
               selectedEnvioId={selectedEnvio?.id}
               onAlmacenSelect={handleAeropuertoClick}
               selectedAlmacenId={selectedAeropuerto?.codigoOACI}
+              selectedAlmacen={selectedAeropuerto}
+              onVueloSelect={handleVueloClick}
               contexto="OPERACION"
               onDataChanged={handleAeropuertosContextoChanged}
+              onVisibleAirportsChange={handleVisibleAirportsChange}
+              tzOffset={mapTz}
+              onSelectedAlmacenClear={() => setSelectedAeropuerto(null)}
             />
           ) : panelMode === 'aviones' ? (
             <VueloListPanel
@@ -482,9 +571,14 @@ export default function OperacionDiaria() {
               selectedEnvioId={selectedEnvio?.id}
               onVueloSelect={handleVueloClick}
               selectedVueloId={selectedVuelo?.id}
-              showStatusFilters={false}
+              selectedVuelo={selectedVuelo}
+              includeCompleted
+              includeProgrammed
               onVisibleFlightsChange={handleVisibleFlightsChange}
               onDataChanged={refreshOperacionContextData}
+              onFlightStatusChanged={handleFlightStatusChanged}
+              tzOffset={mapTz}
+              onSelectedVueloClear={() => setSelectedVuelo(null)}
             />
           ) : panelMode === 'maletas' ? (
             <MaletaListPanel

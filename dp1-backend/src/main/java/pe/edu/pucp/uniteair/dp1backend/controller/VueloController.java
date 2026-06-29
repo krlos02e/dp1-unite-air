@@ -4,10 +4,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import pe.edu.pucp.uniteair.dp1backend.dto.ProgramacionVueloDTO;
+import pe.edu.pucp.uniteair.dp1backend.dto.SimulationState;
 import pe.edu.pucp.uniteair.dp1backend.entity.AlmacenContexto;
 import pe.edu.pucp.uniteair.dp1backend.service.CargaArchivosService;
 import pe.edu.pucp.uniteair.dp1backend.service.ProgramacionVueloService;
+import pe.edu.pucp.uniteair.dp1backend.service.SimulationService;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -22,14 +25,34 @@ public class VueloController {
     @Autowired
     private ProgramacionVueloService programacionVueloService;
 
+    @Autowired
+    private SimulationService simulationService;
+
     @PostMapping("/cancelar")
     public ResponseEntity<Map<String, Object>> cancelarVuelo(@RequestBody CancelacionRequest request) {
         try {
+            LocalDateTime referenciaUtc = LocalDateTime.now(java.time.ZoneOffset.UTC);
+            if (request.contexto() == AlmacenContexto.SIMULACION) {
+                if (request.sessionId() == null || request.sessionId().isBlank()) {
+                    throw new IllegalArgumentException("Se requiere sessionId para cancelar vuelos en simulacion");
+                }
+                SimulationState estado = simulationService.obtenerEstado(request.sessionId());
+                if (estado == null || estado.getSimulationTime() == null) {
+                    throw new IllegalArgumentException("No se encontro la simulacion activa solicitada");
+                }
+                referenciaUtc = estado.getSimulationTime();
+            }
+
             String vueloId = cargaArchivosService.cancelarVuelo(
                     request.origen(),
                     request.destino(),
-                    request.horaSalidaLocal()
+                    request.horaSalidaLocal(),
+                    request.contexto() != null ? request.contexto() : AlmacenContexto.OPERACION,
+                    referenciaUtc
             );
+            if (request.contexto() == null || request.contexto() == AlmacenContexto.OPERACION) {
+                cargaArchivosService.replanificarOperacionActual();
+            }
 
             return ResponseEntity.ok(Map.of(
                     "success", true,
@@ -45,8 +68,33 @@ public class VueloController {
     }
 
     @GetMapping("/cancelados")
-    public ResponseEntity<Set<String>> obtenerVuelosCancelados() {
-        return ResponseEntity.ok(cargaArchivosService.obtenerVuelosCancelados());
+    public ResponseEntity<Set<String>> obtenerVuelosCancelados(
+            @RequestParam(defaultValue = "OPERACION") AlmacenContexto contexto
+    ) {
+        return ResponseEntity.ok(cargaArchivosService.obtenerVuelosCancelados(contexto));
+    }
+
+    @PostMapping("/descancelar")
+    public ResponseEntity<Map<String, Object>> descancelarVuelo(@RequestBody DescancelacionRequest request) {
+        try {
+            String vueloId = cargaArchivosService.descancelarVuelo(
+                    request.vueloId(),
+                    request.contexto() != null ? request.contexto() : AlmacenContexto.OPERACION
+            );
+            if (request.contexto() == null || request.contexto() == AlmacenContexto.OPERACION) {
+                cargaArchivosService.replanificarOperacionActual();
+            }
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Vuelo descancelado correctamente",
+                    "vueloId", vueloId
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", e.getMessage()
+            ));
+        }
     }
 
     @GetMapping("/programaciones")
@@ -114,5 +162,16 @@ public class VueloController {
         }
     }
 
-    public record CancelacionRequest(String origen, String destino, String horaSalidaLocal) {}
+    public record CancelacionRequest(
+            String origen,
+            String destino,
+            String horaSalidaLocal,
+            AlmacenContexto contexto,
+            String sessionId
+    ) {}
+
+    public record DescancelacionRequest(
+            String vueloId,
+            AlmacenContexto contexto
+    ) {}
 }

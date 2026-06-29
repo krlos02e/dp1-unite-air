@@ -3,8 +3,11 @@ package pe.edu.pucp.uniteair.dp1backend.service;
 import jakarta.annotation.PostConstruct;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import pe.edu.pucp.uniteair.dp1backend.entity.AlmacenContexto;
+import pe.edu.pucp.uniteair.dp1backend.entity.VueloCancelado;
+import pe.edu.pucp.uniteair.dp1backend.repository.VueloCanceladoRepository;
 import tasf.config.Config_Simulacion;
 import tasf.core.AsignacionPaquete;
 import tasf.core.Dataset;
@@ -50,7 +53,6 @@ public class CargaArchivosService {
     private volatile Map<String, Ruta> rutasAnteriores = new HashMap<>();
     private volatile Map<String, AsignacionPaquete> asignacionesSplit = new HashMap<>();
     private volatile boolean planificando = false;
-    private volatile Set<String> vuelosCancelados = new HashSet<>();
     private volatile List<Paquete> paquetesIncrementales = new ArrayList<>();
     private volatile boolean usarPaquetesBaseEnOperacion = false;
     private int contadorPaquetesIncrementales = 0;
@@ -60,9 +62,12 @@ public class CargaArchivosService {
         return t;
     });
     private final DatasetContextService datasetContextService;
+    private final VueloCanceladoRepository vueloCanceladoRepository;
 
-    public CargaArchivosService(DatasetContextService datasetContextService) {
+    public CargaArchivosService(DatasetContextService datasetContextService,
+                                VueloCanceladoRepository vueloCanceladoRepository) {
         this.datasetContextService = datasetContextService;
+        this.vueloCanceladoRepository = vueloCanceladoRepository;
     }
 
     public record CargaResult(boolean success, String message, int aeropuertosCount, int vuelosCount,
@@ -685,10 +690,11 @@ public class CargaArchivosService {
             }
         }
 
+        Set<String> vuelosCanceladosOperacion = obtenerVuelosCancelados(AlmacenContexto.OPERACION);
         List<Vuelo> vuelosFiltrados = new ArrayList<>();
         LocalDateTime finVuelos = fin.plusHours(48);
         for (Vuelo v : lastDataset.getVuelos()) {
-            if (vuelosCancelados.contains(v.getId())) continue;
+            if (vuelosCanceladosOperacion.contains(v.getId())) continue;
 
             LocalDateTime salida = v.getSalidaUtc();
             if (!salida.isBefore(inicio) && !salida.isAfter(finVuelos)) {
@@ -732,10 +738,11 @@ public class CargaArchivosService {
             }
         }
 
+        Set<String> vuelosCanceladosOperacion = obtenerVuelosCancelados(AlmacenContexto.OPERACION);
         List<Vuelo> vuelosFiltrados = new ArrayList<>();
         LocalDateTime finVuelos = fin.plusHours(48);
         for (Vuelo v : lastDataset.getVuelos()) {
-            if (vuelosCancelados.contains(v.getId())) continue;
+            if (vuelosCanceladosOperacion.contains(v.getId())) continue;
 
             LocalDateTime salida = v.getSalidaUtc();
             if (!salida.isBefore(inicio) && !salida.isAfter(finVuelos)) {
@@ -776,16 +783,28 @@ public class CargaArchivosService {
         return new HashMap<>(rutasAsignadas);
     }
 
+    @Transactional
     public synchronized String cancelarVuelo(String origen, String destino, String horaSalidaLocal) {
+        return cancelarVuelo(origen, destino, horaSalidaLocal, AlmacenContexto.OPERACION, LocalDateTime.now(ZoneOffset.UTC));
+    }
+
+    @Transactional
+    public synchronized String cancelarVuelo(
+            String origen,
+            String destino,
+            String horaSalidaLocal,
+            AlmacenContexto contexto,
+            LocalDateTime referenciaUtc
+    ) {
         if (lastDataset == null) {
             throw new IllegalStateException("No hay dataset cargado");
         }
 
-        LocalDateTime ahoraUtc = LocalDateTime.now(ZoneOffset.UTC);
+        LocalDateTime ahoraUtc = referenciaUtc != null ? referenciaUtc : LocalDateTime.now(ZoneOffset.UTC);
         LocalTime horaSalida = LocalTime.parse(horaSalidaLocal);
         LocalDate hoy = ahoraUtc.toLocalDate();
 
-        Vuelo vueloHoy = buscarVuelo(origen, destino, hoy, horaSalida);
+        Vuelo vueloHoy = buscarVuelo(origen, destino, hoy, horaSalida, contexto);
 
         if (vueloHoy == null) {
             throw new IllegalArgumentException(
@@ -796,11 +815,13 @@ public class CargaArchivosService {
         long minutosParaSalida = java.time.Duration.between(ahoraUtc, vueloHoy.getSalidaUtc()).toMinutes();
 
         Vuelo vueloACancelar;
-        if (minutosParaSalida > 60) {
+        // La cancelacion aplica al vuelo del mismo dia si se registra con al menos
+        // 60 minutos de anticipacion; con menos tiempo pasa al siguiente dia.
+        if (minutosParaSalida >= 60) {
             vueloACancelar = vueloHoy;
         } else {
             LocalDate manana = hoy.plusDays(1);
-            vueloACancelar = buscarVuelo(origen, destino, manana, horaSalida);
+            vueloACancelar = buscarVuelo(origen, destino, manana, horaSalida, contexto);
             if (vueloACancelar == null) {
                 throw new IllegalArgumentException(
                         "No se encontro vuelo " + origen + "-" + destino + " a las " + horaSalidaLocal + " para manana " + manana
@@ -808,15 +829,34 @@ public class CargaArchivosService {
             }
         }
 
-        vuelosCancelados.add(vueloACancelar.getId());
+        String vueloId = vueloACancelar.getId();
+        if (vueloCanceladoRepository.findByContextoAndVueloId(contexto, vueloId).isEmpty()) {
+            vueloCanceladoRepository.save(VueloCancelado.builder()
+                    .contexto(contexto)
+                    .vueloId(vueloId)
+                    .origenOACI(vueloACancelar.getOrigen().getCodigoOACI())
+                    .destinoOACI(vueloACancelar.getDestino().getCodigoOACI())
+                    .salidaUtc(vueloACancelar.getSalidaUtc())
+                    .horaSalidaLocal(horaSalida)
+                    .createdAt(LocalDateTime.now(ZoneOffset.UTC))
+                    .build());
+        }
         System.out.println("[CargaArchivosService] Vuelo cancelado: " + vueloACancelar.getId()
                 + " (minutos para salida: " + minutosParaSalida + ")");
-        return vueloACancelar.getId();
+        return vueloId;
     }
 
-    private Vuelo buscarVuelo(String origen, String destino, LocalDate fecha, LocalTime horaSalidaLocal) {
-        Dataset datasetOperacion = datasetContextService.construirDatasetEfectivo(AlmacenContexto.OPERACION, lastDataset);
-        for (Vuelo v : datasetOperacion.getVuelos()) {
+    @Transactional
+    public synchronized String descancelarVuelo(String vueloId, AlmacenContexto contexto) {
+        VueloCancelado cancelado = vueloCanceladoRepository.findByContextoAndVueloId(contexto, vueloId)
+                .orElseThrow(() -> new IllegalArgumentException("El vuelo " + vueloId + " no esta cancelado en el contexto " + contexto));
+        vueloCanceladoRepository.delete(cancelado);
+        return vueloId;
+    }
+
+    private Vuelo buscarVuelo(String origen, String destino, LocalDate fecha, LocalTime horaSalidaLocal, AlmacenContexto contexto) {
+        Dataset datasetEfectivo = datasetContextService.construirDatasetEfectivo(contexto, lastDataset);
+        for (Vuelo v : datasetEfectivo.getVuelos()) {
             if (v.getOrigen().getCodigoOACI().equals(origen)
                     && v.getDestino().getCodigoOACI().equals(destino)
                     && v.getSalidaUtc().toLocalDate().equals(fecha)
@@ -828,7 +868,22 @@ public class CargaArchivosService {
     }
 
     public synchronized Set<String> obtenerVuelosCancelados() {
-        return new HashSet<>(vuelosCancelados);
+        return obtenerVuelosCancelados(AlmacenContexto.OPERACION);
+    }
+
+    public synchronized Set<String> obtenerVuelosCancelados(AlmacenContexto contexto) {
+        return vueloCanceladoRepository.findAllByContextoOrderBySalidaUtcAsc(contexto).stream()
+                .map(VueloCancelado::getVueloId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    public synchronized boolean estaVueloCancelado(String vueloId, AlmacenContexto contexto) {
+        return vueloCanceladoRepository.findByContextoAndVueloId(contexto, vueloId).isPresent();
+    }
+
+    @Transactional
+    public synchronized void limpiarVuelosCancelados(AlmacenContexto contexto) {
+        vueloCanceladoRepository.deleteAllByContexto(contexto);
     }
 
     public synchronized List<Paquete> agregarEnvios(List<EnvioEntrada> envios) {
