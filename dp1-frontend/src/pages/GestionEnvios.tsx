@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { cargaArchivosService } from '../services/CargaArchivosService'
-import CancelacionVuelos from '../components/CancelacionVuelos'
 import AgregarEnvios from '../components/AgregarEnvios'
 import type { CargaResult } from '../types'
 
-type Tab = 'carga' | 'cancelacion' | 'envios'
+type Tab = 'carga' | 'envios'
 
 export default function GestionEnvios() {
   const [tab, setTab] = useState<Tab>('carga')
@@ -17,9 +16,6 @@ export default function GestionEnvios() {
         <TabButton active={tab === 'carga'} onClick={() => setTab('carga')}>
           Carga de Archivos
         </TabButton>
-        <TabButton active={tab === 'cancelacion'} onClick={() => setTab('cancelacion')}>
-          Cancelación de Vuelos
-        </TabButton>
         <TabButton active={tab === 'envios'} onClick={() => setTab('envios')}>
           Agregar Envíos
         </TabButton>
@@ -27,7 +23,6 @@ export default function GestionEnvios() {
 
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
         {tab === 'carga' && <CargaArchivosTab />}
-        {tab === 'cancelacion' && <CancelacionVuelos />}
         {tab === 'envios' && <AgregarEnvios />}
       </div>
     </div>
